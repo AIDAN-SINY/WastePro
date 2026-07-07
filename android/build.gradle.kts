@@ -1,3 +1,12 @@
+plugins {
+    // Change 8.1.0 to 8.11.1 as requested by your error log
+    id("com.android.application")  apply false
+    id("com.android.library") apply false
+    
+    // Keep these as they are
+    id("org.jetbrains.kotlin.android") apply false
+    id("com.google.gms.google-services") version "4.3.15" apply false
+}
 allprojects {
     repositories {
         google()

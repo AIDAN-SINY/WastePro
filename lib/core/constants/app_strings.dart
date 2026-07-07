@@ -2,6 +2,7 @@
 ///
 /// Centralized text constants for the application
 /// Useful for internationalization and consistency
+library;
 
 class AppStrings {
   // App Name

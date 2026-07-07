@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 // TODO: Import your theme and routes
 
 class WasteProApp extends StatelessWidget {
-  const WasteProApp({Key? key}) : super(key: key);
+  const WasteProApp({super.key, this.home});
+
+  final Widget? home;
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +24,12 @@ class WasteProApp extends StatelessWidget {
       //   '/home': (context) => const HomeScreen(),
       //   '/profile': (context) => const ProfileScreen(),
       // },
-      home: Scaffold(
-        appBar: AppBar(title: const Text('WastePro')),
-        body: const Center(child: Text('Welcome to WastePro')),
-      ),
+      home:
+          home ??
+          Scaffold(
+            appBar: AppBar(title: const Text('WastePro')),
+            body: const Center(child: Text('Welcome to WastePro')),
+          ),
     );
   }
 }

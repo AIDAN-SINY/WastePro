@@ -5,6 +5,7 @@
 /// - Payment confirmations
 /// - Status updates
 /// - Real-time alerts
+library;
 
 class NotificationService {
   // TODO: Initialize Firebase Cloud Messaging (FCM)

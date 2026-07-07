@@ -4,6 +4,7 @@
 /// - User authentication and profile management
 /// - Jobs and subscriptions data
 /// - Real-time updates
+library;
 
 class FirebaseService {
   // TODO: Initialize Firebase and Firestore instance

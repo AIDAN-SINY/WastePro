@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -56,7 +53,6 @@ class DefaultFirebaseOptions {
     projectId: 'waste-pro-f67a5',
     storageBucket: 'waste-pro-f67a5.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDVkLwEpFHhLQcrBECgHdrwhhIYRA7rDmg',
     appId: '1:107168223474:ios:1e776ec04f865cc874c06b',
@@ -64,5 +60,14 @@ class DefaultFirebaseOptions {
     projectId: 'waste-pro-f67a5',
     storageBucket: 'waste-pro-f67a5.firebasestorage.app',
     iosBundleId: 'com.example.wastePro',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyASh4XMhFvQ1h-ZG_gdE-nuuho_2h299os',
+    authDomain: 'waste-pro-f67a5.firebaseapp.com',
+    projectId: 'waste-pro-f67a5',
+    storageBucket: 'waste-pro-f67a5.firebasestorage.app',
+    messagingSenderId: '107168223474',
+    appId: '1:107168223474:web:000000000000000',
+    measurementId: 'G-0000000000',
   );
 }

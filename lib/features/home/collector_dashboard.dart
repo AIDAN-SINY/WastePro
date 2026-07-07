@@ -37,7 +37,7 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
                 Switch(
                   value: _isOnline,
                   onChanged: (val) => setState(() => _isOnline = val),
-                  activeColor: Colors.white,
+                  activeThumbColor: Colors.white,
                 ),
               ],
             ),

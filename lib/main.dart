@@ -3,32 +3,60 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'features/auth/screens/login_screen.dart';
+import 'features/auth/screens/registration_sreen.dart';
 import 'features/home/client_dashboard.dart';
 import 'features/home/collector_dashboard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'providers/user_provider.dart';
+import 'firebase_options.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MyApp());
+}
 
 // Minimal MyApp wrapper used by tests and app entrypoint
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => UserProvider(),
-      child: const WasteProApp(),
+      child: const WasteProApp(home: AuthWrapper()),
     );
   }
 }
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({Key? key}) : super(key: key);
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  Future<bool>? _loadUserFuture;
+  String? _currentUid;
+
+  Future<bool> _ensureUserLoaded(String uid) async {
+    if (_currentUid != uid) {
+      _currentUid = uid;
+      _loadUserFuture = Provider.of<UserProvider>(context, listen: false)
+          .refreshUser(uid)
+          .then(
+            (_) =>
+                Provider.of<UserProvider>(context, listen: false).user != null,
+          );
+    }
+    return _loadUserFuture!;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context);
-
     // 1. Listen to Firebase Auth state
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
@@ -45,21 +73,31 @@ class AuthWrapper extends StatelessWidget {
           return const LoginScreen();
         }
 
-        // 3. If user IS logged in, check if we have their profile data
-        if (userProvider.user == null) {
-          // Trigger a fetch of user data from Firestore
-          userProvider.refreshUser(snapshot.data!.uid);
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+        return FutureBuilder<bool>(
+          future: _ensureUserLoaded(snapshot.data!.uid),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState != ConnectionState.done) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-        // 4. Redirect based on Role
-        if (userProvider.user!.role == 'collector') {
-          return const CollectorDashboard();
-        } else {
-          return const ClientDashboard();
-        }
+            final userProvider = Provider.of<UserProvider>(context);
+            if (userProvider.user == null) {
+              return RegistrationScreen(
+                uid: snapshot.data!.uid,
+                phone: snapshot.data!.phoneNumber ?? '',
+              );
+            }
+
+            // 4. Redirect based on Role
+            if (userProvider.user!.role == 'collector') {
+              return const CollectorDashboard();
+            } else {
+              return const ClientDashboard();
+            }
+          },
+        );
       },
     );
   }

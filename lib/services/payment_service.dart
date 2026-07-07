@@ -4,6 +4,7 @@
 /// - Campay (Cameroon)
 /// - Monetbil
 /// - Transaction history and status tracking
+library;
 
 class PaymentService {
   // TODO: Initialize payment SDK (Campay/Monetbil)
