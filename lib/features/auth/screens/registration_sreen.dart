@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import '../../../main.dart';
 import '../../../models/user_model.dart';
 import '../../../providers/user_provider.dart';
@@ -12,8 +13,8 @@ class RegistrationScreen extends StatefulWidget {
 
   const RegistrationScreen({
     super.key,
-    required this.phone,
-    required this.initialPassword,
+    this.phone = '',
+    this.initialPassword = '',
   });
 
   @override
@@ -22,8 +23,11 @@ class RegistrationScreen extends StatefulWidget {
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   final TextEditingController _confirmPassController = TextEditingController();
+  String _fullPhoneNumber = "";
+  bool _isNumberValid = false;
 
   String? _selectedNeighborhood;
   bool _isLoading = false;
@@ -45,6 +49,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   void initState() {
     super.initState();
     _passController.text = widget.initialPassword;
+    if (widget.phone.isNotEmpty) {
+      _phoneController.text = widget.phone;
+      _fullPhoneNumber = widget.phone;
+      _isNumberValid = true;
+    }
   }
 
   Future<void> _showRetryDialog(String message) async {
@@ -73,10 +82,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   Future<void> _handleRegister() async {
-    if (_nameController.text.trim().isEmpty || _selectedNeighborhood == null) {
+    if (_nameController.text.trim().isEmpty || 
+        _selectedNeighborhood == null || 
+        _fullPhoneNumber.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please fill in your name and neighborhood"),
+          content: Text("Please fill in your name, phone number and neighborhood"),
         ),
       );
       return;
@@ -92,9 +103,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final assignedRole = await AuthService().determineRole(widget.phone);
+      final assignedRole = await AuthService().determineRole(_fullPhoneNumber);
       final newUser = UserModel(
-        phoneNumber: widget.phone,
+        phoneNumber: _fullPhoneNumber,
         fullName: _nameController.text.trim(),
         role: assignedRole,
         password: _passController.text,
@@ -150,6 +161,33 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ),
             const SizedBox(height: 30),
             _buildTextField(_nameController, "Full Name", Icons.person_outline),
+            const SizedBox(height: 15),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: InternationalPhoneNumberInput(
+                onInputChanged: (n) => setState(() {
+                  _fullPhoneNumber = n.phoneNumber ?? "";
+                }),
+                onInputValidated: (v) => setState(() => _isNumberValid = v),
+                selectorConfig: const SelectorConfig(
+                  selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
+                  showFlags: true,
+                  useEmoji: true,
+                  setSelectorButtonAsPrefixIcon: true,
+                  leadingPadding: 15,
+                ),
+                initialValue: PhoneNumber(isoCode: 'CM'),
+                textFieldController: _phoneController,
+                inputDecoration: const InputDecoration(
+                  hintText: 'Phone Number',
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                ),
+              ),
+            ),
             const SizedBox(height: 15),
             DropdownButtonFormField<String>(
               initialValue: _selectedNeighborhood,
