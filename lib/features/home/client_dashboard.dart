@@ -90,13 +90,13 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               _buildContractCard(user),
               const SizedBox(height: 22),
 
-              _sectionTitle("Accès rapide"),
+              _sectionTitle("Quick Access"),
               const SizedBox(height: 12),
               _buildQuickActions(),
 
               const SizedBox(height: 22),
 
-              _sectionTitle("Ce mois-ci"),
+              _sectionTitle("This Month"),
               const SizedBox(height: 12),
               _buildMonthlyStats(),
 
@@ -105,9 +105,9 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _sectionTitle("Suivi"),
+                  _sectionTitle("Tracking"),
                   Text(
-                    "Détails",
+                    "Details",
                     style: TextStyle(
                       color: dGold,
                       fontWeight: FontWeight.w500,
@@ -126,9 +126,9 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _sectionTitle("Activité récente"),
+                  _sectionTitle("Recent Activity"),
                   Text(
-                    "Tout voir",
+                    "View All",
                     style: TextStyle(
                       color: dGold,
                       fontWeight: FontWeight.w500,
@@ -158,11 +158,11 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     final hour = now.hour;
     String greeting;
     if (hour < 12) {
-      greeting = "Bonjour";
+      greeting = "Good morning";
     } else if (hour < 18) {
-      greeting = "Bon après-midi";
+      greeting = "Good afternoon";
     } else {
-      greeting = "Bonsoir";
+      greeting = "Good evening";
     }
     
     return Row(
@@ -303,7 +303,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                           ),
                         ),
                         Text(
-                          "restantes",
+                          "remaining",
                           style: TextStyle(
                             color: muted,
                             fontSize: 8.5,
@@ -328,7 +328,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    "FORMULE STANDARD · 2x/SEM.",
+                    "STANDARD PLAN · 2x/WK",
                     style: TextStyle(
                       color: dGold,
                       fontSize: 10,
@@ -339,7 +339,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Prochain ramassage",
+                  "Next pickup",
                   style: GoogleFonts.sora(
                     color: cream,
                     fontSize: 15,
@@ -348,7 +348,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  "Demain · 07:00 — Rue 1.234, Bonanjo",
+                  "Tomorrow · 07:00 — Rue 1.234, Bonanjo",
                   style: TextStyle(
                     color: muted,
                     fontSize: 11.5,
@@ -368,19 +368,19 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
       children: [
         _actionItem(
           Icons.warning_amber_rounded,
-          "Signaler un problème",
+          "Report Issue",
           dRedSoft,
           dRed,
         ),
         _actionItem(
           Icons.add,
-          "Ramassage supp.",
+          "Extra Pickup",
           dGoldSoft,
           dGold,
         ),
         _actionItem(
           Icons.description_outlined,
-          "Ma facture",
+          "My Bill",
           dGreenSoft,
           dGreen,
         ),
@@ -420,17 +420,25 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
             children: [
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cream.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.workspace_premium_rounded,
-                      color: cream,
-                      size: 28,
-                    ),
+                  AnimatedBuilder(
+                    animation: _scaleAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: 1.0 + (_scaleAnimation.value - 1.0) * 0.1,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: cream.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.workspace_premium_rounded,
+                            color: cream,
+                            size: 28,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -438,7 +446,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Passez à Premium",
+                          "Upgrade to Premium",
                           style: GoogleFonts.sora(
                             color: cream,
                             fontSize: 18,
@@ -447,7 +455,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "Profitez de ramassages illimités et prioritaires",
+                          "Unlimited pickups & priority service",
                           style: TextStyle(
                             color: cream.withOpacity(0.85),
                             fontSize: 12,
@@ -464,14 +472,32 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                   Expanded(
                     child: _buildPremiumFeature(
                       Icons.local_shipping_rounded,
-                      "Ramassages illimités",
+                      "Unlimited Pickups",
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildPremiumFeature(
                       Icons.speed_rounded,
-                      "Service prioritaire",
+                      "Priority Service",
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildPremiumFeature(
+                      Icons.support_agent_rounded,
+                      "24/7 Support",
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildPremiumFeature(
+                      Icons.verified_rounded,
+                      "Eco Rewards",
                     ),
                   ),
                 ],
@@ -499,7 +525,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Voir les plans",
+                        "View Plans",
                         style: GoogleFonts.sora(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -555,7 +581,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Déchets collectés",
+                "Waste Collected",
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -563,7 +589,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 ),
               ),
               Text(
-                "6 derniers mois",
+                "Last 6 months",
                 style: TextStyle(
                   fontSize: 10,
                   color: dMuted,
@@ -582,7 +608,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        const months = ['Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul'];
+                        const months = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
                         if (value.toInt() >= 0 && value.toInt() < months.length) {
                           return Text(
                             months[value.toInt()],
@@ -767,7 +793,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      "En route",
+                      "On the way",
                       style: TextStyle(
                         color: const Color(0xFF2E8B57),
                         fontSize: 10,
@@ -809,7 +835,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    "min · arrivée estimée",
+                    "min · ETA",
                     style: TextStyle(
                       color: dMuted,
                       fontSize: 11.5,
@@ -824,7 +850,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  "Suivre",
+                  "Track",
                   style: TextStyle(
                     color: cream,
                     fontSize: 11.5,
@@ -1065,24 +1091,24 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
         children: [
           _activityItem(
             Icons.check_rounded,
-            "Ramassage effectué",
-            "Lun. 28 juillet · 07:12",
+            "Pickup completed",
+            "Mon Jul 28 · 07:12",
             "4.2 kg",
             dGreenSoft,
             dGreen,
           ),
           _activityItem(
             Icons.check_rounded,
-            "Ramassage effectué",
-            "Ven. 25 juillet · 07:05",
+            "Pickup completed",
+            "Fri Jul 25 · 07:05",
             "3.8 kg",
             dGreenSoft,
             dGreen,
           ),
           _activityItem(
             Icons.close,
-            "Ramassage manqué",
-            "Lun. 21 juillet · reporté",
+            "Pickup missed",
+            "Mon Jul 21 · rescheduled",
             "—",
             dRedSoft,
             dRed,
