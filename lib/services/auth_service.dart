@@ -1,72 +1,76 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // 1. Send SMS Code
-  Future<void> verifyPhoneNumber(
-    String phone, {
-    required Function(String) onCodeSent,
-    required Function(String) onError,
+  Future<T> _runWithRetry<T>(
+    Future<T> Function() action, {
+    int retries = 2,
   }) async {
-    await _auth.verifyPhoneNumber(
-      phoneNumber: phone,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        // Automatic handling on some Android phones
-        await _auth.signInWithCredential(credential);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        onError(e.message ?? "Verification Failed");
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        onCodeSent(verificationId);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {},
-    );
-  }
+    for (var attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await action();
+      } on FirebaseException catch (e) {
+        final isTransient =
+            e.code == 'unavailable' || e.code == 'deadline-exceeded';
+        if (isTransient && attempt < retries) {
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          continue;
+        }
 
-  // 2. Verify OTP and Sign In
-  Future<UserCredential?> signInWithOTP(
-    String verificationId,
-    String smsCode,
-  ) async {
-    try {
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-      return await _auth.signInWithCredential(credential);
-    } catch (e) {
-      print("Error signing in: $e");
-      return null;
+        if (e.code == 'unavailable') {
+          throw 'The database service is temporarily unavailable. Please check your internet connection and try again.';
+        }
+
+        throw e.message ?? 'Firestore request failed.';
+      } on SocketException {
+        if (attempt < retries) {
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          continue;
+        }
+        throw 'No internet connection. Please reconnect and try again.';
+      }
     }
+
+    throw 'Unable to complete the request right now.';
   }
 
-  // 3. Check if user exists in our Firestore database
-  Future<bool> checkIfUserExists(String uid) async {
-    DocumentSnapshot doc = await _db.collection('users').doc(uid).get();
-    return doc.exists;
-  }
-  // Add this inside the AuthService class
+  Future<String> determineRole(String phone) async {
+    final normalizedPhone = phone.trim();
 
-  // 4. Create User Profile in Firestore
-  Future<void> createUserProfile(UserModel user) async {
-    try {
-      await _db.collection('users').doc(user.uid).set(user.toMap());
-    } catch (e) {
-      print("Error creating user profile: $e");
-      rethrow; // Pass the error to the UI to show a snackbar
+    if (normalizedPhone.isEmpty) {
+      return 'client';
     }
+
+    return 'client';
   }
 
-  // 6. Sign out helper
-  Future<void> signOut() async {
-    await _auth.signOut();
+  Future<void> register(UserModel user) async {
+    await _runWithRetry(() async {
+      await _db.collection('users').doc(user.phoneNumber).set(user.toMap());
+    });
   }
 
-  // 5. Get current Firebase User
-  User? get currentUser => _auth.currentUser;
+  Future<UserModel?> login(String phone, String password) async {
+    return _runWithRetry<UserModel?>(() async {
+      final doc = await _db.collection('users').doc(phone).get();
+
+      if (doc.exists) {
+        final user = UserModel.fromMap(doc.data()!);
+        if (user.password == password) {
+          return user;
+        } else {
+          throw "Incorrect Password";
+        }
+      } else {
+        return null;
+      }
+    });
+  }
+
+  void signOut() {
+    // In PIN mode, we just clear the local state via Provider later
+  }
 }

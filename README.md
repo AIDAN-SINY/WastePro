@@ -1,6 +1,6 @@
 # waste_pro
 
-A new Flutter project.
+A new Flutter project for househol.
 
 ## Getting Started
 

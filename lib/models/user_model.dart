@@ -1,45 +1,47 @@
 class UserModel {
-  final String uid;
   final String phoneNumber;
   final String fullName;
-  final String role; // 'client' or 'collector'
-  final bool isVerified;
+  final String role;
+  final String password; // Changed from pin
   final double? latitude;
   final double? longitude;
+  final String? subscriptionPlan;
+  final bool? isSubscribed;
 
   UserModel({
-    required this.uid,
     required this.phoneNumber,
     required this.fullName,
     required this.role,
-    this.isVerified = false,
+    required this.password,
     this.latitude,
     this.longitude,
+    this.subscriptionPlan,
+    this.isSubscribed,
   });
 
-  // Convert a Firestore Document to a local User Object
-  factory UserModel.fromMap(Map<String, dynamic> map) {
-    return UserModel(
-      uid: map['uid'] ?? '',
-      phoneNumber: map['phoneNumber'] ?? '',
-      fullName: map['fullName'] ?? '',
-      role: map['role'] ?? 'client',
-      isVerified: map['isVerified'] ?? false,
-      latitude: map['latitude']?.toDouble(),
-      longitude: map['longitude']?.toDouble(),
-    );
-  }
-
-  // Convert our User Object to a Map to save in Firestore
   Map<String, dynamic> toMap() {
     return {
-      'uid': uid,
       'phoneNumber': phoneNumber,
       'fullName': fullName,
       'role': role,
-      'isVerified': isVerified,
+      'password': password, // Store as password
       'latitude': latitude,
       'longitude': longitude,
+      'subscription_plan': subscriptionPlan,
+      'isSubscribed': isSubscribed,
     };
+  }
+
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    return UserModel(
+      phoneNumber: map['phoneNumber'] ?? '',
+      fullName: map['fullName'] ?? '',
+      role: map['role'] ?? 'client',
+      password: map['password'] ?? '', // Read as password
+      latitude: map['latitude']?.toDouble(),
+      longitude: map['longitude']?.toDouble(),
+      subscriptionPlan: map['subscription_plan'] as String?,
+      isSubscribed: map['isSubscribed'] as bool?,
+    );
   }
 }

@@ -1,106 +1,159 @@
 import 'package:flutter/material.dart';
-import 'package:waste_pro/features/auth/screens/otp_screen.dart';
+import 'package:intl_phone_number_input/intl_phone_number_input.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
+import '../../../providers/user_provider.dart';
+import 'registration_sreen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final bool isNewUser;
+  const LoginScreen({super.key, required this.isNewUser});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final TextEditingController _passwordController = TextEditingController();
+  String _fullPhoneNumber = "";
   bool _isLoading = false;
-
-  void _sendCode() async {
-    String phone = _phoneController.text.trim();
-
-    // Basic Validation for Cameroon numbers
-    if (phone.length != 9) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid 9-digit number")),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    // Add the Cameroon country code automatically
-    String fullPhone = "+237$phone";
-
-    await _authService.verifyPhoneNumber(
-      fullPhone,
-      onCodeSent: (verificationId) {
-        setState(() => _isLoading = false);
-        // Navigate to OTPScreen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OTPScreen(
-              verificationId: verificationId,
-              phoneNumber: fullPhone,
-            ),
-          ),
-        );
-      },
-      onError: (error) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error)),
-        );
-      },
-    );
-  }
+  bool _isNumberValid = false;
+  bool _obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+      // 1. ADDED APPBAR FOR THE BACK ARROW
+      appBar: AppBar(
+        backgroundColor: Colors.green.shade800,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.green.shade800, Colors.green.shade50],
+            stops: const [0.0, 0.4],
+          ),
+        ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              "Waste Pro",
-              style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.green),
-              textAlign: TextAlign.center,
-            ),
+            const Icon(Icons.shield_outlined, size: 60, color: Colors.white),
             const SizedBox(height: 10),
-            const Text(
-              "Enter your phone number to continue",
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                prefixText: "+237 ",
-                hintText: "6XX XXX XXX",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.grey[100],
+            Text("WASTEPRO", 
+              style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const Spacer(),
+            
+            Container(
+              padding: const EdgeInsets.all(30),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
               ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _sendCode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Login", style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 30),
+
+                  // 2. UPDATED PHONE INPUT WITH VISIBLE ARROW
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: InternationalPhoneNumberInput(
+                      onInputChanged: (n) => _fullPhoneNumber = n.phoneNumber!,
+                      onInputValidated: (v) => setState(() => _isNumberValid = v),
+                      selectorConfig: const SelectorConfig(
+                        selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
+                        showFlags: true,
+                        useEmoji: true,
+                        // This adds the visual "arrow" or distinction
+                        setSelectorButtonAsPrefixIcon: true, 
+                        leadingPadding: 15,
+                      ),
+                      initialValue: PhoneNumber(isoCode: 'CM'),
+                      textFieldController: TextEditingController(),
+                      inputDecoration: const InputDecoration(
+                        hintText: 'Phone Number',
+                        border: InputBorder.none,
+                        suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.grey), // Visual hint
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // PASSWORD WITH TOGGLE
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      hintText: "Password",
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                      filled: true, fillColor: Colors.grey.shade100,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade700, 
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      onPressed: _isLoading ? null : _handleAuth,
+                      child: _isLoading 
+                        ? const CircularProgressIndicator(color: Colors.white) 
+                        : Text("CONNECT", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
-              child: _isLoading 
-                ? const CircularProgressIndicator(color: Colors.white) 
-                : const Text("Send Verification Code"),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _handleAuth() async {
+    if (!_isNumberValid || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final user = await AuthService().login(_fullPhoneNumber, _passwordController.text);
+      if (user != null && mounted) {
+        await Provider.of<UserProvider>(context, listen: false).setUser(user);
+      } else if (widget.isNewUser && mounted) {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => RegistrationScreen(phone: _fullPhoneNumber, initialPassword: _passwordController.text)
+        ));
+      } else {
+        throw "User not found. Please register first.";
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 }

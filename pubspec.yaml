@@ -35,11 +35,25 @@ dependencies:
   firebase_core: ^3.0.0
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0
-  
+  firebase_app_check: ^0.3.0 
+  shared_preferences: ^2.2.3
+  mobile_scanner: ^5.1.0
+  # Modern Phone Input
+  intl_phone_number_input: ^0.7.4
+  # Geocoding (Coordinates to Address)
+  geocoding: ^3.0.0
+  # Image Handling for KYC
+  image_picker: ^1.1.2
+  # Visual Polish
+  flutter_blurhash: ^0.8.2
+  # Components
+  google_fonts: ^6.2.1
   # State Management (to manage user roles and login state)
   provider: ^6.1.2
   
   # Location (for the household pin and collector tracking)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0 # For coordinate calculations
   geolocator: ^12.0.0
   google_maps_flutter: ^2.7.0
 
@@ -64,10 +78,14 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
+   assets:
+       - assets/images/waste_bg.jpg
+       - assets/images/internal_bg.jpg
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
-  uses-material-design: true
+   uses-material-design: true
+  
 
   # To add assets to your application, add an assets section, like this:
   # assets:
