@@ -1,273 +1,534 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart'; // Add this for the graph
 import '../../providers/user_provider.dart';
-import '../../services/subscription_service.dart';
 import '../subscription/screens/subscription_screen.dart';
 import '../subscription/screens/history_screen.dart';
-import '../auth/screens/map_picker_screen.dart';
 import '../profile/screens/profile_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
 
   @override
-  
   State<ClientDashboard> createState() => _ClientDashboardState();
 }
 
 class _ClientDashboardState extends State<ClientDashboard> {
-  bool _isActionLoading = false;
+  int _currentIndex = 0; // For Bottom Navigation
 
-  // Professional Colors
-  final Color greenPrimary = const Color(0xFF33D17E);
-  final Color goldPrimary = const Color(0xFFE8B94B);
-
-  // Logic: Calculate Days Remaining (Bank Requirement)
-  int _calculateDaysRemaining(dynamic expiryDate) {
-    if (expiryDate == null) return 0;
-    DateTime expiry = (expiryDate as Timestamp).toDate();
-    int difference = expiry.difference(DateTime.now()).inDays;
-    return difference < 0 ? 0 : difference;
-  }
+  // --- DESIGN COLORS (From your image) ---
+  final Color primaryGreen = const Color(0xFF143626); // Deep Green
+  final Color accentGreen = const Color(0xFF33D17E); // Bright Green
+  final Color bgColor = const Color(0xFFF9F9F7); // Off-white
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = Provider.of<UserProvider>(context);
-    final user = userProvider.user;
-
-    if (user == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
-    // Fetch subscription details if they exist
-    bool active = user.toMap()['isSubscribed'] ?? false;
-    int daysLeft = 30; // Default or logic from your 'contracts' fetch
+    final user = Provider.of<UserProvider>(context).user!;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text("WASTEPRO", style: GoogleFonts.sora(fontWeight: FontWeight.bold, color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => userProvider.logout(),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // 1. BLURRED BACKGROUND (Modified as requested)
-          Image.asset(
-            'assets/images/internal_bg.jpg', 
-            width: double.infinity, 
-            height: double.infinity, 
-            fit: BoxFit.cover
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              child: Container(color: Colors.black.withOpacity(0.5)),
-            ),
-          ),
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. HEADER: GREETING & NOTIFICATION
+              _buildHeader(user),
+              const SizedBox(height: 25),
 
-          // 2. SCROLLABLE CONTENT (Previous Layout)
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // 2. HERO CARD: NEXT PICKUP (The Green Card)
+              _buildHeroCard(user),
+              const SizedBox(height: 30),
+
+              // 3. QUICK ACTIONS (Accès rapide)
+              _sectionTitle("Accès rapide"),
+              const SizedBox(height: 15),
+              _buildQuickActions(),
+
+              const SizedBox(height: 30),
+
+              // 4. MONTHLY STATS (Ce mois-ci)
+              _sectionTitle("Ce mois-ci"),
+              const SizedBox(height: 15),
+              _buildMonthlyStats(),
+
+              const SizedBox(height: 30),
+
+              // 5. CHART SECTION (Suivi)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("Welcome,", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                  Text(user.fullName, style: GoogleFonts.sora(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 25),
-
-                  // STATUS CARD
-                  _buildStatusCard(user, active, daysLeft),
-                  const SizedBox(height: 20),
-
-                  // IMPACT STATS
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _miniStat("Pickups", "12", Colors.greenAccent),
-                      _miniStat("Kg Saved", "45", Colors.orangeAccent),
-                      _miniStat("Score", "98%", Colors.blueAccent),
-                    ],
+                  _sectionTitle("Suivi"),
+                  Text(
+                    "Détails",
+                    style: TextStyle(
+                      color: Colors.orange[800],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
-
-                  const SizedBox(height: 30),
-                  const Text("Quick Actions", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 15),
-
-                  // ACTION GRID (RECONNECTED & FUNCTIONAL)
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 15,
-                    crossAxisSpacing: 15,
-                    children: [
-                      _actionCard(Icons.payment, "Subscribe", Colors.blue, () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen()));
-                      }),
-                      _actionCard(Icons.location_on, "Set Pin", Colors.red, () async {
-                        final dynamic result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPickerScreen()));
-                        if (result != null && result is Map && context.mounted) {
-                          setState(() => _isActionLoading = true);
-                          await FirebaseFirestore.instance.collection('users').doc(user.phoneNumber).update({
-                            'latitude': result['location'].latitude,
-                            'longitude': result['location'].longitude,
-                            'neighborhood': result['address'],
-                          });
-                          await userProvider.refreshUser(user.phoneNumber);
-                          if (mounted) setState(() => _isActionLoading = false);
-                        }
-                      }),
-                      _actionCard(Icons.bolt, "Urgent", Colors.orange, () => _showUrgentDialog(context, user.phoneNumber)),
-                      _actionCard(Icons.history, "History", Colors.purple, () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen()));
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 100), // Space for fixed bar
                 ],
               ),
-            ),
-          ),
+              const SizedBox(height: 15),
+              _buildChartSection(),
 
-          // 3. FIXED BOTTOM BAR (Requested Modification)
-          Positioned(
-            bottom: 20, left: 20, right: 20,
-            child: _glassContainer(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _helpBtn(Icons.chat, "WhatsApp", greenPrimary),
-                  Container(width: 1, height: 20, color: Colors.white24),
-                  _helpBtn(Icons.phone, "Call Center", Colors.white),
-                ],
-              ),
-            ),
-          ),
+              const SizedBox(height: 20),
 
-          if (_isActionLoading)
-            Container(color: Colors.black54, child: const Center(child: CircularProgressIndicator(color: Colors.green))),
-        ],
+              // 6. COLLECTOR TRACKING CARD
+              _buildCollectorTracking(),
+
+              const SizedBox(height: 100), // Space for bottom nav
+            ],
+          ),
+        ),
       ),
+      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  // --- UI HELPERS ---
+  // --- UI BUILDING BLOCKS ---
 
-  Widget _buildStatusCard(user, bool active, int daysLeft) {
-    return _glassContainer(
+  Widget _buildHeader(user) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: primaryGreen,
+              child: Text(
+                user.fullName[0],
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    text: "Bonjour, ",
+                    style: GoogleFonts.inter(color: Colors.black, fontSize: 18),
+                    children: [
+                      TextSpan(
+                        text: user.fullName.split(' ')[0],
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const TextSpan(text: " 👋"),
+                    ],
+                  ),
+                ),
+                Text(
+                  user.toMap()['neighborhood'] ?? "Bonanjo, Douala",
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                ),
+              ],
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: const Icon(Icons.notifications_none, size: 22),
+            ),
+            InkWell(
+              onTap: () {
+                Provider.of<UserProvider>(context, listen: false).logout();
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: const Icon(
+                  Icons.logout,
+                  size: 22,
+                  color: Colors.black54,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeroCard(user) {
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: primaryGreen,
+        borderRadius: BorderRadius.circular(24),
+        image: const DecorationImage(
+          image: AssetImage(
+            'assets/images/card_pattern.png',
+          ), // Subtle texture if you have one
+          opacity: 0.1,
+          fit: BoxFit.cover,
+        ),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Contract Status", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              // Circular countdown
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 45,
+                    height: 45,
+                    child: CircularProgressIndicator(
+                      value: 0.7,
+                      strokeWidth: 4,
+                      color: accentGreen,
+                      backgroundColor: Colors.white10,
+                    ),
+                  ),
+                  const Text(
+                    "18h",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: active ? greenPrimary.withOpacity(0.2) : Colors.orange.withOpacity(0.2), borderRadius: BorderRadius.circular(10)),
-                child: Text(active ? "$daysLeft Days Left" : "Inactive", style: TextStyle(color: active ? greenPrimary : Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  "FORMULE STANDARD - 2X/SEM.",
+                  style: GoogleFonts.jetBrainsMono(
+                    color: accentGreen,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
-          const Divider(color: Colors.white10, height: 30),
-          _kvRow("Pickup Day", user.toMap()['pickupDay'] ?? "Not scheduled"),
-          _kvRow("Fixed Time", user.toMap()['pickupTime'] ?? "Not set"),
-          const SizedBox(height: 10),
-          if (active) LinearProgressIndicator(value: daysLeft / 30, backgroundColor: Colors.white10, valueColor: AlwaysStoppedAnimation(greenPrimary)),
+          const SizedBox(height: 20),
+          const Text(
+            "Prochain ramassage",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            "Demain - 07:00 — Rue 1.234, ${user.toMap()['neighborhood'] ?? 'Bonanjo'}",
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _glassContainer({required Widget child, EdgeInsets? padding}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withOpacity(0.1))),
-          child: child,
+  Widget _buildQuickActions() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _actionItem(
+          Icons.warning_amber_rounded,
+          "Signaler un\nproblème",
+          Colors.red[50]!,
+          Colors.red,
         ),
-      ),
+        _actionItem(
+          Icons.add,
+          "Ramassage\nsupp.",
+          Colors.orange[50]!,
+          Colors.orange[800]!,
+        ),
+        _actionItem(
+          Icons.description_outlined,
+          "Ma facture",
+          Colors.green[50]!,
+          primaryGreen,
+        ),
+        _actionItem(
+          Icons.chat_bubble_outline,
+          "Support",
+          Colors.blue[50]!,
+          Colors.blue,
+        ),
+      ],
     );
   }
 
-  Widget _actionCard(IconData icon, String title, Color color, VoidCallback onTap) {
-    return _glassContainer(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 30),
-            const SizedBox(height: 10),
-            Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+  Widget _buildMonthlyStats() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _statBox("24kg", "Collectés"),
+        _statBox("68%", "Taux recyclage"),
+        _statBox("12kg", "CO2 évité"),
+      ],
+    );
+  }
+
+  Widget _buildChartSection() {
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: BarChart(
+        BarChartData(
+          gridData: const FlGridData(show: false),
+          titlesData: const FlTitlesData(show: true), // Simplified for brevity
+          borderData: FlBorderData(show: false),
+          barGroups: [
+            BarChartGroupData(
+              x: 0,
+              barRods: [
+                BarChartRodData(
+                  toY: 8,
+                  color: primaryGreen,
+                  width: 15,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
+            BarChartGroupData(
+              x: 1,
+              barRods: [
+                BarChartRodData(
+                  toY: 12,
+                  color: primaryGreen,
+                  width: 15,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
+            BarChartGroupData(
+              x: 2,
+              barRods: [
+                BarChartRodData(
+                  toY: 10,
+                  color: primaryGreen,
+                  width: 15,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
+            BarChartGroupData(
+              x: 3,
+              barRods: [
+                BarChartRodData(
+                  toY: 14,
+                  color: primaryGreen,
+                  width: 15,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _miniStat(String l, String v, Color c) {
-    return Column(children: [
-      Text(v, style: GoogleFonts.sora(color: c, fontSize: 20, fontWeight: FontWeight.bold)),
-      Text(l, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-    ]);
-  }
-
-  Widget _kvRow(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(k, style: const TextStyle(color: Colors.white54, fontSize: 13)),
-        Text(v, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ]),
+  Widget _buildCollectorTracking() {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 25,
+            backgroundColor: Color(0xFFFDECD8),
+            child: Text("PM", style: TextStyle(color: Colors.orange)),
+          ),
+          const SizedBox(width: 15),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Paul Mbarga",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.star, color: Colors.orange, size: 14),
+                  Text(
+                    " 4.8",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.green[50],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(radius: 3, backgroundColor: accentGreen),
+                const Text(
+                  " En route",
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _helpBtn(IconData i, String l, Color c) {
+  // --- HELPERS ---
+
+  Widget _sectionTitle(String t) => Text(
+    t,
+    style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.bold),
+  );
+
+  Widget _actionItem(IconData i, String l, Color bg, Color ic) {
     return InkWell(
-      onTap: () {}, // Support Logic
-      child: Row(children: [Icon(i, color: c, size: 20), const SizedBox(width: 8), Text(l, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))]),
+      onTap: () {
+        if (l.contains("Ma facture"))
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HistoryScreen()),
+          );
+        if (l.contains("supp."))
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+          );
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade100),
+            ),
+            child: Icon(i, color: ic),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.grey,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  void _showUrgentDialog(BuildContext context, String phone) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0A1F18),
-        title: const Text("Urgent Pickup", style: TextStyle(color: Colors.white)),
-        content: const Text("Request an immediate collection for 500 XAF?", style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () async {
-              Navigator.pop(context);
-              setState(() => _isActionLoading = true);
-              await SubscriptionService().processOneTimePayment(phone, 500, "Urgent");
-              await FirebaseFirestore.instance.collection('urgent_pickups').add({'userPhone': phone, 'timestamp': FieldValue.serverTimestamp(), 'status': 'paid'});
-              if (mounted) setState(() => _isActionLoading = false);
-            },
-            child: const Text("Confirm"),
+  Widget _statBox(String v, String l) {
+    return Container(
+      width: 105,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: TextSpan(
+              text: v.replaceAll(RegExp(r'[^0-9]'), ''),
+              style: GoogleFonts.sora(
+                color: primaryGreen,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+              children: [
+                TextSpan(
+                  text: v.replaceAll(RegExp(r'[0-9]'), ''),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Text(l, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: primaryGreen,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            label: "Accueil",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: "Historique",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.description_outlined),
+            label: "Facture",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: "Profil",
           ),
         ],
       ),

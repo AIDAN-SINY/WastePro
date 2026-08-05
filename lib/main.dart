@@ -69,9 +69,10 @@ class AuthWrapper extends StatelessWidget {
     }
 
     // 2. If user is logged in, direct to their specific Dashboard
-    if (userProvider.user!.role == 'collector') {
+    final role = userProvider.user!.role.trim().toLowerCase();
+    if (role == 'collector') {
       return const CollectorDashboard();
-    } else if (userProvider.user!.role == 'admin') {
+    } else if (role == 'admin') {
       return const AdminDashboard();
     } else {
       return const ClientDashboard();

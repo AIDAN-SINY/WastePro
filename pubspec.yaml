@@ -50,6 +50,7 @@ dependencies:
   google_fonts: ^6.2.1
   # State Management (to manage user roles and login state)
   provider: ^6.1.2
+  fl_chart: ^0.66.0 # For the waste analytics graph
   
   # Location (for the household pin and collector tracking)
   flutter_map: ^6.1.0

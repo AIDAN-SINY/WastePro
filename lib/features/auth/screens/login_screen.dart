@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../providers/user_provider.dart';
+import '../../../main.dart';
 import 'registration_sreen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -47,10 +48,17 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             const Icon(Icons.shield_outlined, size: 60, color: Colors.white),
             const SizedBox(height: 10),
-            Text("WASTEPRO", 
-              style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            Text(
+              "WASTEPRO",
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
             const Spacer(),
-            
+
             Container(
               padding: const EdgeInsets.all(30),
               decoration: const BoxDecoration(
@@ -60,7 +68,13 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Login", style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Login",
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 30),
 
                   // 2. UPDATED PHONE INPUT WITH VISIBLE ARROW
@@ -71,13 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: InternationalPhoneNumberInput(
                       onInputChanged: (n) => _fullPhoneNumber = n.phoneNumber!,
-                      onInputValidated: (v) => setState(() => _isNumberValid = v),
+                      onInputValidated: (v) =>
+                          setState(() => _isNumberValid = v),
                       selectorConfig: const SelectorConfig(
                         selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
                         showFlags: true,
                         useEmoji: true,
                         // This adds the visual "arrow" or distinction
-                        setSelectorButtonAsPrefixIcon: true, 
+                        setSelectorButtonAsPrefixIcon: true,
                         leadingPadding: 15,
                       ),
                       initialValue: PhoneNumber(isoCode: 'CM'),
@@ -85,7 +100,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       inputDecoration: const InputDecoration(
                         hintText: 'Phone Number',
                         border: InputBorder.none,
-                        suffixIcon: Icon(Icons.arrow_drop_down, color: Colors.grey), // Visual hint
+                        suffixIcon: Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.grey,
+                        ), // Visual hint
                       ),
                     ),
                   ),
@@ -100,11 +118,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       hintText: "Password",
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
                       ),
-                      filled: true, fillColor: Colors.grey.shade100,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
 
@@ -115,13 +143,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 60,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade700, 
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        backgroundColor: Colors.green.shade700,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
                       ),
                       onPressed: _isLoading ? null : _handleAuth,
-                      child: _isLoading 
-                        ? const CircularProgressIndicator(color: Colors.white) 
-                        : Text("CONNECT", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              "CONNECT",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -135,23 +171,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleAuth() async {
     if (!_isNumberValid || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
       return;
     }
     setState(() => _isLoading = true);
     try {
-      final user = await AuthService().login(_fullPhoneNumber, _passwordController.text);
+      final user = await AuthService().login(
+        _fullPhoneNumber,
+        _passwordController.text,
+      );
       if (user != null && mounted) {
         await Provider.of<UserProvider>(context, listen: false).setUser(user);
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AuthWrapper()),
+            (route) => false,
+          );
+        }
       } else if (widget.isNewUser && mounted) {
-        Navigator.push(context, MaterialPageRoute(
-          builder: (_) => RegistrationScreen(phone: _fullPhoneNumber, initialPassword: _passwordController.text)
-        ));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RegistrationScreen(
+              phone: _fullPhoneNumber,
+              initialPassword: _passwordController.text,
+            ),
+          ),
+        );
       } else {
         throw "User not found. Please register first.";
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

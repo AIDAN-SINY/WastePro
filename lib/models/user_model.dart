@@ -36,7 +36,7 @@ class UserModel {
     return UserModel(
       phoneNumber: map['phoneNumber'] ?? '',
       fullName: map['fullName'] ?? '',
-      role: map['role'] ?? 'client',
+      role: (map['role'] as String?)?.trim().toLowerCase() ?? 'client',
       password: map['password'] ?? '', // Read as password
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
