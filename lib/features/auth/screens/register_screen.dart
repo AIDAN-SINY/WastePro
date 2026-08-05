@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
-import '../../../providers/user_provider.dart';
-import '../../../main.dart';
+import 'login_screen.dart';
+import 'registration_sreen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   String _fullPhoneNumber = "";
@@ -24,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 1. ADDED APPBAR FOR THE BACK ARROW
+      // BACK ARROW
       appBar: AppBar(
         backgroundColor: Colors.green.shade800,
         elevation: 0,
@@ -45,7 +44,11 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: Column(
           children: [
-            const Icon(Icons.shield_outlined, size: 60, color: Colors.white),
+            const Icon(
+              Icons.person_add_alt_1_outlined,
+              size: 60,
+              color: Colors.white,
+            ),
             const SizedBox(height: 10),
             Text(
               "WASTEPRO",
@@ -68,15 +71,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Login",
+                    "Register",
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Create your account to get started.",
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
                   const SizedBox(height: 30),
 
-                  // 2. UPDATED PHONE INPUT WITH VISIBLE ARROW
+                  // PHONE INPUT
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
@@ -90,7 +101,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
                         showFlags: true,
                         useEmoji: true,
-                        // This adds the visual "arrow" or distinction
                         setSelectorButtonAsPrefixIcon: true,
                         leadingPadding: 15,
                       ),
@@ -102,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         suffixIcon: Icon(
                           Icons.arrow_drop_down,
                           color: Colors.grey,
-                        ), // Visual hint
+                        ),
                       ),
                     ),
                   ),
@@ -147,16 +157,38 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(15),
                         ),
                       ),
-                      onPressed: _isLoading ? null : _handleAuth,
+                      onPressed: _isLoading ? null : _handleRegister,
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              "CONNECT",
+                              "REGISTER",
                               style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 15),
+
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        "Already have an account? Login",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -168,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _handleAuth() async {
+  Future<void> _handleRegister() async {
     if (!_isNumberValid || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -177,21 +209,20 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      final user = await AuthService().login(
-        _fullPhoneNumber,
-        _passwordController.text,
-      );
-      if (user != null && mounted) {
-        await Provider.of<UserProvider>(context, listen: false).setUser(user);
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const AuthWrapper()),
-            (route) => false,
-          );
-        }
-      } else {
-        throw "User not found. Please register first.";
+      final exists = await AuthService().isPhoneRegistered(_fullPhoneNumber);
+      if (exists) {
+        throw "An account already exists for this number. Please log in instead.";
       }
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegistrationScreen(
+            phone: _fullPhoneNumber,
+            initialPassword: _passwordController.text,
+          ),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(
         context,

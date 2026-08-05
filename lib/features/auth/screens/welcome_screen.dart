@@ -1,6 +1,7 @@
 import 'dart:ui'; // Required for ImageFilter
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
+import 'register_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -65,7 +66,7 @@ class WelcomeScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen(isNewUser: true))),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
                       child: const Text("Get Started", style: TextStyle(color: Colors.white, fontSize: 16)),
                     ),
                   ),
@@ -74,7 +75,7 @@ class WelcomeScreen extends StatelessWidget {
                   
                   // Action: Login
                   TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen(isNewUser: false))),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
                     child: const Text(
                       "Already have an account? login", 
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)

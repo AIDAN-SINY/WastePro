@@ -37,6 +37,11 @@ class AuthService {
     throw 'Unable to complete the request right now.';
   }
 
+  /// Assigns a role at registration.
+  ///
+  /// Admins pre-approve collector numbers in the `collectors` collection
+  /// (whitelist). If the number is whitelisted the account becomes a
+  /// 'collector', otherwise it is a regular 'client'.
   Future<String> determineRole(String phone) async {
     final normalizedPhone = phone.trim();
 
@@ -44,7 +49,24 @@ class AuthService {
       return 'client';
     }
 
-    return 'client';
+    return _runWithRetry(() async {
+      final doc = await _db.collection('collectors').doc(normalizedPhone).get();
+      return doc.exists ? 'collector' : 'client';
+    });
+  }
+
+  /// Returns true when an account already exists for this phone number.
+  Future<bool> isPhoneRegistered(String phone) async {
+    final normalizedPhone = phone.trim();
+
+    if (normalizedPhone.isEmpty) {
+      return false;
+    }
+
+    return _runWithRetry(() async {
+      final doc = await _db.collection('users').doc(normalizedPhone).get();
+      return doc.exists;
+    });
   }
 
   Future<void> register(UserModel user) async {
