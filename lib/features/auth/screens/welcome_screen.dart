@@ -1,7 +1,8 @@
 import 'dart:ui'; // Required for ImageFilter
+import 'package:flutter/foundation.dart'; // kDebugMode
 import 'package:flutter/material.dart';
+import '../../superadmin/super_admin_console.dart';
 import 'login_screen.dart';
-import 'registration_sreen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -36,8 +37,8 @@ class WelcomeScreen extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(30.0),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  const SizedBox(height: 40),
                   const Icon(Icons.recycling_rounded, size: 100, color: Colors.white),
                   const SizedBox(height: 30),
                   const Text(
@@ -57,7 +58,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   const Spacer(),
                   
-                  // Action: Register
+                  // Action: Login
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -66,21 +67,32 @@ class WelcomeScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegistrationScreen())),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
                       child: const Text("Get Started", style: TextStyle(color: Colors.white, fontSize: 16)),
                     ),
                   ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Action: Login
-                  TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())),
-                    child: const Text(
-                      "Already have an account? login", 
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+
+                  // Dev-only preview of the Super Admin console (debug builds)
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SuperAdminConsole(),
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.admin_panel_settings_outlined,
+                        size: 15,
+                        color: Colors.white70,
+                      ),
+                      label: const Text(
+                        "Aperçu console super admin (dev)",
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

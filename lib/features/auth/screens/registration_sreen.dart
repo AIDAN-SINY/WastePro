@@ -241,6 +241,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
               ),
             ),
+            const SizedBox(height: 40),
           ],
         ),
       ),

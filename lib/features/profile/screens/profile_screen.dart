@@ -1,15 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../providers/navigation_provider.dart';
+import '../../auth/screens/welcome_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     // Getting the user data from our Global State (Provider)
     final userProvider = Provider.of<UserProvider>(context);
-    final user = userProvider.user!;
+    final navProvider = Provider.of<NavigationProvider>(context);
+    final user = userProvider.user;
+
+    // Redirect to login if user is null (after logout)
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+          (route) => false,
+        );
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -20,6 +41,7 @@ class ProfileScreen extends StatelessWidget {
         elevation: 0,
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 100),
         child: Column(
           children: [
             const SizedBox(height: 20),
@@ -73,6 +95,7 @@ class ProfileScreen extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: _buildBottomNav(navProvider),
     );
   }
 
@@ -103,6 +126,121 @@ class ProfileScreen extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text(sub),
       trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+    );
+  }
+
+  Widget _buildBottomNav(NavigationProvider navProvider) {
+    return Container(
+      height: 65,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.home_rounded,
+                label: "Accueil",
+                index: 0,
+                onTap: () {
+                  navProvider.setIndex(0);
+                  Navigator.pop(context);
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.history_rounded,
+                label: "Historique",
+                index: 1,
+                onTap: () {
+                  navProvider.setIndex(1);
+                  Navigator.pushReplacementNamed(context, '/history');
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.description_rounded,
+                label: "Facture",
+                index: 2,
+                onTap: () {
+                  navProvider.setIndex(2);
+                  Navigator.pushReplacementNamed(context, '/subscription');
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.person_rounded,
+                label: "Profil",
+                index: 3,
+                onTap: () {
+                  navProvider.setIndex(3);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required NavigationProvider navProvider,
+    required IconData icon,
+    required String label,
+    required int index,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = navProvider.currentIndex == index;
+    final Color dGreen = const Color(0xFF0F3D2E);
+    final Color dMuted = const Color(0xFF7C8A80);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      splashColor: dGreen.withOpacity(0.1),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: isSelected 
+                    ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
+                    : null,
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? dGreen : dMuted,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? dGreen : dMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

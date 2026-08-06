@@ -2,11 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../providers/user_provider.dart';
-import '../../services/subscription_service.dart';
 import 'qr_scanner_screen.dart';
 import 'pickup_schedule_screen.dart';
 
@@ -19,7 +16,7 @@ class CollectorDashboard extends StatefulWidget {
 
 class _CollectorDashboardState extends State<CollectorDashboard> {
   bool _isOnline = false;
-  Set<Marker> _markers = {};
+  int _currentIndex = 0;
 
   // --- COLORS MATCHING CLIENT DASHBOARD ---
   final Color voidBg = const Color(0xFF050F0C);
@@ -42,7 +39,7 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
           _buildRadialGlow(),
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 80),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -68,14 +65,13 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
 
                   // 6. WEEKLY LEDGER PREVIEW
                   _buildLedgerPreview(),
-                  
-                  const SizedBox(height: 50),
                 ],
               ),
             ),
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -262,5 +258,119 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
 
   void _showManualDialog(String collectorPhone, UserProvider provider) {
     // Linked to Manual Entry logic
+  }
+
+  Widget _buildBottomNav() {
+    // Pas de hauteur fixe : la barre s'adapte à son contenu (évite le
+    // « bottom overflow » quand le contenu est plus haut que 65 px).
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1F18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                icon: Icons.dashboard_rounded,
+                label: "Dashboard",
+                index: 0,
+                onTap: () {
+                  setState(() => _currentIndex = 0);
+                },
+              ),
+              _buildNavItem(
+                icon: Icons.qr_code_scanner_rounded,
+                label: "Scan",
+                index: 1,
+                onTap: () {
+                  setState(() => _currentIndex = 1);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const QRScannerScreen()),
+                  );
+                },
+              ),
+              _buildNavItem(
+                icon: Icons.calendar_today_rounded,
+                label: "Schedule",
+                index: 2,
+                onTap: () {
+                  setState(() => _currentIndex = 2);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PickupScheduleScreen()),
+                  );
+                },
+              ),
+              _buildNavItem(
+                icon: Icons.wallet_rounded,
+                label: "Wallet",
+                index: 3,
+                onTap: () {
+                  setState(() => _currentIndex = 3);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required IconData icon,
+    required String label,
+    required int index,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = _currentIndex == index;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      splashColor: greenAccent.withOpacity(0.2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? greenAccent.withOpacity(0.2) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: isSelected 
+                    ? Border.all(color: greenAccent.withOpacity(0.5), width: 1.5)
+                    : null,
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? greenAccent : iceText.withOpacity(0.5),
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? greenAccent : iceText.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       duration: const Duration(milliseconds: 2400),
     );
     _scaleAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.sineInOut),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOutSine),
     );
     _animationController.repeat(reverse: true);
   }
@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           width: 56,
                           height: 56,
                           margin: const EdgeInsets.only(bottom: 18),
-                          child: const Icon(
+                          child: Icon(
                             Icons.recycling_rounded,
                             color: accentGold,
                             size: 56,
@@ -242,6 +242,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       ),
                     ),
                   ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
@@ -262,10 +263,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     setState(() => _isLoading = true);
     
     try {
-      // Add +237 prefix if not present
-      String phoneNumber = _phoneController.text.trim();
+      // Add +237 prefix if not present; strip spaces/dashes so the lookup
+      // matches the canonical phone stored when the super admin created the
+      // account (e.g. '+237 677 12 34 56' ⇄ '+237677123456').
+      String phoneNumber = _phoneController.text.trim().replaceAll(
+        RegExp(r'[\s-]'),
+        '',
+      );
       if (!phoneNumber.startsWith('+')) {
-        phoneNumber = '+237$phoneNumber';
+        // Gère aussi le « 237... » saisi sans le +.
+        phoneNumber = phoneNumber.startsWith('237')
+            ? '+$phoneNumber'
+            : '+237$phoneNumber';
       }
       
       final user = await AuthService().login(

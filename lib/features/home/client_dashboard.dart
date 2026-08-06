@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../providers/user_provider.dart';
+import '../../providers/navigation_provider.dart';
 import '../subscription/screens/subscription_screen.dart';
 import '../subscription/screens/history_screen.dart';
 import '../profile/screens/profile_screen.dart';
@@ -17,9 +19,9 @@ class ClientDashboard extends StatefulWidget {
 }
 
 class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProviderStateMixin {
-  int _currentIndex = 0;
   late AnimationController _animationController;
   late Animation<double> _progressAnimation;
+  late Animation<double> _scaleAnimation;
 
   // --- DESIGN COLORS (From design.html) ---
   final Color bgDark = const Color(0xFF0F3D2E);
@@ -50,6 +52,10 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     _progressAnimation = Tween<double>(begin: 0, end: 0.375).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOutSine),
+    );
+    _animationController.repeat(reverse: true);
     _animationController.forward();
   }
 
@@ -62,6 +68,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<UserProvider>(context).user;
+    final navProvider = Provider.of<NavigationProvider>(context);
     
     // Redirect to login if user is null (after logout)
     if (user == null) {
@@ -80,7 +87,12 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
       backgroundColor: dBg,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 10,
+            bottom: 100,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -139,13 +151,11 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               ),
               const SizedBox(height: 12),
               _buildRecentActivity(),
-
-              const SizedBox(height: 100),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildBottomNav(navProvider),
     );
   }
 
@@ -168,61 +178,72 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: dGreen,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: GoogleFonts.sora(
-                    color: cream,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: dGreen,
+                  shape: BoxShape.circle,
                 ),
-              ),
-            ),
-            const SizedBox(width: 11),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "$greeting, $firstName 👋",
-                  style: GoogleFonts.sora(
-                    color: dText,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 13,
-                      color: dMuted,
+                child: Center(
+                  child: Text(
+                    initials,
+                    style: GoogleFonts.sora(
+                      color: cream,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
-                    const SizedBox(width: 3),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 11),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      "Bonanjo, Douala",
-                      style: TextStyle(
-                        color: dMuted,
-                        fontSize: 11.5,
+                      "$greeting, $firstName 👋",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.sora(
+                        color: dText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 13,
+                          color: dMuted,
+                        ),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            "Bonanjo, Douala",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: dMuted,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 10),
         Container(
           width: 38,
           height: 38,
@@ -578,16 +599,18 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "Waste Collected",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: dText,
+              Expanded(
+                child: Text(
+                  "Waste Collected",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: dText,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 "Last 6 months",
                 style: TextStyle(
@@ -966,68 +989,81 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(NavigationProvider navProvider) {
+    // Pas de hauteur fixe : la barre s'adapte à son contenu (évite le
+    // « bottom overflow » quand le contenu est plus haut que 65 px).
     return Container(
-      height: 70,
       decoration: BoxDecoration(
         color: dSurface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(
-                icon: Icons.home_rounded,
-                label: "Accueil",
-                index: 0,
-                onTap: () {
-                  setState(() => _currentIndex = 0);
-                },
+              Expanded(
+                child: _buildNavItem(
+                  navProvider: navProvider,
+                  icon: Icons.home_rounded,
+                  label: "Accueil",
+                  index: 0,
+                  onTap: () {
+                    navProvider.setIndex(0);
+                  },
+                ),
               ),
-              _buildNavItem(
-                icon: Icons.history_rounded,
-                label: "Historique",
-                index: 1,
-                onTap: () {
-                  setState(() => _currentIndex = 1);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                  );
-                },
+              Expanded(
+                child: _buildNavItem(
+                  navProvider: navProvider,
+                  icon: Icons.history_rounded,
+                  label: "Historique",
+                  index: 1,
+                  onTap: () {
+                    navProvider.setIndex(1);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                    );
+                  },
+                ),
               ),
-              _buildNavItem(
-                icon: Icons.description_rounded,
-                label: "Facture",
-                index: 2,
-                onTap: () {
-                  setState(() => _currentIndex = 2);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-                  );
-                },
+              Expanded(
+                child: _buildNavItem(
+                  navProvider: navProvider,
+                  icon: Icons.description_rounded,
+                  label: "Facture",
+                  index: 2,
+                  onTap: () {
+                    navProvider.setIndex(2);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+                    );
+                  },
+                ),
               ),
-              _buildNavItem(
-                icon: Icons.person_rounded,
-                label: "Profil",
-                index: 3,
-                onTap: () {
-                  setState(() => _currentIndex = 3);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  );
-                },
+              Expanded(
+                child: _buildNavItem(
+                  navProvider: navProvider,
+                  icon: Icons.person_rounded,
+                  label: "Profil",
+                  index: 3,
+                  onTap: () {
+                    navProvider.setIndex(3);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -1037,17 +1073,19 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
   }
 
   Widget _buildNavItem({
+    required NavigationProvider navProvider,
     required IconData icon,
     required String label,
     required int index,
     required VoidCallback onTap,
   }) {
-    final isSelected = _currentIndex == index;
+    final isSelected = navProvider.currentIndex == index;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
+      splashColor: dGreen.withOpacity(0.1),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1055,8 +1093,11 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected ? dGreen.withOpacity(0.1) : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+                color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: isSelected 
+                    ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
+                    : null,
               ),
               child: Icon(
                 icon,
@@ -1069,7 +1110,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? dGreen : dMuted,
               ),
             ),

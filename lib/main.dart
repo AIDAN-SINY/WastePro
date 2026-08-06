@@ -6,12 +6,15 @@ import 'firebase_options.dart';
 
 // Providers
 import 'providers/user_provider.dart';
+import 'providers/navigation_provider.dart';
 
 // Screens
 import 'features/auth/screens/welcome_screen.dart'; // Ensure you created this file
 import 'features/home/client_dashboard.dart';
 import 'features/home/collector_dashboard.dart';
-import 'features/home/admin_dashboard.dart';
+import 'features/backoffice/backoffice_screen.dart';
+import 'features/superadmin/data/firestore_platform_store.dart';
+import 'features/superadmin/super_admin_console.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,8 +31,11 @@ void main() async {
   await userProvider.tryAutoLogin();
 
   runApp(
-    ChangeNotifierProvider.value(
-      value: userProvider,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: userProvider),
+        ChangeNotifierProvider(create: (_) => NavigationProvider()),
+      ],
       child: const WasteProApp(),
     ),
   );
@@ -52,8 +58,23 @@ class WasteProApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  // Created once (lazily) so AuthWrapper rebuilds don't leak Firestore
+  // snapshot subscriptions; disposed with the wrapper.
+  FirestorePlatformStore? _consoleStore;
+
+  @override
+  void dispose() {
+    _consoleStore?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,10 +91,13 @@ class AuthWrapper extends StatelessWidget {
 
     // 2. If user is logged in, direct to their specific Dashboard
     final role = userProvider.user!.role.trim().toLowerCase();
-    if (role == 'collector') {
+    if (role == 'super_admin') {
+      _consoleStore ??= FirestorePlatformStore();
+      return SuperAdminConsole(store: _consoleStore);
+    } else if (role == 'collector') {
       return const CollectorDashboard();
     } else if (role == 'admin') {
-      return const AdminDashboard();
+      return const BackofficeScreen();
     } else {
       return const ClientDashboard();
     }

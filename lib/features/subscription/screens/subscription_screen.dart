@@ -1,9 +1,9 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../services/subscription_service.dart';
 import '../../../providers/user_provider.dart';
+import '../../../providers/navigation_provider.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -14,6 +14,14 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isProcessing = false;
+
+  // Design System Colors
+  final Color dBg = const Color(0xFFF5F7F6);
+  final Color dSurface = const Color(0xFFFFFFFF);
+  final Color dGreen = const Color(0xFF0F3D2E);
+  final Color dGold = const Color(0xFFD4A853);
+  final Color dMuted = const Color(0xFF7C8A80);
+  final Color dBorder = const Color(0xFFE8EBE9);
 
   // Professional Payment Handshake Logic
   void _handleSubscription(String cycleName, double amount) async {
@@ -38,7 +46,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Success! Your $cycleName contract is now active."),
-              backgroundColor: Colors.green,
+              backgroundColor: dGreen,
             ),
           );
           Navigator.pop(context); // Return to Dashboard
@@ -55,103 +63,305 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final navProvider = Provider.of<NavigationProvider>(context);
+    
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      backgroundColor: dBg,
       appBar: AppBar(
-        title: Text("Service Plans", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
+        title: Text("Service Plans", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: dGreen)),
+        backgroundColor: dSurface,
         elevation: 0,
-        foregroundColor: Colors.white,
+        foregroundColor: dGreen,
       ),
-      body: Stack(
-        children: [
-          // BACKGROUND (Using your new image)
-          Image.asset(
-            'assets/images/internal_bg.jpg', 
-            width: double.infinity, 
-            height: double.infinity, 
-            fit: BoxFit.cover
-          ),
-          Container(color: Colors.black.withOpacity(0.6)),
+      body: _isProcessing 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF0F3D2E)))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 100),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Choose Your Plan",
+                  style: GoogleFonts.sora(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: dGreen,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Select a collection frequency that suits your needs",
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: dMuted,
+                  ),
+                ),
+                const SizedBox(height: 24),
 
-          SafeArea(
-            child: _isProcessing 
-              ? const Center(child: CircularProgressIndicator(color: Colors.green))
-              : ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    _buildPlanCard("Monthly", 3000, "1 Collection per week", Icons.calendar_month),
-                    _buildPlanCard("Weekly", 5500, "2 Collections per week", Icons.view_week),
-                    _buildPlanCard("Daily", 15000, "Collection every single day", Icons.wb_sunny),
-                    
-                    const SizedBox(height: 20),
-                    Center(
-                      child: Text(
+                _buildPlanCard("Monthly", 3000, "1 Collection per week", Icons.calendar_month, false),
+                _buildPlanCard("Weekly", 5500, "2 Collections per week", Icons.view_week, true),
+                _buildPlanCard("Daily", 15000, "Collection every single day", Icons.wb_sunny, false),
+                
+                const SizedBox(height: 20),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock, size: 16, color: dMuted),
+                      const SizedBox(width: 8),
+                      Text(
                         "Secure checkout via SARA Money / MoMo",
-                        style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12),
+                        style: GoogleFonts.inter(color: dMuted, fontSize: 12),
                       ),
-                    )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+      bottomNavigationBar: _buildBottomNav(navProvider),
+    );
+  }
+
+  Widget _buildPlanCard(String title, double price, String subtitle, IconData icon, bool isPopular) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: dSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isPopular ? dGold.withOpacity(0.3) : dBorder,
+          width: isPopular ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isPopular ? dGold.withOpacity(0.15) : dGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  icon, 
+                  color: isPopular ? dGold : dGreen,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title, 
+                          style: GoogleFonts.sora(
+                            color: dGreen, 
+                            fontSize: 18, 
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (isPopular) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: dGold,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              "POPULAR",
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle, 
+                      style: GoogleFonts.inter(
+                        color: dMuted, 
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
+              ),
+            ],
           ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "${price.toInt()} XAF", 
+                    style: GoogleFonts.sora(
+                      color: dGreen, 
+                      fontSize: 24, 
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    "per cycle",
+                    style: GoogleFonts.inter(
+                      color: dMuted, 
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isPopular ? dGold : dGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  elevation: 0,
+                ),
+                onPressed: () => _handleSubscription(title, price),
+                child: Text(
+                  "SUBSCRIBE",
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              )
+            ],
+          )
         ],
       ),
     );
   }
 
-  // --- MODERN GLASS UI HELPER ---
-  Widget _buildPlanCard(String title, double price, String subtitle, IconData icon) {
+  Widget _buildBottomNav(NavigationProvider navProvider) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.green.withOpacity(0.2),
-                      child: Icon(icon, color: Colors.greenAccent),
-                    ),
-                    const SizedBox(width: 15),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                        Text(subtitle, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13)),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 25),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("${price.toInt()} XAF", style: GoogleFonts.poppins(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.greenAccent.shade700,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12),
-                      ),
-                      onPressed: () => _handleSubscription(title, price),
-                      child: const Text("SUBSCRIBE"),
-                    )
-                  ],
-                )
-              ],
-            ),
+      height: 65,
+      decoration: BoxDecoration(
+        color: dSurface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, -3),
           ),
+        ],
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.home_rounded,
+                label: "Accueil",
+                index: 0,
+                onTap: () {
+                  navProvider.setIndex(0);
+                  Navigator.pop(context);
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.history_rounded,
+                label: "Historique",
+                index: 1,
+                onTap: () {
+                  navProvider.setIndex(1);
+                  Navigator.pushReplacementNamed(context, '/history');
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.description_rounded,
+                label: "Facture",
+                index: 2,
+                onTap: () {
+                  navProvider.setIndex(2);
+                },
+              ),
+              _buildNavItem(
+                navProvider: navProvider,
+                icon: Icons.person_rounded,
+                label: "Profil",
+                index: 3,
+                onTap: () {
+                  navProvider.setIndex(3);
+                  Navigator.pushReplacementNamed(context, '/profile');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required NavigationProvider navProvider,
+    required IconData icon,
+    required String label,
+    required int index,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = navProvider.currentIndex == index;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      splashColor: dGreen.withOpacity(0.1),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: isSelected 
+                    ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
+                    : null,
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? dGreen : dMuted,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? dGreen : dMuted,
+              ),
+            ),
+          ],
         ),
       ),
     );
