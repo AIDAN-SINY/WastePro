@@ -44,7 +44,7 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 1. TOP STATUS ROW
-                  _buildTopStatusRow(user),
+                  _buildTopStatusRow(user, userProvider),
                   const SizedBox(height: 25),
 
                   // 2. WALLET CARD (Fintech Grade)
@@ -77,35 +77,59 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
 
   // --- UI BUILDING METHODS ---
 
-  Widget _buildTopStatusRow(user) {
+  Widget _buildTopStatusRow(user, UserProvider userProvider) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Operations Terminal", style: GoogleFonts.sora(color: iceText, fontSize: 22, fontWeight: FontWeight.bold)),
-            Text("${user.fullName} · Zone C", style: GoogleFonts.inter(color: iceText.withOpacity(0.4), fontSize: 13)),
-          ],
-        ),
-        // CUSTOM SWITCH (Online/Offline)
-        GestureDetector(
-          onTap: () => setState(() => _isOnline = !_isOnline),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: _isOnline ? greenAccent.withOpacity(0.1) : Colors.white10,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _isOnline ? greenAccent.withOpacity(0.5) : Colors.white12),
-            ),
-            child: Row(
-              children: [
-                Text(_isOnline ? "Online" : "Offline", style: TextStyle(color: _isOnline ? greenAccent : iceText.withOpacity(0.5), fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(width: 8),
-                Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: _isOnline ? greenAccent : Colors.grey)),
-              ],
-            ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Operations Terminal",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.sora(color: iceText, fontSize: 22, fontWeight: FontWeight.bold)),
+              Text("${user.fullName} · Zone C",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(color: iceText.withOpacity(0.4), fontSize: 13)),
+            ],
           ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // CUSTOM SWITCH (Online/Offline)
+            GestureDetector(
+              onTap: () => setState(() => _isOnline = !_isOnline),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _isOnline ? greenAccent.withOpacity(0.1) : Colors.white10,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _isOnline ? greenAccent.withOpacity(0.5) : Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    Text(_isOnline ? "Online" : "Offline", style: TextStyle(color: _isOnline ? greenAccent : iceText.withOpacity(0.5), fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(width: 8),
+                    Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: _isOnline ? greenAccent : Colors.grey)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // LOGOUT BUTTON
+            IconButton(
+              onPressed: () => userProvider.logout(),
+              tooltip: 'Déconnexion',
+              icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF6B5C), size: 20),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white10,
+                padding: const EdgeInsets.all(8),
+              ),
+            ),
+          ],
         )
       ],
     );
