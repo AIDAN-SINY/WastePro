@@ -31,13 +31,13 @@ void main() {
     await pumpBackoffice(tester, BackofficeStore());
 
     // Also present in the (off-screen) side menu, hence findsWidgets.
-    expect(find.text("Vue d'ensemble"), findsWidgets);
-    expect(find.text('Clients actifs'), findsOneWidget);
-    expect(find.text("Collectes aujourd'hui"), findsOneWidget);
-    expect(find.text('Revenus (milliers)'), findsOneWidget);
-    expect(find.text('Taux de réussite'), findsOneWidget);
-    expect(find.text('Activité récente'), findsOneWidget);
-    expect(find.textContaining('Ramassage effectué'), findsOneWidget);
+    expect(find.text('Overview'), findsWidgets);
+    expect(find.text('Active clients'), findsOneWidget);
+    expect(find.text("Today's collections"), findsOneWidget);
+    expect(find.text('Revenue (thousands)'), findsOneWidget);
+    expect(find.text('Success rate'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
+    expect(find.textContaining('Pickup completed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -62,7 +62,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('bo_fab')));
     await tester.pumpAndSettle();
-    expect(find.text('Nouveau client'), findsOneWidget);
+    expect(find.text('New client'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('bo_f_name')), 'Jean Test');
     // Le mot de passe est requis à la création (il permet au client de se
@@ -90,15 +90,15 @@ void main() {
 
     await tester.tap(find.byKey(const Key('bo_fab')));
     await tester.pumpAndSettle();
-    expect(find.text('Nouveau client'), findsOneWidget);
+    expect(find.text('New client'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('bo_f_name')), 'Jean Sans MDP');
     await tester.tap(find.byKey(const Key('bo_sheet_save')));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 3));
 
-    // La feuille reste ouverte et aucun client n'est créé.
-    expect(find.text('Nouveau client'), findsOneWidget);
+    // The sheet stays open and no client is created.
+    expect(find.text('New client'), findsOneWidget);
     expect(store.clients.any((c) => c.name == 'Jean Sans MDP'), isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -124,8 +124,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Modifier'), findsOneWidget);
-    await tester.tap(find.text('Supprimer'));
+    expect(find.text('Edit'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 3));
 
@@ -155,9 +155,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Modifier'));
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
-    expect(find.text('Modifier client'), findsOneWidget);
+    expect(find.text('Edit client'), findsOneWidget);
 
     // The form is prefilled with the client's name.
     final nameField = tester.widget<TextField>(
@@ -181,14 +181,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('bo_menu')));
     await tester.pumpAndSettle();
-    expect(find.text('Facturation'), findsOneWidget);
+    expect(find.text('Billing'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('bo_menu_facturation')));
     await tester.pumpAndSettle();
 
     expect(find.text('Jean Dooh'), findsOneWidget);
-    expect(find.textContaining('éch. '), findsWidgets);
-    expect(find.text('Facturation'), findsWidgets);
+    expect(find.textContaining('due '), findsWidgets);
+    expect(find.text('Billing'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -199,7 +199,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Only suspended clients remain after filtering.
-    await tester.tap(find.text('Suspendus'));
+    await tester.tap(find.text('Suspended'));
     await tester.pumpAndSettle();
 
     expect(find.text('Samuel Njoya'), findsOneWidget);

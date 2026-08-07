@@ -21,40 +21,40 @@ void main() {
 
     // Brand appears as a rich text (also present in the agency chart labels,
     // so we only assert the sidebar-specific texts here).
-    expect(find.text('CONSOLE PLATEFORME'), findsOneWidget);
+    expect(find.text('PLATFORM CONSOLE'), findsOneWidget);
     expect(find.text('Super Admin'), findsOneWidget);
 
     // Navigation items (labels also appear as KPI labels, hence findsWidgets)
-    expect(find.text('Sociétés'), findsOneWidget);
-    expect(find.text('Agences'), findsWidgets);
-    expect(find.text('Utilisateurs'), findsWidgets);
+    expect(find.text('Companies'), findsOneWidget);
+    expect(find.text('Agencies'), findsWidgets);
+    expect(find.text('Users'), findsWidgets);
 
     // Dashboard KPIs
-    expect(find.text('Sociétés actives'), findsOneWidget);
-    expect(find.text('Disponibilité plateforme'), findsOneWidget);
+    expect(find.text('Active companies'), findsOneWidget);
+    expect(find.text('Platform availability'), findsOneWidget);
 
     // Mock data appears in the activity feed
-    expect(find.text('Activité plateforme'), findsOneWidget);
+    expect(find.text('Platform activity'), findsOneWidget);
   });
 
-  testWidgets('creates a société through the drawer and shows it in the table', (
+  testWidgets('creates a company through the drawer and shows it in the table', (
     tester,
   ) async {
     await pumpConsole(tester);
 
-    // Navigate to Sociétés
-    await tester.tap(find.text('Sociétés'));
+    // Navigate to Companies
+    await tester.tap(find.text('Companies'));
     await tester.pumpAndSettle();
-    expect(find.text('Nouvelle société'), findsOneWidget);
+    expect(find.text('New company'), findsOneWidget);
 
     // Open the create drawer
-    await tester.tap(find.text('Nouvelle société'));
+    await tester.tap(find.text('New company'));
     await tester.pumpAndSettle();
-    expect(find.text('Raison sociale'), findsOneWidget);
+    expect(find.text('Company name'), findsOneWidget);
 
     // Fill the form and save
     await tester.enterText(find.byType(TextFormField).at(0), 'Test SARL');
-    await tester.tap(find.text('Enregistrer'));
+    await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
     // The new company is visible in the table + toast shown
@@ -64,47 +64,47 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('blocks saving a société with an empty required field', (
+  testWidgets('blocks saving a company with an empty required field', (
     tester,
   ) async {
     await pumpConsole(tester);
 
-    await tester.tap(find.text('Sociétés'));
+    await tester.tap(find.text('Companies'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Nouvelle société'));
+    await tester.tap(find.text('New company'));
     await tester.pumpAndSettle();
 
-    // Save without filling the "Raison sociale" field.
-    await tester.tap(find.text('Enregistrer'));
+    // Save without filling the "Company name" field.
+    await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
     // An error toast is shown and the drawer stays open for a retry.
     expect(
-      find.text('Le champ « Raison sociale » est obligatoire.'),
+      find.text('The field "Company name" is required.'),
       findsOneWidget,
     );
-    expect(find.text('Raison sociale'), findsOneWidget);
+    expect(find.text('Company name'), findsOneWidget);
 
     // Flush the toast auto-dismiss timer.
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('blocks deleting a société that still has agences', (
+  testWidgets('blocks deleting a company that still has agencies', (
     tester,
   ) async {
     await pumpConsole(tester);
 
-    await tester.tap(find.text('Sociétés'));
+    await tester.tap(find.text('Companies'));
     await tester.pumpAndSettle();
 
-    // 'Propre237 Douala SARL' has 2 attached agences (seed data): its
+    // 'WastePro Douala Ltd' has 2 attached agencies (seed data): its
     // delete action is blocked with an explanatory toast, no confirm dialog.
     await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Supprimer cette société ?'), findsNothing);
-    expect(find.textContaining('Impossible de supprimer'), findsOneWidget);
-    expect(find.text('Propre237 Douala SARL'), findsWidgets);
+    expect(find.text('Delete this company?'), findsNothing);
+    expect(find.textContaining('Cannot delete'), findsOneWidget);
+    expect(find.text('WastePro Douala Ltd'), findsWidgets);
 
     // Flush the toast auto-dismiss timer.
     await tester.pump(const Duration(seconds: 4));
@@ -126,33 +126,33 @@ void main() {
 
     // Sidebar is hidden (drawer closed) - nav items are not hit-testable.
     expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
-    expect(find.text('Sociétés').hitTestable(), findsNothing);
+    expect(find.text('Companies').hitTestable(), findsNothing);
 
     // Open the drawer via the hamburger.
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Sociétés').hitTestable(), findsOneWidget);
+    expect(find.text('Companies').hitTestable(), findsOneWidget);
 
-    // Navigate: drawer closes and the sociétés page shows cards.
-    await tester.tap(find.text('Sociétés').hitTestable());
+    // Navigate: drawer closes and the companies page shows cards.
+    await tester.tap(find.text('Companies').hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Bonanjo, Douala'), findsWidgets);
-    expect(find.text('Nouvelle société'), findsOneWidget);
+    expect(find.text('New company'), findsOneWidget);
   });
 
   testWidgets('mobile: tapping a card opens the edit form', (tester) async {
     await pumpConsoleMobile(tester);
 
-    // Open the drawer and go to the sociétés page (cards layout).
+    // Open the drawer and go to the companies page (cards layout).
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sociétés').hitTestable());
+    await tester.tap(find.text('Companies').hitTestable());
     await tester.pumpAndSettle();
 
     // Tapping the first card opens the edit form (parity with desktop rows).
-    await tester.tap(find.text('Propre237 Douala SARL').first);
+    await tester.tap(find.text('WastePro Douala Ltd').first);
     await tester.pumpAndSettle();
-    expect(find.text('Modifier la société'), findsOneWidget);
+    expect(find.text('Edit company'), findsOneWidget);
     await tester.pumpAndSettle();
   });
 
@@ -173,44 +173,44 @@ void main() {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SuperAdminConsole()),
                 ),
-                child: const Text('Ouvrir console'),
+                child: const Text('Open console'),
               ),
             ),
           ),
         ),
       ),
     );
-    await tester.tap(find.text('Ouvrir console'));
+    await tester.tap(find.text('Open console'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 600));
 
     // Open the drawer.
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Sociétés').hitTestable(), findsOneWidget);
+    expect(find.text('Companies').hitTestable(), findsOneWidget);
 
     // First back: the drawer closes, the console is NOT popped.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Sociétés').hitTestable(), findsNothing);
-    expect(find.text('Ouvrir console'), findsNothing);
+    expect(find.text('Companies').hitTestable(), findsNothing);
+    expect(find.text('Open console'), findsNothing);
 
     // Second back: the console pops back to the previous screen.
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.text('Ouvrir console'), findsOneWidget);
+    expect(find.text('Open console'), findsOneWidget);
   });
 
   testWidgets('command palette opens and closes with Escape', (tester) async {
     await pumpConsole(tester);
 
-    await tester.tap(find.text('Rechercher ou agir...'));
+    await tester.tap(find.text('Search or take action...'));
     await tester.pumpAndSettle();
 
     // Group labels are uppercased by the palette UI.
     expect(find.text('NAVIGATION'), findsOneWidget);
     expect(find.text('ACTIONS'), findsOneWidget);
-    expect(find.text('Nouvelle société'), findsOneWidget);
+    expect(find.text('New company'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();

@@ -18,20 +18,20 @@ class ParametresPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Plateforme',
+                'Platform',
                 style: SuperAdminTheme.sora(14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 16),
-              _SettingField(label: 'Nom de la plateforme', value: 'Propre237'),
+              _SettingField(label: 'Platform name', value: 'WastePro'),
               const SizedBox(height: 14),
               _SettingField(
-                label: 'Email de support',
-                value: 'support@propre237.cm',
+                label: 'Support email',
+                value: 'support@wastepro.cm',
               ),
               const SizedBox(height: 14),
               _SettingField(
-                label: 'Fuseau horaire',
-                value: 'Afrique/Douala (GMT+1)',
+                label: 'Time zone',
+                value: 'Africa/Douala (GMT+1)',
               ),
             ],
           ),
@@ -44,19 +44,19 @@ class ParametresPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Sécurité',
+                'Security',
                 style: SuperAdminTheme.sora(14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               const _SecurityItem(
                 color: SuperAdminTheme.green,
-                title: 'Double authentification (2FA)',
-                subtitle: 'Requise pour les Administrateurs Généraux',
+                title: 'Two-factor authentication (2FA)',
+                subtitle: 'Required for General Administrators',
               ),
               const _SecurityItem(
                 color: SuperAdminTheme.gold,
-                title: 'Journalisation des actions',
-                subtitle: 'Activée — conservation 12 mois',
+                title: 'Action logging',
+                subtitle: 'Enabled — 12-month retention',
               ),
             ],
           ),

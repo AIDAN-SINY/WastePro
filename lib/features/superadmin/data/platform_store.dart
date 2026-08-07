@@ -45,7 +45,7 @@ class PlatformStore extends ChangeNotifier {
 
   // --- Dashboard helpers ---
   int get societesActives =>
-      societes.where((s) => s.status == 'Actif').length;
+      societes.where((s) => s.status == 'Active').length;
   int get agencesCount => agences.length;
   int get utilisateursCount => utilisateurs.length;
 

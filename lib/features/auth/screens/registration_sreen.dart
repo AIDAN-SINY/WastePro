@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
@@ -118,10 +119,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           context,
           listen: false,
         ).setUser(newUser);
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthWrapper()),
-          (route) => false,
-        );
+        // Navigation par route (URL) : le routeur redirige ensuite vers le
+        // dashboard ou la console selon le rôle. Fallback sans routeur.
+        final router = GoRouter.maybeOf(context);
+        if (router != null) {
+          router.go('/');
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AuthWrapper()),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

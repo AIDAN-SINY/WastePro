@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/superadmin/data/firestore_platform_store.dart';
@@ -40,7 +41,7 @@ void main() {
       'adresse': 'Yaoundé',
       'telephone': '+237 600 00 00 00',
       'email': 'contact@ma-societe.cm',
-      'status': 'Actif',
+      'status': 'Active',
     });
 
     final store = FirestorePlatformStore(db: db);
@@ -70,7 +71,7 @@ void main() {
       adresse: 'Douala',
       telephone: '+237 6 00 00 00 00',
       email: 'test@sarl.cm',
-      status: 'Actif',
+      status: 'Active',
     );
     expect(store.societes.single.raisonSociale, 'Test SARL');
     final id = store.societes.first.id;
@@ -78,10 +79,10 @@ void main() {
     expect(doc.data()?['raisonSociale'], 'Test SARL');
 
     // Update
-    await store.updateSociete(store.societes.first.copyWith(status: 'Suspendu'));
-    expect(store.societes.first.status, 'Suspendu');
+    await store.updateSociete(store.societes.first.copyWith(status: 'Suspended'));
+    expect(store.societes.first.status, 'Suspended');
     doc = await db.collection('societes').doc(id).get();
-    expect(doc.data()?['status'], 'Suspendu');
+    expect(doc.data()?['status'], 'Suspended');
 
     // Delete
     await store.deleteSociete(id);
@@ -92,13 +93,57 @@ void main() {
     store.dispose();
   });
 
+  test('permission-denied après déconnexion ne déclenche pas de bannière',
+      () async {
+    final db = FakeFirebaseFirestore();
+    // Simule une session Firebase Auth révoquée (logout) : les listeners
+    // encore actifs sont rejetés par les règles → pas d'erreur affichée.
+    final store = FirestorePlatformStore(
+      db: db,
+      seedIfEmpty: false,
+      isSignedOut: () => true,
+    );
+    await store.initialLoad;
+    await _settle();
+
+    store.handleStreamError(
+      FirebaseException(plugin: 'firestore', code: 'permission-denied'),
+    );
+
+    expect(store.error, isNull,
+        reason: 'Après logout, permission-denied est attendu — pas une erreur.');
+    expect(store.isLoading, isFalse);
+
+    store.dispose();
+  });
+
+  test('permission-denied pendant une session active affiche l erreur',
+      () async {
+    final db = FakeFirebaseFirestore();
+    final store = FirestorePlatformStore(
+      db: db,
+      seedIfEmpty: false,
+      isSignedOut: () => false,
+    );
+    await store.initialLoad;
+    await _settle();
+
+    store.handleStreamError(
+      FirebaseException(plugin: 'firestore', code: 'permission-denied'),
+    );
+
+    expect(store.error, contains('Access denied'));
+
+    store.dispose();
+  });
+
   test('renaming a société cascades to its agences', () async {
     final db = FakeFirebaseFirestore();
     final store = FirestorePlatformStore(db: db);
     await store.initialLoad;
     await _settle();
 
-    // so1 'Propre237 Douala SARL' owns ag1 + ag2 (seed data).
+    // so1 'WastePro Douala Ltd' owns ag1 + ag2 (seed data).
     final so1 = store.societes.firstWhere((s) => s.id == 'so1');
     expect(
       store.agences.where((a) => a.societe == so1.raisonSociale).length,
@@ -106,19 +151,19 @@ void main() {
     );
 
     await store.updateSociete(
-      so1.copyWith(raisonSociale: 'Propre237 Douala SAS'),
+      so1.copyWith(raisonSociale: 'WastePro Douala SAS'),
     );
 
     // In-memory lists are in sync…
     expect(
       store.agences
           .where((a) => a.id == 'ag1' || a.id == 'ag2')
-          .every((a) => a.societe == 'Propre237 Douala SAS'),
+          .every((a) => a.societe == 'WastePro Douala SAS'),
       isTrue,
     );
     // …and the rename really landed in Firestore.
     final ag1 = await db.collection('agences').doc('ag1').get();
-    expect(ag1.data()?['societe'], 'Propre237 Douala SAS');
+    expect(ag1.data()?['societe'], 'WastePro Douala SAS');
 
     store.dispose();
   });
@@ -130,11 +175,11 @@ void main() {
     await _settle();
 
     await store.addAgence(
-      societe: 'Propre237 Douala SARL',
+      societe: 'WastePro Douala Ltd',
       ville: 'Douala — Akwa',
       responsable: 'Paul Biya Jr',
       telephone: '+237 688 00 00 00',
-      status: 'Actif',
+      status: 'Active',
     );
     expect(store.agences.single.ville, 'Douala — Akwa');
     final agenceId = store.agences.first.id;
@@ -144,18 +189,18 @@ void main() {
     );
 
     await store.addUtilisateur(
-      nom: 'Nouvel Admin',
+      nom: 'New Admin',
       telephone: '+237 699 99 99 99',
-      role: 'Administrateur Général',
+      role: 'General Administrator',
       agence: '—',
-      status: 'Actif',
+      status: 'Active',
       password: 'mdp123',
     );
-    expect(store.utilisateurs.single.nom, 'Nouvel Admin');
+    expect(store.utilisateurs.single.nom, 'New Admin');
     final userId = store.utilisateurs.first.id;
     expect(
       (await db.collection('utilisateurs').doc(userId).get()).data()?['role'],
-      'Administrateur Général',
+      'General Administrator',
     );
 
     await store.deleteAgence(agenceId);
@@ -174,11 +219,11 @@ void main() {
 
     // Sans mot de passe → aucun compte de connexion (utilisateurs seedés).
     await store.addUtilisateur(
-      nom: 'Sans MDP',
+      nom: 'No Password',
       telephone: '+237 611 11 11 11',
-      role: "Responsable d'Agence",
+      role: 'Agency Manager',
       agence: 'Douala — Bonanjo',
-      status: 'Actif',
+      status: 'Active',
       password: '',
     );
     expect(
@@ -191,9 +236,9 @@ void main() {
     await store.addUtilisateur(
       nom: 'Marie Ekwalla',
       telephone: '+237 699 99 99 99',
-      role: "Responsable d'Agence",
+      role: 'Agency Manager',
       agence: 'Yaoundé',
-      status: 'Actif',
+      status: 'Active',
       password: 'secret123',
     );
     final login = await db.collection('users').doc('+237699999999').get();
@@ -208,15 +253,15 @@ void main() {
     final updated = await db.collection('users').doc('+237699999999').get();
     expect(updated.data()?['password'], 'newpass456');
 
-    // Suspendre l'utilisateur supprime son compte de connexion (plus de login).
-    await store.updateUtilisateur(user.copyWith(status: 'Suspendu'));
+    // Suspending the user removes their login account (no more login).
+    await store.updateUtilisateur(user.copyWith(status: 'Suspended'));
     expect(
       (await db.collection('users').doc('+237699999999').get()).exists,
       isFalse,
     );
 
-    // Le réactiver recrée le compte de connexion.
-    await store.updateUtilisateur(user.copyWith(status: 'Actif'));
+    // Reactivating recreates the login account.
+    await store.updateUtilisateur(user.copyWith(status: 'Active'));
     expect(
       (await db.collection('users').doc('+237699999999').get()).exists,
       isTrue,
@@ -250,11 +295,11 @@ void main() {
 
     await expectLater(
       store.addUtilisateur(
-        nom: 'Faux Admin',
+        nom: 'Fake Admin',
         telephone: '+237 688 88 88 88',
-        role: 'Administrateur Général',
+        role: 'General Administrator',
         agence: '—',
-        status: 'Actif',
+        status: 'Active',
         password: 'hack',
       ),
       throwsA(isA<Exception>()),

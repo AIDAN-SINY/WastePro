@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/backoffice/data/firestore_backoffice_store.dart';
@@ -34,7 +35,7 @@ void main() {
 
       // Les collecteurs seedés actifs sont pré-approuvés (liste blanche).
       final whitelist = await db.collection('collectors').get();
-      final active = seedCollecteurs.where((c) => c.status == 'Actif').length;
+      final active = seedCollecteurs.where((c) => c.status == 'Active').length;
       expect(whitelist.docs.length, active);
 
       store.dispose();
@@ -49,7 +50,7 @@ void main() {
       'phone': '+237 600 00 00 00',
       'zone': 'Yaoundé',
       'plan': 'Standard',
-      'status': 'Actif',
+      'status': 'Active',
     });
 
     final store = FirestoreBackofficeStore(db: db);
@@ -77,7 +78,7 @@ void main() {
         phone: '+237 612 34 56 78',
         zone: 'Bonanjo',
         plan: 'Premium',
-        status: 'Actif',
+        status: 'Active',
         password: 'secret123',
       );
       expect(store.clients.single.name, 'Claude Nguema');
@@ -113,7 +114,7 @@ void main() {
         phone: '+237 622 22 22 22',
         zone: 'Akwa',
         plan: 'Standard',
-        status: 'Actif',
+        status: 'Active',
       );
       expect(
         (await db.collection('users').doc('+237622222222').get()).exists,
@@ -136,7 +137,7 @@ void main() {
       phone: '+237 655 00 00 00',
       zone: 'Bonanjo / Akwa',
       rating: 4.7,
-      status: 'Actif',
+      status: 'Active',
       password: 'collector123',
     );
     expect(store.collecteurs.single.name, 'Boris Ndongo');
@@ -168,7 +169,7 @@ void main() {
       phone: '+237 612 34 56 78',
       zone: 'Bonanjo',
       plan: 'Premium',
-      status: 'Actif',
+      status: 'Active',
       password: 'secret123',
     );
     final client = store.clients.first;
@@ -198,21 +199,21 @@ void main() {
         phone: '+237 612 34 56 78',
         zone: 'Bonanjo',
         plan: 'Premium',
-        status: 'Actif',
+        status: 'Active',
         password: 'secret123',
       );
       final client = store.clients.first;
 
-      // Suspendu → plus de compte de connexion (plus de login possible).
-      await store.updateClient(client.copyWith(status: 'Suspendu'));
+      // Suspended → no more login account (no more login possible).
+      await store.updateClient(client.copyWith(status: 'Suspended'));
       expect(
         (await db.collection('users').doc('+237612345678').get()).exists,
         isFalse,
       );
 
-      // Réactivé → le compte de connexion est recréé avec le mot de passe
-      // conservé (le champ reste vide côté admin).
-      await store.updateClient(client.copyWith(status: 'Actif'));
+      // Reactivated → the login account is recreated with the kept password
+      // (the field stays empty on the admin side).
+      await store.updateClient(client.copyWith(status: 'Active'));
       final login = await db.collection('users').doc('+237612345678').get();
       expect(login.exists, isTrue);
       expect(login.data()?['password'], 'secret123');
@@ -234,7 +235,7 @@ void main() {
         phone: '+237 655 00 00 00',
         zone: 'Deido',
         rating: 4.0,
-        status: 'Inactif',
+        status: 'Inactive',
         password: 'collector123',
       );
       expect(
@@ -246,9 +247,9 @@ void main() {
         isFalse,
       );
 
-      // Réactivé → le compte de connexion et l'approbation sont créés.
+      // Reactivated → the login account and the approval are created.
       final collecteur = store.collecteurs.first;
-      await store.updateCollecteur(collecteur.copyWith(status: 'Actif'));
+      await store.updateCollecteur(collecteur.copyWith(status: 'Active'));
       expect(
         (await db.collection('users').doc('+237655000000').get()).exists,
         isTrue,
@@ -273,7 +274,7 @@ void main() {
       phone: '+237 612 34 56 78',
       zone: 'Bonanjo',
       plan: 'Premium',
-      status: 'Actif',
+      status: 'Active',
       password: 'secret123',
     );
     await store.deleteClient(store.clients.first.id);
@@ -298,7 +299,7 @@ void main() {
       phone: '+237 655 00 00 00',
       zone: 'Bonanjo',
       rating: 4.7,
-      status: 'Actif',
+      status: 'Active',
       password: 'collector123',
     );
     await store.deleteCollecteur(store.collecteurs.first.id);
@@ -334,7 +335,7 @@ void main() {
         'phone': '+237 655 00 00 00',
         'zone': 'Akwa',
         'rating': 4.0,
-        'status': 'Inactif',
+        'status': 'Inactive',
       });
 
       final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
@@ -373,7 +374,7 @@ void main() {
         phone: '+237 688 88 88 88',
         zone: 'Akwa',
         plan: 'Standard',
-        status: 'Actif',
+        status: 'Active',
         password: 'hack',
       ),
       throwsA(isA<Exception>()),
@@ -389,6 +390,50 @@ void main() {
     store.dispose();
   });
 
+  test('permission-denied après déconnexion ne déclenche pas de bannière',
+      () async {
+    final db = FakeFirebaseFirestore();
+    // Simule une session Firebase Auth révoquée (logout) : les listeners
+    // encore actifs sont rejetés par les règles → pas d'erreur affichée.
+    final store = FirestoreBackofficeStore(
+      db: db,
+      seedIfEmpty: false,
+      isSignedOut: () => true,
+    );
+    await store.initialLoad;
+    await _settle();
+
+    store.handleStreamError(
+      FirebaseException(plugin: 'firestore', code: 'permission-denied'),
+    );
+
+    expect(store.error, isNull,
+        reason: 'Après logout, permission-denied est attendu — pas une erreur.');
+    expect(store.isLoading, isFalse);
+
+    store.dispose();
+  });
+
+  test('permission-denied pendant une session active affiche l erreur',
+      () async {
+    final db = FakeFirebaseFirestore();
+    final store = FirestoreBackofficeStore(
+      db: db,
+      seedIfEmpty: false,
+      isSignedOut: () => false,
+    );
+    await store.initialLoad;
+    await _settle();
+
+    store.handleStreamError(
+      FirebaseException(plugin: 'firestore', code: 'permission-denied'),
+    );
+
+    expect(store.error, contains('Access denied'));
+
+    store.dispose();
+  });
+
   test('changing the phone number migrates the login account', () async {
     final db = FakeFirebaseFirestore();
     final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
@@ -400,7 +445,7 @@ void main() {
       phone: '+237 612 34 56 78',
       zone: 'Bonanjo',
       plan: 'Premium',
-      status: 'Actif',
+      status: 'Active',
       password: 'secret123',
     );
     final client = store.clients.first;

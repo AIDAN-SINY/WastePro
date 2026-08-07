@@ -6,15 +6,15 @@ void main() {
     final store = PlatformStore();
 
     store.updateSociete(
-      store.societes.first.copyWith(raisonSociale: 'Propre237 Douala SAS'),
+      store.societes.first.copyWith(raisonSociale: 'WastePro Douala SAS'),
     );
 
     expect(
-      store.agences.where((a) => a.societe == 'Propre237 Douala SARL'),
+      store.agences.where((a) => a.societe == 'WastePro Douala Ltd'),
       isEmpty,
     );
     expect(
-      store.agences.where((a) => a.societe == 'Propre237 Douala SAS').length,
+      store.agences.where((a) => a.societe == 'WastePro Douala SAS').length,
       2,
     );
   });
@@ -22,7 +22,7 @@ void main() {
   test('dashboard helpers count the design data correctly', () {
     final store = PlatformStore();
 
-    // Seed: 3 sociétés (2 Actif), 4 agences, 4 utilisateurs.
+    // Seed: 3 companies (2 Active), 4 agencies, 4 users.
     expect(store.societesActives, 2);
     expect(store.agencesCount, 4);
     expect(store.utilisateursCount, 4);

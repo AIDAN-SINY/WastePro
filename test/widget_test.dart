@@ -34,7 +34,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Welcome to WastePro'), findsOneWidget);
+    // The new welcome screen shows the CTA card with its "Log In" button
+    // (the "Welcome to WastePro" text was replaced by a responsive product
+    // promise).
+    expect(find.text('Log In'), findsOneWidget);
   });
 
   testWidgets('auth wrapper shows loading while auth check is in progress', (

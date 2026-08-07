@@ -24,52 +24,52 @@ class BoListPage extends StatelessWidget {
 
   String get _entityName => switch (type) {
         BoEntity.client => 'client',
-        BoEntity.collecteur => 'collecteur',
-        BoEntity.contrat => 'contrat',
-        BoEntity.collecte => 'collecte',
-        BoEntity.facture => 'facture',
-        BoEntity.frequence => 'fréquence',
+        BoEntity.collecteur => 'collector',
+        BoEntity.contrat => 'contract',
+        BoEntity.collecte => 'collection',
+        BoEntity.facture => 'invoice',
+        BoEntity.frequence => 'frequency',
       };
 
   String get _emptyText => switch (type) {
-        BoEntity.client => 'Aucun client trouvé',
-        BoEntity.collecteur => 'Aucun collecteur trouvé',
-        BoEntity.contrat => 'Aucun contrat trouvé',
-        BoEntity.collecte => 'Aucune collecte trouvée',
-        BoEntity.facture => 'Aucune facture trouvée',
-        BoEntity.frequence => 'Aucune fréquence',
+        BoEntity.client => 'No clients found',
+        BoEntity.collecteur => 'No collectors found',
+        BoEntity.contrat => 'No contracts found',
+        BoEntity.collecte => 'No collections found',
+        BoEntity.facture => 'No invoices found',
+        BoEntity.frequence => 'No frequencies',
       };
 
   /// (label shown, status value used for filtering) per the design.
   List<(String, String)> get _filters => switch (type) {
         BoEntity.client => [
-            ('Tous', 'Tous'),
-            ('Actifs', 'Actif'),
-            ('Suspendus', 'Suspendu'),
+            ('All', 'All'),
+            ('Active', 'Active'),
+            ('Suspended', 'Suspended'),
           ],
         BoEntity.collecteur => [
-            ('Tous', 'Tous'),
-            ('Actifs', 'Actif'),
-            ('Inactifs', 'Inactif'),
+            ('All', 'All'),
+            ('Active', 'Active'),
+            ('Inactive', 'Inactive'),
           ],
         BoEntity.contrat => [
-            ('Tous', 'Tous'),
-            ('Actifs', 'Actif'),
-            ('Expirés', 'Expiré'),
+            ('All', 'All'),
+            ('Active', 'Active'),
+            ('Expired', 'Expired'),
           ],
         BoEntity.collecte => [
-            ('Toutes', 'Toutes'),
-            ('Effectuées', 'Effectué'),
-            ('Prévues', 'Prévu'),
-            ('Manquées', 'Manqué'),
+            ('All', 'All'),
+            ('Completed', 'Completed'),
+            ('Scheduled', 'Scheduled'),
+            ('Missed', 'Missed'),
           ],
         BoEntity.facture => [
-            ('Toutes', 'Toutes'),
-            ('Payées', 'Payée'),
-            ('En attente', 'En attente'),
-            ('En retard', 'En retard'),
+            ('All', 'All'),
+            ('Paid', 'Paid'),
+            ('Pending', 'Pending'),
+            ('Overdue', 'Overdue'),
           ],
-        BoEntity.frequence => [('Toutes', 'Toutes')],
+        BoEntity.frequence => [('All', 'All')],
       };
 
   @override
@@ -120,28 +120,28 @@ class BoListPage extends StatelessWidget {
     switch (type) {
       case BoEntity.client:
         return store.clients
-            .where((c) => (sel == 'Tous' || c.status == sel) && (match(c.name) || match(c.zone)))
+            .where((c) => (sel == 'All' || c.status == sel) && (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.collecteur:
         return store.collecteurs
-            .where((c) => (sel == 'Tous' || c.status == sel) && (match(c.name) || match(c.zone)))
+            .where((c) => (sel == 'All' || c.status == sel) && (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.contrat:
         return store.contrats
-            .where((c) => (sel == 'Tous' || c.status == sel) && match(c.client))
+            .where((c) => (sel == 'All' || c.status == sel) && match(c.client))
             .toList()
             .cast<Object>();
       case BoEntity.collecte:
         final sorted = [...store.collectes]..sort((a, b) => b.date.compareTo(a.date));
         return sorted
-            .where((c) => (sel == 'Toutes' || c.status == sel) && match(c.client))
+            .where((c) => (sel == 'All' || c.status == sel) && match(c.client))
             .toList()
             .cast<Object>();
       case BoEntity.facture:
         return store.factures
-            .where((f) => (sel == 'Toutes' || f.status == sel) && match(f.client))
+            .where((f) => (sel == 'All' || f.status == sel) && match(f.client))
             .toList()
             .cast<Object>();
       case BoEntity.frequence:
@@ -193,7 +193,7 @@ class BoListPage extends StatelessWidget {
         return BoItemCard(
           avatarText: boInitials(c.client),
           title: c.client,
-          subtitle: '${boMoney(c.montant)} XAF · éch. ${boFmtDate(c.echeance)}',
+          subtitle: '${boMoney(c.montant)} XAF · due ${boFmtDate(c.echeance)}',
           status: c.status,
           onKebab: () => _onKebab(context, c),
         );
@@ -201,8 +201,8 @@ class BoListPage extends StatelessWidget {
         return BoItemCard(
           avatarText: '🔄',
           title: (item as FrequenceModel).libelle,
-          subtitle: 'Tous les ${item.jours} jours',
-          status: 'Actif',
+          subtitle: 'Every ${item.jours} days',
+          status: 'Active',
           onKebab: () => _onKebab(context, item),
         );
     }
@@ -231,7 +231,7 @@ class BoListPage extends StatelessWidget {
       case BoEntity.frequence:
         store.deleteFrequence((item as FrequenceModel).id);
     }
-    BoToastService.show('$_entityName supprimé');
+    BoToastService.show('$_entityName deleted');
   }
 }
 

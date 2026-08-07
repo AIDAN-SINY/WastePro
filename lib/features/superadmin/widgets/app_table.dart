@@ -30,7 +30,7 @@ class AppTable<T> extends StatefulWidget {
     required this.columns,
     this.actions,
     this.onRowTap,
-    this.emptyText = 'Aucun élément trouvé',
+    this.emptyText = 'No items found',
     this.footer,
   });
 

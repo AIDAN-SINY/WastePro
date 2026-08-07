@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
@@ -22,7 +24,9 @@ class FirestorePlatformStore extends PlatformStore {
   FirestorePlatformStore({
     FirebaseFirestore? db,
     this.seedIfEmpty = true,
-  }) : _db = db ?? FirebaseFirestore.instance {
+    @visibleForTesting bool Function()? isSignedOut,
+  }) : _isSignedOutOverride = isSignedOut,
+       _db = db ?? FirebaseFirestore.instance {
     // Never flash the design's mock data in the real console.
     societes.clear();
     agences.clear();
@@ -68,19 +72,19 @@ class FirestorePlatformStore extends PlatformStore {
     _subs.add(
       _db.collection('societes').snapshots().listen(
             _onSocietes,
-            onError: _onStreamError,
+            onError: handleStreamError,
           ),
     );
     _subs.add(
       _db.collection('agences').snapshots().listen(
             _onAgences,
-            onError: _onStreamError,
+            onError: handleStreamError,
           ),
     );
     _subs.add(
       _db.collection('utilisateurs').snapshots().listen(
             _onUtilisateurs,
-            onError: _onStreamError,
+            onError: handleStreamError,
           ),
     );
 
@@ -138,12 +142,36 @@ class FirestorePlatformStore extends PlatformStore {
     notifyListeners();
   }
 
-  void _onStreamError(Object error) {
+  final bool Function()? _isSignedOutOverride;
+
+  /// Point d'entrée des erreurs de flux (exposé pour les tests).
+  ///
+  /// Après une déconnexion, le token est révoqué et les règles rejettent
+  /// les listeners encore actifs (permission-denied…) : c'est attendu — la
+  /// console est en train de se démonter, on n'affiche pas de bannière.
+  @visibleForTesting
+  void handleStreamError(Object error) {
     setLoading(false);
-    setErrorValue(_friendlyError(error));
+    if (!_isSignedOut()) {
+      setErrorValue(_friendlyError(error));
+    }
     final completer = _loadCompleter;
     if (completer != null && !completer.isCompleted) completer.complete();
     notifyListeners();
+  }
+
+  /// Vrai quand aucune session Firebase Auth n'est active (déconnecté ou
+  /// token expiré). Protégé pour les tests (app Firebase non initialisée) :
+  /// on considère alors qu'une session existe, pour ne jamais masquer une
+  /// vraie erreur de règles.
+  bool _isSignedOut() {
+    final override = _isSignedOutOverride;
+    if (override != null) return override();
+    try {
+      return FirebaseAuth.instance.currentUser == null;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _seedCollection(
@@ -406,7 +434,7 @@ class FirestorePlatformStore extends PlatformStore {
     if (phone.isEmpty || user.password.isEmpty) return;
     final ref = _db.collection('users').doc(phone);
 
-    if (user.status == 'Suspendu') {
+    if (user.status == 'Suspended') {
       final doc = await ref.get();
       if (doc.exists && doc.data()?['consoleCreated'] == true) {
         await ref.delete();
@@ -417,8 +445,8 @@ class FirestorePlatformStore extends PlatformStore {
     final existing = await ref.get();
     if (existing.exists && existing.data()?['consoleCreated'] != true) {
       throw _SyncError(
-        'Un compte client existe déjà avec ce numéro. Choisissez un '
-        'numéro différent.',
+        'A client account already exists with this number. Choose a '
+        'different number.',
       );
     }
     await ref.set({
@@ -450,14 +478,14 @@ class FirestorePlatformStore extends PlatformStore {
     if (error is FirebaseException) {
       switch (error.code) {
         case 'unavailable':
-          return 'Service indisponible. Vérifie ta connexion internet.';
+          return 'Service unavailable. Check your internet connection.';
         case 'permission-denied':
-          return 'Accès refusé. Vérifie les règles Firestore du projet.';
+          return 'Access denied. Check the project Firestore rules.';
         default:
-          return error.message ?? 'Erreur Firestore.';
+          return error.message ?? 'Firestore error.';
       }
     }
-    return 'Une erreur est survenue. Réessaie.';
+    return 'An error occurred. Please try again.';
   }
 
   void _cancelSubscriptions() {

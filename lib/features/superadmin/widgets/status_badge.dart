@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// Status pill with the design's color mapping:
-/// Actif → green, Suspendu → red, Administrateur Général → gold,
-/// Responsable d'Agence → gray.
+/// Status pill with the design's color mapping.
+///
+/// Handles both the new English values ('Active', 'Suspended', …) and the
+/// legacy French values stored before the app switched to English ('Actif',
+/// 'Suspendu', …) so existing Firestore records keep their colors until they
+/// are edited.
 class StatusBadge extends StatelessWidget {
   const StatusBadge({super.key, required this.status});
 
@@ -13,9 +16,10 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (Color bg, Color fg) = switch (status) {
-      'Actif' => (SuperAdminTheme.greenSoft, SuperAdminTheme.green),
-      'Suspendu' => (SuperAdminTheme.redSoft, SuperAdminTheme.red),
-      'Administrateur Général' =>
+      'Active' || 'Actif' => (SuperAdminTheme.greenSoft, SuperAdminTheme.green),
+      'Suspended' || 'Suspendu' =>
+        (SuperAdminTheme.redSoft, SuperAdminTheme.red),
+      'General Administrator' || 'Administrateur Général' =>
         (SuperAdminTheme.goldSoft, SuperAdminTheme.goldDim),
       _ => (const Color(0xFFEFEDE5), SuperAdminTheme.muted),
     };

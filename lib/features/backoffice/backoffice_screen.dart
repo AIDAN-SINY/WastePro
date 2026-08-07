@@ -53,13 +53,13 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
   bool _toastInit = false;
 
   static const _titles = <String, String>{
-    'dashboard': "Vue d'ensemble",
+    'dashboard': 'Overview',
     'clients': 'Clients',
-    'collecteurs': 'Collecteurs',
-    'contrats': 'Contrats',
-    'collectes': 'Collectes',
-    'facturation': 'Facturation',
-    'parametres': 'Paramètres',
+    'collecteurs': 'Collectors',
+    'contrats': 'Contracts',
+    'collectes': 'Collections',
+    'facturation': 'Billing',
+    'parametres': 'Settings',
   };
 
   @override
@@ -104,17 +104,17 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
   String get _subtitle {
     switch (_page) {
       case 'clients':
-        return '${_store.clients.length} enregistrés';
+        return '${_store.clients.length} registered';
       case 'collecteurs':
         return '${_store.collecteurs.length} agents';
       case 'contrats':
-        return '${_store.contrats.length} au total';
+        return '${_store.contrats.length} total';
       case 'facturation':
-        return '${_store.factures.length} factures';
+        return '${_store.factures.length} invoices';
       case 'parametres':
-        return 'Configuration';
+        return 'Company settings';
       default:
-        return "Aujourd'hui";
+        return 'Today';
     }
   }
 
@@ -257,7 +257,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
             key: const Key('bo_bell'),
             icon: Icons.notifications_none_rounded,
             dot: true,
-            onTap: () => BoToastService.show('Aucune nouvelle notification'),
+            onTap: () => BoToastService.show('No new notifications'),
           ),
         ],
       ),
@@ -349,7 +349,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                       weight: FontWeight.w600,
                     ),
                   ),
-                  child: const Text('Réessayer'),
+                  child: const Text('Retry'),
                 ),
               ],
             ),
@@ -396,7 +396,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                         decoration: const InputDecoration(
                           border: InputBorder.none,
                           isDense: true,
-                          hintText: 'Rechercher...',
+                          hintText: 'Search...',
                           hintStyle: TextStyle(
                             color: BackofficeTheme.muted,
                             fontSize: 13,
@@ -442,14 +442,14 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
           child: Row(
             children: [
-              _tabItem('dashboard', Icons.home_rounded, 'Accueil'),
+              _tabItem('dashboard', Icons.home_rounded, 'Home'),
               _tabItem('clients', Icons.people_outline_rounded, 'Clients'),
-              _tabItem('collectes', Icons.event_note_rounded, 'Collectes'),
-              _tabItem('contrats', Icons.description_outlined, 'Contrats'),
+              _tabItem('collectes', Icons.event_note_rounded, 'Collections'),
+              _tabItem('contrats', Icons.description_outlined, 'Contracts'),
               _tabItem(
                 'more',
                 Icons.more_horiz_rounded,
-                'Plus',
+                'More',
                 forceActive: moreActive,
               ),
             ],
@@ -551,7 +551,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                       SizedBox(width: 9),
                       Text.rich(
                         TextSpan(
-                          text: 'Propre',
+                          text: 'Waste',
                           style: TextStyle(
                             fontFamily: 'Sora',
                             fontSize: 15,
@@ -560,7 +560,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                           ),
                           children: [
                             TextSpan(
-                              text: '237',
+                              text: 'Pro',
                               style: TextStyle(
                                 fontFamily: 'Sora',
                                 fontWeight: FontWeight.w700,
@@ -573,21 +573,21 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                     ],
                   ),
                 ),
-                _menuItem('dashboard', Icons.home_rounded, "Vue d'ensemble"),
+                _menuItem('dashboard', Icons.home_rounded, 'Overview'),
                 _menuItem('clients', Icons.people_outline_rounded, 'Clients'),
                 _menuItem(
                   'collecteurs',
                   Icons.person_search_rounded,
-                  'Collecteurs',
+                  'Collectors',
                 ),
-                _menuItem('contrats', Icons.description_outlined, 'Contrats'),
-                _menuItem('collectes', Icons.event_note_rounded, 'Collectes'),
+                _menuItem('contrats', Icons.description_outlined, 'Contracts'),
+                _menuItem('collectes', Icons.event_note_rounded, 'Collections'),
                 _menuItem(
                   'facturation',
                   Icons.payments_outlined,
-                  'Facturation',
+                  'Billing',
                 ),
-                _menuItem('parametres', Icons.settings_outlined, 'Paramètres'),
+                _menuItem('parametres', Icons.settings_outlined, 'Settings'),
                 const Spacer(),
                 _menuFooter(),
               ],
@@ -676,7 +676,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
           if (user != null)
             IconButton(
               key: const Key('bo_logout'),
-              tooltip: 'Déconnexion',
+              tooltip: 'Log out',
               onPressed: () =>
                   Provider.of<UserProvider>(context, listen: false).logout(),
               icon: const Icon(

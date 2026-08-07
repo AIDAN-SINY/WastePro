@@ -58,14 +58,18 @@ class DefaultFirebaseOptions {
     storageBucket: 'waste-pro-f67a5.firebasestorage.app',
     iosBundleId: 'com.example.wastePro',
   );
+  // Config web : réutilise l'app web-type déjà enregistrée dans le projet
+  // (identifiants réels — l'ancien appId était un placeholder).
+  // Recommandé en prod : `flutterfire configure` pour créer une app web
+  // dédiée.
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyASh4XMhFvQ1h-ZG_gdE-nuuho_2h299os',
+    apiKey: 'AIzaSyBtZ2G7JI-XMHyWolGjLMtRMpbFBoq5Yhw',
     authDomain: 'waste-pro-f67a5.firebaseapp.com',
     projectId: 'waste-pro-f67a5',
     storageBucket: 'waste-pro-f67a5.firebasestorage.app',
     messagingSenderId: '107168223474',
-    appId: '1:107168223474:web:000000000000000',
-    measurementId: 'G-0000000000',
+    appId: '1:107168223474:web:f82fd3b32d6b5c1874c06b',
+    measurementId: 'G-QWKH1V357T',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

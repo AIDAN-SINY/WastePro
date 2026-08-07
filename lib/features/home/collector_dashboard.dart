@@ -122,7 +122,7 @@ class _CollectorDashboardState extends State<CollectorDashboard> {
             // LOGOUT BUTTON
             IconButton(
               onPressed: () => userProvider.logout(),
-              tooltip: 'Déconnexion',
+              tooltip: 'Log out',
               icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF6B5C), size: 20),
               style: IconButton.styleFrom(
                 backgroundColor: Colors.white10,

@@ -24,13 +24,13 @@ class UtilisateursPage extends StatefulWidget {
 
 class UtilisateursPageState extends State<UtilisateursPage> {
   static const List<String> _filters = [
-    'Tous',
+    'All',
     'Admins',
-    "Resp. d'agence",
+    'Agency managers',
   ];
   static const List<String> _roleOptions = [
-    'Administrateur Général',
-    "Responsable d'Agence",
+    'General Administrator',
+    'Agency Manager',
   ];
 
   int _filter = 0;
@@ -42,34 +42,34 @@ class UtilisateursPageState extends State<UtilisateursPage> {
     return ['—', ...agences];
   }
 
-  /// Opens the "Nouvel utilisateur" drawer (used by the command palette).
+  /// Opens the "New user" drawer (used by the command palette).
   void openCreate() {
     _form
       ..clear()
-      ..['status'] = 'Actif'
-      ..['role'] = "Responsable d'Agence"
+      ..['status'] = 'Active'
+      ..['role'] = 'Agency Manager'
       ..['agence'] = '—';
     showCrudDrawer(
       context,
-      title: 'Nouvel utilisateur',
+      title: 'New user',
       body: _buildForm(_agenceOptions),
       onSave: () async {
         try {
-          final nom = requireField(_form, 'nom', 'Nom complet');
-          // Le super admin fixe le mot de passe initial (pas d'envoi par
-          // mail pour l'instant) : l'utilisateur s'en servira pour se loguer.
-          final password = requireField(_form, 'password', 'Mot de passe');
+          final nom = requireField(_form, 'nom', 'Full name');
+          // The super admin sets the initial password (no email yet): the
+          // user will use it to log in.
+          final password = requireField(_form, 'password', 'Password');
           await context.read<PlatformStore>().addUtilisateur(
                 nom: nom,
                 telephone: _form['telephone']?.toString().trim() ?? '',
                 role: _form['role']?.toString() ?? _roleOptions[0],
                 agence: _form['agence']?.toString() ?? '—',
-                status: _form['status']?.toString() ?? 'Actif',
+                status: _form['status']?.toString() ?? 'Active',
                 password: password,
               );
           ToastService.show(
-            'Utilisateur créé avec succès. Il peut se connecter avec son '
-            'numéro et ce mot de passe.',
+            'User created successfully. They can log in with their '
+            'number and this password.',
           );
         } catch (e) {
           ToastService.show(e.toString(), isError: true);
@@ -88,12 +88,12 @@ class UtilisateursPageState extends State<UtilisateursPage> {
       ..remove('password');
     showCrudDrawer(
       context,
-      title: "Modifier l'utilisateur",
+      title: 'Edit user',
       body: _buildForm(_agenceOptions),
       onSave: () async {
         try {
-          final nom = requireField(_form, 'nom', 'Nom complet');
-          // Champ vide à l'édition = garder le mot de passe actuel.
+          final nom = requireField(_form, 'nom', 'Full name');
+          // Empty field when editing = keep the current password.
           final password = _form['password']?.toString().trim() ?? '';
           await context.read<PlatformStore>().updateUtilisateur(
                 user.copyWith(
@@ -105,7 +105,7 @@ class UtilisateursPageState extends State<UtilisateursPage> {
                   password: password.isEmpty ? user.password : password,
                 ),
               );
-          ToastService.show('Modifications enregistrées.');
+          ToastService.show('Changes saved.');
         } catch (e) {
           ToastService.show(e.toString(), isError: true);
           rethrow;
@@ -117,14 +117,14 @@ class UtilisateursPageState extends State<UtilisateursPage> {
   Future<void> confirmDelete(PlatformUserModel user) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: "Supprimer cet utilisateur ?",
+      title: 'Delete this user?',
       message:
-          '"${user.nom}" sera définitivement supprimé. Cette action est irréversible.',
+          '"${user.nom}" will be permanently deleted. This action is irreversible.',
     );
     if (confirmed == true && mounted) {
       try {
         await context.read<PlatformStore>().deleteUtilisateur(user.id);
-        if (mounted) ToastService.show('Élément supprimé.');
+        if (mounted) ToastService.show('Item deleted.');
       } catch (e) {
         if (mounted) ToastService.show(e.toString(), isError: true);
       }
@@ -136,14 +136,14 @@ class UtilisateursPageState extends State<UtilisateursPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SaTextField(
-          label: 'Nom complet',
+          label: 'Full name',
           initial: _form['nom']?.toString(),
           hint: 'Ex. Marie Ekwalla',
           onChanged: (v) => _form['nom'] = v,
         ),
         const SizedBox(height: 16),
         SaTextField(
-          label: 'Téléphone',
+          label: 'Phone',
           initial: _form['telephone']?.toString(),
           hint: '+237 6XX XX XX XX',
           keyboardType: TextInputType.phone,
@@ -154,7 +154,7 @@ class UtilisateursPageState extends State<UtilisateursPage> {
           children: [
             Expanded(
               child: SaSelectField(
-                label: 'Rôle',
+                label: 'Role',
                 options: _roleOptions,
                 initial: _form['role']?.toString(),
                 onChanged: (v) => _form['role'] = v,
@@ -163,7 +163,7 @@ class UtilisateursPageState extends State<UtilisateursPage> {
             const SizedBox(width: 12),
             Expanded(
               child: SaSelectField(
-                label: 'Agence rattachée',
+                label: 'Linked agency',
                 options: agenceOptions,
                 initial: _form['agence']?.toString(),
                 onChanged: (v) => _form['agence'] = v,
@@ -173,17 +173,17 @@ class UtilisateursPageState extends State<UtilisateursPage> {
         ),
         const SizedBox(height: 16),
         SaTextField(
-          label: 'Mot de passe',
+          label: 'Password',
           initial: _form['password']?.toString(),
-          hint: 'Le mot de passe de connexion de cet utilisateur',
+          hint: 'This user login password',
           obscureText: true,
           onChanged: (v) => _form['password'] = v,
         ),
         const SizedBox(height: 16),
         SaSelectField(
-          label: 'Statut',
-          options: const ['Actif', 'Suspendu'],
-          initial: _form['status']?.toString() ?? 'Actif',
+          label: 'Status',
+          options: const ['Active', 'Suspended'],
+          initial: _form['status']?.toString() ?? 'Active',
           onChanged: (v) => _form['status'] = v,
         ),
       ],
@@ -210,7 +210,7 @@ class UtilisateursPageState extends State<UtilisateursPage> {
             onChanged: (i) => setState(() => _filter = i),
           ),
           action: PrimaryButton(
-            label: 'Nouvel utilisateur',
+            label: 'New user',
             icon: Icons.add_rounded,
             onTap: openCreate,
           ),
@@ -218,29 +218,29 @@ class UtilisateursPageState extends State<UtilisateursPage> {
         const SizedBox(height: 16),
         AppTable<PlatformUserModel>(
           rows: rows,
-          emptyText: 'Aucun utilisateur trouvé',
-          footer: '${rows.length} utilisateur${rows.length > 1 ? 's' : ''}',
+          emptyText: 'No users found',
+          footer: '${rows.length} user${rows.length > 1 ? 's' : ''}',
           columns: [
             TableColumnSpec(
-              label: 'Utilisateur',
+              label: 'User',
               sortValue: (u) => u.nom,
               flex: 3,
               cell: (u) => saNameCell(u.nom),
             ),
             TableColumnSpec(
-              label: 'Rôle',
+              label: 'Role',
               sortValue: (u) => u.role,
               flex: 2,
               cell: (u) => saTextCell(u.role),
             ),
             TableColumnSpec(
-              label: 'Agence',
+              label: 'Agency',
               sortValue: (u) => u.agence,
               flex: 2,
               cell: (u) => saTextCell(u.agence),
             ),
             TableColumnSpec(
-              label: 'Statut',
+              label: 'Status',
               sortValue: (u) => u.status,
               flex: 1,
               cell: (u) => StatusBadge(status: u.status),

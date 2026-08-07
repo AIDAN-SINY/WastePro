@@ -194,7 +194,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.home_rounded,
-                label: "Accueil",
+                label: "Home",
                 index: 0,
                 onTap: () {
                   navProvider.setIndex(0);
@@ -204,7 +204,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.history_rounded,
-                label: "Historique",
+                label: "History",
                 index: 1,
                 onTap: () {
                   navProvider.setIndex(1);
@@ -213,7 +213,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.description_rounded,
-                label: "Facture",
+                label: "Bill",
                 index: 2,
                 onTap: () {
                   navProvider.setIndex(2);
@@ -223,7 +223,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.person_rounded,
-                label: "Profil",
+                label: "Profile",
                 index: 3,
                 onTap: () {
                   navProvider.setIndex(3);

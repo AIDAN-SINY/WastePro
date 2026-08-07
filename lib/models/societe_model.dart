@@ -1,13 +1,13 @@
 /// A company registered on the platform (multi-tenant structure).
 ///
-/// Mirrors the "Sociétés" entity from the super admin console design.
+/// Mirrors the "Companies" entity from the super admin console design.
 class SocieteModel {
   final String id;
   final String raisonSociale;
   final String adresse;
   final String telephone;
   final String email;
-  final String status; // 'Actif' | 'Suspendu'
+  final String status; // 'Active' | 'Suspended' (legacy docs may say 'Actif')
 
   const SocieteModel({
     required this.id,
@@ -53,7 +53,7 @@ class SocieteModel {
       adresse: map['adresse'] as String? ?? '',
       telephone: map['telephone'] as String? ?? '',
       email: map['email'] as String? ?? '',
-      status: map['status'] as String? ?? 'Actif',
+      status: map['status'] as String? ?? 'Active',
     );
   }
 }

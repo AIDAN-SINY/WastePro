@@ -11,7 +11,7 @@ class ValidationError implements Exception {
 
 /// Returns the trimmed value of [form][key] or throws a [ValidationError]
 /// when it is missing/blank — used to block drawer saves on empty required
-/// fields (e.g. Raison sociale, Ville, Nom complet).
+/// fields (e.g. Company name, City, Full name).
 String requireField(
   Map<String, dynamic> form,
   String key,
@@ -19,7 +19,7 @@ String requireField(
 ) {
   final value = form[key]?.toString().trim() ?? '';
   if (value.isEmpty) {
-    throw ValidationError('Le champ « $label » est obligatoire.');
+    throw ValidationError('The field "$label" is required.');
   }
   return value;
 }

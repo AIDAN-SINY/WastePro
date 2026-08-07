@@ -27,7 +27,7 @@ Future<void> showCommandPalette(
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Fermer',
+    barrierLabel: 'Close',
     barrierColor: Colors.black.withValues(alpha: 0.55),
     transitionDuration: const Duration(milliseconds: 200),
     pageBuilder: (context, _, _) =>
@@ -171,7 +171,7 @@ class _CommandPaletteState extends State<_CommandPalette> {
                           autofocus: true,
                           style: SuperAdminTheme.inter(15),
                           decoration: const InputDecoration(
-                            hintText: "Aller à... ou créer...",
+                            hintText: "Go to... or create...",
                             hintStyle: TextStyle(color: SuperAdminTheme.muted),
                             border: InputBorder.none,
                             isCollapsed: true,
@@ -179,7 +179,7 @@ class _CommandPaletteState extends State<_CommandPalette> {
                           onChanged: (_) => setState(() => _activeIndex = 0),
                         ),
                       ),
-                      _kbd('Échap'),
+                      _kbd('Esc'),
                     ],
                   ),
                 ),
@@ -210,7 +210,7 @@ class _CommandPaletteState extends State<_CommandPalette> {
                               padding: const EdgeInsets.all(16),
                               child: Center(
                                 child: Text(
-                                  'Aucun résultat',
+                                  'No results',
                                   style: SuperAdminTheme.inter(
                                     12.5,
                                     color: SuperAdminTheme.muted,

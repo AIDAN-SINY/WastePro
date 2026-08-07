@@ -5,7 +5,7 @@ import '../theme.dart';
 /// Right-side slide-in drawer used for create/edit forms (design's "drawer").
 ///
 /// The [body] widget owns its form state (e.g. via onChanged callbacks);
-/// [onSave] is invoked when the user presses "Enregistrer" — the drawer
+/// [onSave] is invoked when the user presses "Save" — the drawer
 /// closes itself afterwards.
 Future<void> showCrudDrawer(
   BuildContext context, {
@@ -16,7 +16,7 @@ Future<void> showCrudDrawer(
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Fermer',
+    barrierLabel: 'Close',
     barrierColor: Colors.black.withValues(alpha: 0.4),
     transitionDuration: const Duration(milliseconds: 350),
     pageBuilder: (context, _, _) => _CrudDrawer(
@@ -132,7 +132,7 @@ class _CrudDrawerState extends State<_CrudDrawer> {
                         ),
                         onPressed: () => Navigator.of(context).pop(),
                         child: Text(
-                          'Annuler',
+                          'Cancel',
                           style: SuperAdminTheme.inter(
                             12.5,
                             weight: FontWeight.w600,
@@ -162,7 +162,7 @@ class _CrudDrawerState extends State<_CrudDrawer> {
                                 ),
                               )
                             : Text(
-                                'Enregistrer',
+                                'Save',
                                 style: SuperAdminTheme.inter(
                                   12.5,
                                   weight: FontWeight.w600,

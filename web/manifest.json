@@ -1,11 +1,11 @@
 {
-    "name": "waste_pro",
-    "short_name": "waste_pro",
+    "name": "WastePro",
+    "short_name": "WastePro",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0F3D2E",
+    "theme_color": "#0F3D2E",
+    "description": "WastePro — waste pickup and subscription management, simplified.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

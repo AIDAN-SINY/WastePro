@@ -71,7 +71,7 @@ class BackofficeStore extends ChangeNotifier {
   }
 
   // --- Dashboard helpers ---
-  int get clientsActifs => clients.where((c) => c.status == 'Actif').length;
+  int get clientsActifs => clients.where((c) => c.status == 'Active').length;
 
   int get collectesAujourdhui {
     final now = DateTime.now();
@@ -85,7 +85,7 @@ class BackofficeStore extends ChangeNotifier {
   /// Revenus (milliers de XAF) = factures payées.
   double get revenusMilliers {
     final total = factures
-        .where((f) => f.status == 'Payée')
+        .where((f) => f.status == 'Paid')
         .fold<int>(0, (s, f) => s + f.montant);
     return total / 1000;
   }
@@ -93,7 +93,7 @@ class BackofficeStore extends ChangeNotifier {
   /// Taux de réussite = part des collectes effectuées.
   double get tauxReussite {
     if (collectes.isEmpty) return 0;
-    final ok = collectes.where((c) => c.status == 'Effectué').length;
+    final ok = collectes.where((c) => c.status == 'Completed').length;
     return ok / collectes.length * 100;
   }
 

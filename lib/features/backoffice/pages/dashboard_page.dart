@@ -7,9 +7,9 @@ import '../widgets/bar_chart.dart';
 import '../widgets/kpi_card.dart';
 
 const List<double> _revenueValues = [3.2, 4.1, 3.8, 4.6, 5.2, 5.8];
-const List<String> _revenueLabels = ['Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août'];
+const List<String> _revenueLabels = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
 const List<double> _weekValues = [3, 4, 5, 2, 6, 4, 5];
-const List<String> _weekLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const List<String> _weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /// Dashboard page: KPI carousel, charts and the activity feed.
 class BoDashboardPage extends StatelessWidget {
@@ -43,7 +43,7 @@ class BoDashboardPage extends StatelessWidget {
                         trend: '↑4.2%',
                         trendUp: true,
                         value: '${store.clientsActifs}',
-                        label: 'Clients actifs',
+                        label: 'Active clients',
                       ),
                       const SizedBox(width: 10),
                       BoKpiCard(
@@ -53,7 +53,7 @@ class BoDashboardPage extends StatelessWidget {
                         trend: '↑12',
                         trendUp: true,
                         value: '${store.collectesAujourdhui}',
-                        label: "Collectes aujourd'hui",
+                        label: "Today's collections",
                       ),
                       const SizedBox(width: 10),
                       BoKpiCard(
@@ -63,7 +63,7 @@ class BoDashboardPage extends StatelessWidget {
                         trend: '↑8.7%',
                         trendUp: true,
                         value: '₣$revenus',
-                        label: 'Revenus (milliers)',
+                        label: 'Revenue (thousands)',
                       ),
                       const SizedBox(width: 10),
                       BoKpiCard(
@@ -73,7 +73,7 @@ class BoDashboardPage extends StatelessWidget {
                         trend: '↓1.1%',
                         trendUp: false,
                         value: '${store.tauxReussite.round()}%',
-                        label: 'Taux de réussite',
+                        label: 'Success rate',
                       ),
                     ],
                   ),
@@ -81,12 +81,12 @@ class BoDashboardPage extends StatelessWidget {
               ),
 
               const SizedBox(height: 6),
-              _chartCard('Revenus (6 mois)', 'XAF, milliers',
+              _chartCard('Revenue (6 months)', 'XAF, thousands',
                   BoBarChart(values: _revenueValues, labels: _revenueLabels)),
-              _chartCard('Collectes — 7 derniers jours', null,
+              _chartCard('Collections — last 7 days', null,
                   BoBarChart(values: _weekValues, labels: _weekLabels)),
 
-              _SectionTitle(title: 'Activité récente', trailing: 'Temps réel'),
+              _SectionTitle(title: 'Recent activity', trailing: 'Live'),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 decoration: BackofficeTheme.card(),

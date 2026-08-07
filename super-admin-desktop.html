@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Propre237 — Console Plateforme</title>
+<title>WastePro — Platform Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -243,7 +243,7 @@
     <button class="collapse-btn" id="collapseBtn"><i class="fa-solid fa-angles-left"></i>&nbsp;<span>Réduire</span></button>
     <div class="side-foot">
       <div class="avatar">SA</div>
-      <div class="who"><h5>Super Admin</h5><p>admin@propre237.cm</p></div>
+      <div class="who"><h5>Super Admin</h5><p>admin@wastepro.cm</p></div>
     </div>
   </aside>
 
@@ -397,8 +397,8 @@
         <div class="grid-2">
           <div class="card">
             <div class="card-head"><h3>Plateforme</h3></div>
-            <div class="form-field"><label>Nom de la plateforme</label><input type="text" value="Propre237"></div>
-            <div class="form-field"><label>Email de support</label><input type="text" value="support@propre237.cm"></div>
+            <div class="form-field"><label>Platform name</label><input type="text" value="WastePro"></div>
+            <div class="form-field"><label>Support email</label><input type="text" value="support@wastepro.cm"></div>
             <div class="form-field" style="margin-bottom:0;"><label>Fuseau horaire</label><input type="text" value="Afrique/Douala (GMT+1)"></div>
           </div>
           <div class="card">
@@ -448,14 +448,14 @@ let uid = 100;
 const nextId = () => 'id' + (uid++);
 
 let societes = [
-  { id:'so1', raisonSociale:'Propre237 Douala SARL', adresse:'Bonanjo, Douala', telephone:'+237 233 42 10 10', email:'contact@propre237-douala.cm', status:'Actif' },
-  { id:'so2', raisonSociale:'Propre237 Yaoundé SA', adresse:'Bastos, Yaoundé', telephone:'+237 222 20 30 40', email:'contact@propre237-yde.cm', status:'Actif' },
+  { id:'so1', raisonSociale:'WastePro Douala Ltd', adresse:'Bonanjo, Douala', telephone:'+237 233 42 10 10', email:'contact@wastepro-douala.cm', status:'Active' },
+  { id:'so2', raisonSociale:'WastePro Yaoundé SA', adresse:'Bastos, Yaoundé', telephone:'+237 222 20 30 40', email:'contact@wastepro-yde.cm', status:'Active' },
   { id:'so3', raisonSociale:'EcoCollecte Kribi', adresse:'Centre-ville, Kribi', telephone:'+237 233 46 12 00', email:'contact@ecocollecte-kribi.cm', status:'Suspendu' },
 ];
 let agences = [
-  { id:'ag1', societe:'Propre237 Douala SARL', ville:'Douala — Bonanjo', responsable:'Jean Dooh', telephone:'+237 677 12 34 56', status:'Actif' },
-  { id:'ag2', societe:'Propre237 Douala SARL', ville:'Douala — Bassa', responsable:'Aïcha Bello', telephone:'+237 699 33 67 41', status:'Actif' },
-  { id:'ag3', societe:'Propre237 Yaoundé SA', ville:'Yaoundé', responsable:'Marie Ekwalla', telephone:'+237 690 45 12 78', status:'Actif' },
+  { id:'ag1', societe:'WastePro Douala Ltd', ville:'Douala — Bonanjo', responsable:'Jean Dooh', telephone:'+237 677 12 34 56', status:'Active' },
+  { id:'ag2', societe:'WastePro Douala Ltd', ville:'Douala — Bassa', responsable:'Aïcha Bello', telephone:'+237 699 33 67 41', status:'Active' },
+  { id:'ag3', societe:'WastePro Yaoundé SA', ville:'Yaoundé', responsable:'Marie Ekwalla', telephone:'+237 690 45 12 78', status:'Active' },
   { id:'ag4', societe:'EcoCollecte Kribi', ville:'Kribi', responsable:'Samuel Njoya', telephone:'+237 655 88 21 09', status:'Suspendu' },
 ];
 let utilisateurs = [
@@ -635,7 +635,7 @@ document.getElementById('collapseBtn').addEventListener('click', () => {
 ============================================================ */
 const FORM_BUILDERS = {
   societe: (d={}) => `
-    <div class="form-field"><label>Raison sociale</label><input id="f_raisonSociale" value="${d.raisonSociale||''}" placeholder="Ex. Propre237 Douala SARL"></div>
+    <div class="form-field"><label>Company name</label><input id="f_raisonSociale" value="${d.raisonSociale||''}" placeholder="Ex. WastePro Douala Ltd"></div>
     <div class="form-field"><label>Adresse</label><input id="f_adresse" value="${d.adresse||''}" placeholder="Ex. Bonanjo, Douala"></div>
     <div class="form-row">
       <div class="form-field"><label>Téléphone</label><input id="f_telephone" value="${d.telephone||''}" placeholder="+237 2XX XX XX XX"></div>

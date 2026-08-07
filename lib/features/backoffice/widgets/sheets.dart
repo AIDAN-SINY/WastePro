@@ -23,7 +23,7 @@ Future<void> showBoFormSheet(
   );
 }
 
-/// Opens the action sheet (Modifier / Supprimer) for an item.
+/// Opens the action sheet (Edit / Delete) for an item.
 Future<void> showBoActionSheet(
   BuildContext context, {
   required VoidCallback onEdit,
@@ -48,7 +48,7 @@ Future<void> showBoActionSheet(
                 children: [
                   _ActionButton(
                     icon: Icons.edit_rounded,
-                    label: 'Modifier',
+                    label: 'Edit',
                     onTap: () {
                       Navigator.of(context).pop();
                       onEdit();
@@ -57,7 +57,7 @@ Future<void> showBoActionSheet(
                   Divider(height: 1, color: BackofficeTheme.border),
                   _ActionButton(
                     icon: Icons.delete_outline_rounded,
-                    label: 'Supprimer',
+                    label: 'Delete',
                     danger: true,
                     onTap: () {
                       Navigator.of(context).pop();
@@ -81,7 +81,7 @@ Future<void> showBoActionSheet(
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    'Annuler',
+                    'Cancel',
                     textAlign: TextAlign.center,
                     style: BackofficeTheme.inter(
                       14,
@@ -206,14 +206,14 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         _phone.text = c?.phone ?? '';
         _zone.text = c?.zone ?? '';
         _selectA = c?.plan ?? 'Standard';
-        _selectB = c?.status ?? 'Actif';
+        _selectB = c?.status ?? 'Active';
       case BoEntity.collecteur:
         final c = d as CollecteurModel?;
         _name.text = c?.name ?? '';
         _phone.text = c?.phone ?? '';
         _zone.text = c?.zone ?? '';
         _number.text = c?.rating.toString() ?? '4.5';
-        _status = c?.status ?? 'Actif';
+        _status = c?.status ?? 'Active';
       case BoEntity.contrat:
         final c = d as ContratModel?;
         _selectA =
@@ -227,7 +227,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
                 ? widget.store.frequences.first.libelle
                 : '');
         _number.text = c?.prix.toString() ?? '';
-        _seedStatus(c?.status ?? 'Actif');
+        _seedStatus(c?.status ?? 'Active');
       case BoEntity.collecte:
         final c = d as CollecteModel?;
         _selectA =
@@ -244,7 +244,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         _date = c != null
             ? (DateTime.tryParse(c.date) ?? DateTime.now())
             : DateTime.now();
-        _seedStatus(c?.status ?? 'Prévu');
+        _seedStatus(c?.status ?? 'Scheduled');
       case BoEntity.facture:
         final c = d as FactureModel?;
         _selectA =
@@ -256,7 +256,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         _date = c != null
             ? (DateTime.tryParse(c.echeance) ?? DateTime.now())
             : DateTime.now();
-        _seedStatus(c?.status ?? 'En attente');
+        _seedStatus(c?.status ?? 'Pending');
       case BoEntity.frequence:
         final c = d as FrequenceModel?;
         _name.text = c?.libelle ?? '';
@@ -275,13 +275,13 @@ class _BoFormSheetState extends State<_BoFormSheet> {
   String get _title {
     final base = switch (widget.type) {
       BoEntity.client => 'client',
-      BoEntity.collecteur => 'collecteur',
-      BoEntity.contrat => 'contrat',
-      BoEntity.collecte => 'collecte',
-      BoEntity.facture => 'facture',
-      BoEntity.frequence => 'fréquence',
+      BoEntity.collecteur => 'collector',
+      BoEntity.contrat => 'contract',
+      BoEntity.collecte => 'collection',
+      BoEntity.facture => 'invoice',
+      BoEntity.frequence => 'frequency',
     };
-    return '${_isEdit ? 'Modifier' : 'Nouveau'} $base';
+    return '${_isEdit ? 'Edit' : 'New'} $base';
   }
 
   Future<void> _pickDate() async {
@@ -310,21 +310,21 @@ class _BoFormSheetState extends State<_BoFormSheet> {
     final r = double.tryParse(numText) ?? 0;
     final password = _password.text.trim();
 
-    // Mot de passe : requis à la création (il permet à la personne de se
-    // connecter à son interface) ; en édition, vide = on le conserve.
+    // Password: required at creation (it lets the person log in to their
+    // interface); when editing, empty = keep the current one.
     if (_needsPassword) {
       if (!_isEdit && password.isEmpty) {
-        return _warn('Le mot de passe est requis (min. 4 caractères)');
+        return _warn('Password is required (min. 4 characters)');
       }
       if (password.isNotEmpty && password.length < 4) {
-        return _warn('Le mot de passe doit contenir au moins 4 caractères');
+        return _warn('Password must be at least 4 characters');
       }
     }
 
     try {
       switch (widget.type) {
         case BoEntity.client:
-          if (s.isEmpty) return _warn('Le nom du client est requis');
+          if (s.isEmpty) return _warn('Client name is required');
           if (_isEdit) {
             await store.updateClient(
               (widget.existing as ClientModel).copyWith(
@@ -347,7 +347,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             );
           }
         case BoEntity.collecteur:
-          if (s.isEmpty) return _warn('Le nom du collecteur est requis');
+          if (s.isEmpty) return _warn('Collector name is required');
           if (_isEdit) {
             await store.updateCollecteur(
               (widget.existing as CollecteurModel).copyWith(
@@ -371,9 +371,9 @@ class _BoFormSheetState extends State<_BoFormSheet> {
           }
         case BoEntity.contrat:
           if (_selectA.isEmpty || _selectB.isEmpty) {
-            return _warn('Aucun client ou fréquence disponible');
+            return _warn('No client or frequency available');
           }
-          if (n <= 0) return _warn('Le prix est requis');
+          if (n <= 0) return _warn('Price is required');
           if (_isEdit) {
             await store.updateContrat(
               (widget.existing as ContratModel).copyWith(
@@ -393,7 +393,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
           }
         case BoEntity.collecte:
           if (_selectA.isEmpty || _selectB.isEmpty) {
-            return _warn('Aucun client ou collecteur disponible');
+            return _warn('No client or collector available');
           }
           if (_isEdit) {
             await store.updateCollecte(
@@ -415,8 +415,8 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             );
           }
         case BoEntity.facture:
-          if (_selectA.isEmpty) return _warn('Aucun client disponible');
-          if (n <= 0) return _warn('Le montant est requis');
+          if (_selectA.isEmpty) return _warn('No client available');
+          if (n <= 0) return _warn('Amount is required');
           if (_isEdit) {
             await store.updateFacture(
               (widget.existing as FactureModel).copyWith(
@@ -435,7 +435,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             );
           }
         case BoEntity.frequence:
-          if (s.isEmpty) return _warn('Le libellé est requis');
+          if (s.isEmpty) return _warn('Label is required');
           if (_isEdit) {
             await store.updateFrequence(
               (widget.existing as FrequenceModel).copyWith(
@@ -454,7 +454,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       return;
     }
     if (mounted) Navigator.of(context).pop();
-    BoToastService.show('${_isEdit ? 'Modifié' : 'Ajouté'} avec succès');
+    BoToastService.show(_isEdit ? 'Changes saved' : 'Added successfully');
   }
 
   void _warn(String message) {
@@ -493,7 +493,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: Text(
-                      'Annuler',
+                      'Cancel',
                       style: BackofficeTheme.inter(
                         13,
                         weight: FontWeight.w600,
@@ -551,19 +551,19 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       case BoEntity.client:
         return [
           _text(
-            'Nom complet',
+            'Full name',
             _name,
             key: const Key('bo_f_name'),
             hint: 'Ex. Jean Dooh',
           ),
-          _text('Téléphone', _phone, hint: '+237 6XX XX XX XX', phone: true),
-          _text('Zone / Quartier', _zone, hint: 'Ex. Bonanjo'),
+          _text('Phone', _phone, hint: '+237 6XX XX XX XX', phone: true),
+          _text('Zone / Area', _zone, hint: 'Ex. Bonanjo'),
           Row(
             children: [
               Expanded(
                 child: _select(
-                  'Formule',
-                  ['Essentiel', 'Standard', 'Premium'],
+                  'Plan',
+                  ['Essential', 'Standard', 'Premium'],
                   _selectA,
                   (v) => setState(() => _selectA = v),
                 ),
@@ -571,8 +571,8 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: _select(
-                  'Statut',
-                  ['Actif', 'Suspendu'],
+                  'Status',
+                  ['Active', 'Suspended'],
                   _selectB,
                   (v) => setState(() => _selectB = v),
                 ),
@@ -583,14 +583,14 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         ];
       case BoEntity.collecteur:
         return [
-          _text('Nom complet', _name, hint: 'Ex. Paul Mbarga'),
-          _text('Téléphone', _phone, hint: '+237 6XX XX XX XX', phone: true),
-          _text('Zone assignée', _zone, hint: 'Ex. Bonanjo / Akwa'),
+          _text('Full name', _name, hint: 'Ex. Paul Mbarga'),
+          _text('Phone', _phone, hint: '+237 6XX XX XX XX', phone: true),
+          _text('Assigned zone', _zone, hint: 'Ex. Bonanjo / Akwa'),
           Row(
             children: [
               Expanded(
                 child: _text(
-                  'Note',
+                  'Rating',
                   _number,
                   hint: '4.5',
                   number: true,
@@ -602,9 +602,9 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: _select(
-                  'Statut',
-                  ['Actif', 'Inactif'],
-                  _status.isEmpty ? 'Actif' : _status,
+                  'Status',
+                  ['Active', 'Inactive'],
+                  _status.isEmpty ? 'Active' : _status,
                   (v) => setState(() => _status = v),
                 ),
               ),
@@ -621,7 +621,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             (v) => setState(() => _selectA = v),
           ),
           _select(
-            'Fréquence',
+            'Frequency',
             store.frequences.map((f) => f.libelle).toList(),
             _selectB,
             (v) => setState(() => _selectB = v),
@@ -630,7 +630,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             children: [
               Expanded(
                 child: _text(
-                  'Prix / mois (XAF)',
+                  'Price / month (XAF)',
                   _number,
                   hint: '8000',
                   number: true,
@@ -639,9 +639,9 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: _select(
-                  'Statut',
-                  ['Actif', 'Suspendu', 'Expiré'],
-                  _status.isEmpty ? 'Actif' : _status,
+                  'Status',
+                  ['Active', 'Suspended', 'Expired'],
+                  _status.isEmpty ? 'Active' : _status,
                   (v) => setState(() => _status = v),
                 ),
               ),
@@ -657,7 +657,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             (v) => setState(() => _selectA = v),
           ),
           _select(
-            'Collecteur',
+            'Collector',
             store.collecteurs.map((c) => c.name).toList(),
             _selectB,
             (v) => setState(() => _selectB = v),
@@ -668,7 +668,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: _text(
-                  'Poids (kg)',
+                  'Weight (kg)',
                   _number,
                   hint: '0',
                   number: true,
@@ -680,9 +680,9 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             ],
           ),
           _select(
-            'Statut',
-            ['Prévu', 'Effectué', 'Manqué'],
-            _status.isEmpty ? 'Prévu' : _status,
+            'Status',
+            ['Scheduled', 'Completed', 'Missed'],
+            _status.isEmpty ? 'Scheduled' : _status,
             (v) => setState(() => _status = v),
           ),
         ];
@@ -698,7 +698,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             children: [
               Expanded(
                 child: _text(
-                  'Montant (XAF)',
+                  'Amount (XAF)',
                   _number,
                   hint: '8000',
                   number: true,
@@ -706,21 +706,21 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _dateField('Échéance', _fmtDate(_date), _pickDate),
+                child: _dateField('Due date', _fmtDate(_date), _pickDate),
               ),
             ],
           ),
           _select(
-            'Statut',
-            ['Payée', 'En attente', 'En retard'],
-            _status.isEmpty ? 'En attente' : _status,
+            'Status',
+            ['Paid', 'Pending', 'Overdue'],
+            _status.isEmpty ? 'Pending' : _status,
             (v) => setState(() => _status = v),
           ),
         ];
       case BoEntity.frequence:
         return [
-          _text('Libellé', _name, hint: 'Ex. Bi-hebdomadaire'),
-          _text('Intervalle (jours)', _number, hint: '7', number: true),
+          _text('Label', _name, hint: 'Ex. Twice a week'),
+          _text('Interval (days)', _number, hint: '7', number: true),
         ];
     }
   }
@@ -779,10 +779,10 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _text(
-          'Mot de passe',
+          'Password',
           _password,
           key: const Key('bo_f_password'),
-          hint: _isEdit ? 'Laisser vide pour conserver' : 'Min. 4 caractères',
+          hint: _isEdit ? 'Leave empty to keep current' : 'Min. 4 characters',
           obscure: true,
           suffixIcon: IconButton(
             onPressed: () =>
@@ -800,8 +800,8 @@ class _BoFormSheetState extends State<_BoFormSheet> {
           padding: const EdgeInsets.only(bottom: 15),
           child: Text(
             widget.type == BoEntity.client
-                ? 'Ce mot de passe permet à ce client de se connecter à son application client.'
-                : 'Ce mot de passe permet à ce collecteur de se connecter à son application collecteur.',
+                ? 'This password lets this client log in to their client app.'
+                : 'This password lets this collector log in to their collector app.',
             style: BackofficeTheme.inter(10.5, color: BackofficeTheme.muted),
           ),
         ),

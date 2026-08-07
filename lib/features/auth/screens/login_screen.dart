@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
@@ -6,6 +7,12 @@ import '../../../providers/user_provider.dart';
 import '../../../main.dart';
 import 'registration_sreen.dart';
 
+/// Écran de connexion — responsive.
+///
+/// Sur grand écran (web / Windows) : panneau de marque à gauche (logo,
+/// promesses, note de confiance) et carte de connexion à droite, bornée à
+/// ~440px (plus d'étirement sur tout l'écran). Sur mobile : le même contenu
+/// empilé verticalement, carte également bornée pour rester élégante.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -13,7 +20,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -23,13 +31,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   late Animation<double> _scaleAnimation;
 
   // Design colors from HTML
-  final Color bgDark = const Color(0xFF0F3D2E);
   final Color bgDarker = const Color(0xFF0A2A20);
   final Color accentGold = const Color(0xFFE8A33D);
   final Color cream = const Color(0xFFF5F1E8);
   final Color muted = const Color(0xFFAEC0B7);
-  final Color glass = const Color(0xFFF5F1E8).withOpacity(0.07);
-  final Color glassBorder = const Color(0xFFF5F1E8).withOpacity(0.16);
+  final Color glass = const Color(0xFFF5F1E8).withValues(alpha: 0.07);
+  final Color glassBorder = const Color(0xFFF5F1E8).withValues(alpha: 0.16);
 
   @override
   void initState() {
@@ -39,7 +46,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       duration: const Duration(milliseconds: 2400),
     );
     _scaleAnimation = Tween<double>(begin: 1.0, end: 1.06).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOutSine),
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOutSine,
+      ),
     );
     _animationController.repeat(reverse: true);
   }
@@ -58,193 +68,27 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         children: [
           // Animated background blobs
           _buildAnimatedBackground(),
-          
+
           // Login content
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 64),
-              child: Column(
-                children: [
-                  // Logo/Mark
-                  AnimatedBuilder(
-                    animation: _scaleAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: _scaleAnimation.value,
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          margin: const EdgeInsets.only(bottom: 18),
-                          child: Icon(
-                            Icons.recycling_rounded,
-                            color: accentGold,
-                            size: 56,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  
-                  // Brand name
-                  RichText(
-                    text: TextSpan(
-                      text: "Waste",
-                      style: GoogleFonts.sora(
-                        color: cream,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.02,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: "Pro",
-                          style: GoogleFonts.sora(
-                            color: accentGold,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.02,
-                          ),
-                        ),
-                      ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final desktop = constraints.maxWidth >= 900;
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 48,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1080),
+                      child: desktop
+                          ? _buildDesktopLayout()
+                          : _buildMobileLayout(),
                     ),
                   ),
-                  
-                  const SizedBox(height: 4),
-                  
-                  // Tagline
-                  Text(
-                    "Ramassage d'ordures simplifié",
-                    style: TextStyle(
-                      color: muted,
-                      fontSize: 13,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 36),
-                  
-                  // Login card
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: glass,
-                      border: Border.all(color: glassBorder),
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Phone field
-                        _buildLabel("Numéro de téléphone"),
-                        _buildPhoneInput(),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Password field
-                        _buildLabel("Mot de passe"),
-                        _buildPasswordInput(),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Remember me & Forgot password
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (value) => setState(() => _rememberMe = value ?? false),
-                                  activeColor: accentGold,
-                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Text(
-                                  "Se souvenir de moi",
-                                  style: TextStyle(
-                                    color: muted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            TextButton(
-                              onPressed: () {},
-                              child: Text(
-                                "Mot de passe oublié ?",
-                                style: TextStyle(
-                                  color: accentGold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 4),
-                        
-                        // Submit button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleAuth,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: accentGold,
-                              foregroundColor: const Color(0xFF2A1B05),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Color(0xFF2A1B05),
-                                    ),
-                                  )
-                                : Text(
-                                    "Se connecter",
-                                    style: GoogleFonts.sora(
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 22),
-                  
-                  // Sign up hint
-                  Text(
-                    "Pas encore de compte ?",
-                    style: TextStyle(
-                      color: muted,
-                      fontSize: 12,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const RegistrationScreen()),
-                    ),
-                    child: Text(
-                      "Créer un compte",
-                      style: GoogleFonts.sora(
-                        color: cream,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -252,16 +96,288 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
+  // ---------- Desktop (web / Windows) ----------
+
+  Widget _buildDesktopLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Panneau de marque
+        Expanded(flex: 6, child: _buildBrandPanel()),
+        const SizedBox(width: 56),
+        // Carte de connexion
+        Expanded(flex: 4, child: _buildFormColumn()),
+      ],
+    );
+  }
+
+  Widget _buildBrandPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: accentGold.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: accentGold.withValues(alpha: 0.4)),
+          ),
+          child: Icon(Icons.recycling_rounded, size: 32, color: accentGold),
+        ),
+        const SizedBox(height: 24),
+        _buildBrandName(size: 30),
+        const SizedBox(height: 8),
+        Text(
+          "Simplified waste collection, from households to businesses.",
+          style: TextStyle(color: muted, fontSize: 14.5, height: 1.5),
+        ),
+        const SizedBox(height: 34),
+        const _TrustPoint(
+          icon: Icons.shield_outlined,
+          text: 'Your data and payments are protected.',
+        ),
+        const SizedBox(height: 14),
+        const _TrustPoint(
+          icon: Icons.schedule_rounded,
+          text: 'Scheduled pickups tracked in real time.',
+        ),
+        const SizedBox(height: 14),
+        const _TrustPoint(
+          icon: Icons.support_agent_rounded,
+          text: 'A team available 7 days a week.',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBrandName({required double size}) {
+    return RichText(
+      text: TextSpan(
+        text: 'Waste',
+        style: GoogleFonts.sora(
+          color: cream,
+          fontSize: size,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.02,
+        ),
+        children: [
+          TextSpan(
+            text: 'Pro',
+            style: GoogleFonts.sora(
+              color: accentGold,
+              fontSize: size,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.02,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- Mobile ----------
+
+  Widget _buildMobileLayout() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Logo animé
+        Center(
+          child: AnimatedBuilder(
+            animation: _scaleAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _scaleAnimation.value,
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  margin: const EdgeInsets.only(bottom: 18),
+                  child: Icon(
+                    Icons.recycling_rounded,
+                    color: accentGold,
+                    size: 56,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        // Marque
+        Center(child: _buildBrandName(size: 24)),
+        const SizedBox(height: 4),
+        Center(
+          child: Text(
+            "Simplified waste collection",
+            style: TextStyle(color: muted, fontSize: 13),
+          ),
+        ),
+        const SizedBox(height: 30),
+        _buildFormColumn(),
+      ],
+    );
+  }
+
+  /// La carte de connexion (champs + bouton) + lien d'inscription.
+  Widget _buildFormColumn() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: glass,
+                border: Border.all(color: glassBorder),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Phone field
+                  _buildLabel('Phone number'),
+                  _buildPhoneInput(),
+
+                  const SizedBox(height: 16),
+
+                  // Password field
+                  _buildLabel('Password'),
+                  _buildPasswordInput(),
+
+                  const SizedBox(height: 16),
+
+                  // Remember me & Forgot password
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) =>
+                                setState(() => _rememberMe = value ?? false),
+                            activeColor: accentGold,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          const Text(
+                            'Remember me',
+                            style: TextStyle(
+                              color: Color(0xFFAEC0B7),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: () {},
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Forgot password?',
+                          style: TextStyle(
+                            color: Color(0xFFE8A33D),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // Submit button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleAuth,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentGold,
+                        foregroundColor: const Color(0xFF2A1B05),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF2A1B05),
+                              ),
+                            )
+                          : Text(
+                              'Log In',
+                              style: GoogleFonts.sora(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 22),
+
+        // Sign up hint
+        Text(
+          "Don't have an account?",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: muted, fontSize: 12),
+        ),
+        Center(
+          child: TextButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const RegistrationScreen(),
+              ),
+            ),
+            child: Text(
+              'Create an account',
+              style: GoogleFonts.sora(
+                color: cream,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   void _handleAuth() async {
     if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Veuillez remplir tous les champs")),
+        const SnackBar(content: Text('Please fill in all the fields')),
       );
       return;
     }
 
     setState(() => _isLoading = true);
-    
+
     try {
       // Add +237 prefix if not present; strip spaces/dashes so the lookup
       // matches the canonical phone stored when the super admin created the
@@ -276,28 +392,35 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ? '+$phoneNumber'
             : '+237$phoneNumber';
       }
-      
+
       final user = await AuthService().login(
         phoneNumber,
         _passwordController.text,
       );
-      
+
       if (user != null && mounted) {
         await Provider.of<UserProvider>(context, listen: false).setUser(user);
         if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const AuthWrapper()),
-            (route) => false,
-          );
+          // Navigation par route (URL) : le routeur redirige ensuite vers le
+          // dashboard ou la console selon le rôle. Fallback sans routeur.
+          final router = GoRouter.maybeOf(context);
+          if (router != null) {
+            router.go('/');
+          } else {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const AuthWrapper()),
+              (route) => false,
+            );
+          }
         }
       } else {
-        throw "Utilisateur non trouvé. Veuillez vous inscrire d'abord.";
+        throw "User not found. Please sign up first.";
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) {
@@ -328,7 +451,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             width: 220,
             height: 220,
             decoration: BoxDecoration(
-              color: accentGold.withOpacity(0.16),
+              color: accentGold.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(110),
             ),
           ),
@@ -367,7 +490,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Widget _buildPhoneInput() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0A2A20).withOpacity(0.35),
+        color: const Color(0xFF0A2A20).withValues(alpha: 0.35),
         border: Border.all(color: glassBorder),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -375,34 +498,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Text(
-              "+237",
-              style: TextStyle(
-                color: muted,
-                fontSize: 14,
-              ),
-            ),
+            child: Text('+237', style: TextStyle(color: muted, fontSize: 14)),
           ),
-          Container(
-            width: 1,
-            height: 20,
-            color: glassBorder,
-          ),
+          Container(width: 1, height: 20, color: glassBorder),
           Expanded(
             child: TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
-              style: TextStyle(
-                color: cream,
-                fontSize: 14.5,
-              ),
+              style: TextStyle(color: cream, fontSize: 14.5),
               decoration: InputDecoration(
-                hintText: "6 XX XX XX XX",
-                hintStyle: TextStyle(
-                  color: muted.withOpacity(0.5),
-                ),
+                hintText: '6 XX XX XX XX',
+                hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -414,7 +525,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Widget _buildPasswordInput() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0A2A20).withOpacity(0.35),
+        color: const Color(0xFF0A2A20).withValues(alpha: 0.35),
         border: Border.all(color: glassBorder),
         borderRadius: BorderRadius.circular(12),
       ),
@@ -424,22 +535,21 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: TextField(
               controller: _passwordController,
               obscureText: _obscurePassword,
-              style: TextStyle(
-                color: cream,
-                fontSize: 14.5,
-              ),
+              style: TextStyle(color: cream, fontSize: 14.5),
               decoration: InputDecoration(
-                hintText: "••••••••",
-                hintStyle: TextStyle(
-                  color: muted.withOpacity(0.5),
-                ),
+                hintText: '••••••••',
+                hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
           IconButton(
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            onPressed: () =>
+                setState(() => _obscurePassword = !_obscurePassword),
             icon: Icon(
               _obscurePassword ? Icons.visibility_off : Icons.visibility,
               color: muted,
@@ -449,6 +559,45 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Un point de confiance (icône + texte) du panneau de marque.
+class _TrustPoint extends StatelessWidget {
+  const _TrustPoint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F1E8).withValues(alpha: 0.07),
+            border: Border.all(
+              color: const Color(0xFFF5F1E8).withValues(alpha: 0.16),
+            ),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Icon(icon, size: 18, color: const Color(0xFFE8A33D)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: Color(0xFFAEC0B7),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

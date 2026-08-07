@@ -21,7 +21,7 @@ class BoSettingsPage extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 110),
           children: [
-            _title('Fréquences de ramassage'),
+            _title('Pickup frequencies'),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BackofficeTheme.card(),
@@ -39,25 +39,25 @@ class BoSettingsPage extends StatelessWidget {
                       ),
                       onDelete: () {
                         store.deleteFrequence(store.frequences[i].id);
-                        BoToastService.show('fréquence supprimée');
+                        BoToastService.show('frequency deleted');
                       },
                     ),
                   ],
                 ],
               ),
             ),
-            _title('Informations entreprise'),
+            _title('Company information'),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BackofficeTheme.card(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _infoField('Nom commercial', 'Propre237'),
+                  _infoField('Company name', 'WastePro'),
                   const SizedBox(height: 15),
-                  _infoField("Ville d'opération", 'Douala'),
+                  _infoField('City of operation', 'Douala'),
                   const SizedBox(height: 15),
-                  _infoField('Numéro de support', '+237 6XX XXX XXX'),
+                  _infoField('Support number', '+237 6XX XXX XXX'),
                 ],
               ),
             ),
@@ -112,8 +112,8 @@ class _FrequenceRow extends StatelessWidget {
     return BoItemCard(
       avatarText: '🔄',
       title: frequence.libelle,
-      subtitle: 'Tous les ${frequence.jours} jours',
-      status: 'Actif',
+      subtitle: 'Every ${frequence.jours} days',
+      status: 'Active',
       onKebab: () {
         showBoActionSheet(context, onEdit: onEdit, onDelete: onDelete);
       },

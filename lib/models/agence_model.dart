@@ -1,13 +1,13 @@
 /// An agency belonging to a [SocieteModel] on the platform.
 ///
-/// Mirrors the "Agences" entity from the super admin console design.
+/// Mirrors the "Agencies" entity from the super admin console design.
 class AgenceModel {
   final String id;
   final String societe; // raisonSociale of the parent company
   final String ville;
   final String responsable;
   final String telephone;
-  final String status; // 'Actif' | 'Suspendu'
+  final String status; // 'Active' | 'Suspended' (legacy docs may say 'Actif')
 
   const AgenceModel({
     required this.id,
@@ -53,7 +53,7 @@ class AgenceModel {
       ville: map['ville'] as String? ?? '',
       responsable: map['responsable'] as String? ?? '',
       telephone: map['telephone'] as String? ?? '',
-      status: map['status'] as String? ?? 'Actif',
+      status: map['status'] as String? ?? 'Active',
     );
   }
 }

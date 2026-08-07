@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/user_provider.dart';
+import '../../routing.dart';
 import 'command_palette.dart';
 import 'data/platform_store.dart';
 import 'pages/agences_page.dart';
@@ -20,12 +22,25 @@ import 'widgets/app_toast.dart';
 /// narrow screens (< 900px) it becomes a hamburger drawer so the console
 /// stays usable on phones and small web windows.
 class SuperAdminConsole extends StatefulWidget {
-  const SuperAdminConsole({super.key, this.store});
+  const SuperAdminConsole({
+    super.key,
+    this.store,
+    this.page,
+    this.autoCreate,
+  });
 
   /// Optional store override — the real super admin login passes the
   /// Firestore-backed store here. When null, an in-memory mock store is
   /// used (dev preview / tests).
   final PlatformStore? store;
+
+  /// Page initiale depuis l'URL (`/console/:page`) — 'overview' | 'societes'
+  /// | 'agences' | 'utilisateurs' | 'rapports' | 'parametres'.
+  final String? page;
+
+  /// Création à ouvrir automatiquement au rendu (depuis la palette
+  /// de commandes) : 'societe' | 'agence' | 'utilisateur'.
+  final String? autoCreate;
 
   @override
   State<SuperAdminConsole> createState() => _SuperAdminConsoleState();
@@ -38,7 +53,7 @@ class _OpenPaletteIntent extends Intent {
 class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   late final PlatformStore _store = widget.store ?? PlatformStore();
 
-  int _page = 0;
+  late int _page = consolePageIndex(widget.page);
   bool _collapsed = false;
   bool _narrowResolved = false;
   bool _drawerOpen = false;
@@ -48,24 +63,21 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   final GlobalKey<UtilisateursPageState> _utilisateursKey = GlobalKey();
 
   static const List<({String title, String sub})> _meta = [
-    (title: "Vue d'ensemble", sub: 'Toutes sociétés confondues'),
-    (title: 'Sociétés', sub: 'Gérer les sociétés clientes de la plateforme'),
-    (title: 'Agences', sub: 'Toutes les agences, toutes sociétés confondues'),
-    (
-      title: 'Utilisateurs',
-      sub: "Comptes Administrateurs et Responsables d'Agence",
-    ),
-    (title: 'Rapports', sub: 'Exports consolidés de la plateforme'),
-    (title: 'Paramètres', sub: 'Configuration de la plateforme'),
+    (title: 'Overview', sub: 'Across all companies'),
+    (title: 'Companies', sub: 'Manage the platform client companies'),
+    (title: 'Agencies', sub: 'All agencies, across all companies'),
+    (title: 'Users', sub: 'Administrator and Agency Manager accounts'),
+    (title: 'Reports', sub: 'Consolidated platform exports'),
+    (title: 'Settings', sub: 'Platform configuration'),
   ];
 
   static const List<({IconData icon, String label})> _navItems = [
-    (icon: Icons.speed_rounded, label: "Vue d'ensemble"),
-    (icon: Icons.business_rounded, label: 'Sociétés'),
-    (icon: Icons.storefront_rounded, label: 'Agences'),
-    (icon: Icons.people_rounded, label: 'Utilisateurs'),
-    (icon: Icons.description_rounded, label: 'Rapports'),
-    (icon: Icons.settings_rounded, label: 'Paramètres'),
+    (icon: Icons.speed_rounded, label: 'Overview'),
+    (icon: Icons.business_rounded, label: 'Companies'),
+    (icon: Icons.storefront_rounded, label: 'Agencies'),
+    (icon: Icons.people_rounded, label: 'Users'),
+    (icon: Icons.description_rounded, label: 'Reports'),
+    (icon: Icons.settings_rounded, label: 'Settings'),
   ];
 
   @override
@@ -82,6 +94,35 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   void initState() {
     super.initState();
     _store.load();
+    // Ouvre le drawer de création demandé via l'URL (?create=) après le
+    // premier rendu (les pages doivent être présentes dans l'IndexedStack).
+    final autoCreate = widget.autoCreate;
+    if (autoCreate != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _applyAutoCreate(autoCreate);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(SuperAdminConsole oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Le routeur réutilise la même instance quand l'URL change
+    // (/console/overview → /console/societes) : initState ne se
+    // ré-exécute pas. On resynchronise donc la page affichée depuis le
+    // nouveau paramètre d'URL — sinon l'IndexedStack reste sur l'ancienne
+    // page jusqu'au rechargement manuel (F5).
+    if (widget.page != oldWidget.page) {
+      _page = consolePageIndex(widget.page);
+    }
+    // Si l'instance est réutilisée avec une nouvelle action (?create=),
+    // initState ne se ré-exécute pas → on applique ici.
+    final autoCreate = widget.autoCreate;
+    if (autoCreate != null && autoCreate != oldWidget.autoCreate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _applyAutoCreate(autoCreate);
+      });
+    }
   }
 
   @override
@@ -92,11 +133,55 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     super.dispose();
   }
 
-  void _goToPage(int index, {bool closeDrawer = false}) {
-    setState(() {
-      _page = index;
-      if (closeDrawer) _drawerOpen = false;
-    });
+  /// Navigue vers une page. Sur la route `/console/...` (app web), chaque
+  /// page devient une URL (`/console/societes`…) : bouton retour du
+  /// navigateur, rechargement et liens partageables fonctionnent. Hors
+  /// route console (preview pushée / tests), la navigation reste interne.
+  void _goToPage(int index, {bool closeDrawer = false, String? intent}) {
+    final router = GoRouter.maybeOf(context);
+    final isConsoleRoute = router != null &&
+        router.routeInformationProvider.value.uri.path
+            .startsWith(consoleBasePath);
+
+    if (!isConsoleRoute) {
+      setState(() {
+        _page = index;
+        if (closeDrawer) _drawerOpen = false;
+      });
+      if (intent != null) _applyAutoCreate(intent);
+      return;
+    }
+
+    // Déjà sur la page cible avec une action (palette) : on l'applique
+    // directement — une navigation query-only relancerait la route sans
+    // ré-exécuter initState.
+    if (index == _page && intent != null) {
+      _applyAutoCreate(intent);
+      return;
+    }
+
+    final page = consolePageNames[index];
+    router.go(
+      intent != null
+          ? '$consoleBasePath/$page?create=$intent'
+          : '$consoleBasePath/$page',
+    );
+  }
+
+  /// Ouvre le drawer de création ciblé (utilisé par la palette et par le
+  /// paramètre d'URL `?create=` après une navigation).
+  void _applyAutoCreate(String intent) {
+    switch (intent) {
+      case 'societe':
+        _societesKey.currentState?.openCreate();
+        break;
+      case 'agence':
+        _agencesKey.currentState?.openCreate();
+        break;
+      case 'utilisateur':
+        _utilisateursKey.currentState?.openCreate();
+        break;
+    }
   }
 
   void _openPalette() {
@@ -114,30 +199,21 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
       actionItems: [
         CmdItem(
           icon: Icons.add_rounded,
-          label: 'Nouvelle société',
-          hint: 'Créer',
-          run: () {
-            _goToPage(1);
-            _societesKey.currentState?.openCreate();
-          },
+          label: 'New company',
+          hint: 'Create',
+          run: () => _goToPage(1, intent: 'societe'),
         ),
         CmdItem(
           icon: Icons.add_rounded,
-          label: 'Nouvelle agence',
-          hint: 'Créer',
-          run: () {
-            _goToPage(2);
-            _agencesKey.currentState?.openCreate();
-          },
+          label: 'New agency',
+          hint: 'Create',
+          run: () => _goToPage(2, intent: 'agence'),
         ),
         CmdItem(
           icon: Icons.add_rounded,
-          label: 'Nouvel utilisateur',
-          hint: 'Créer',
-          run: () {
-            _goToPage(3);
-            _utilisateursKey.currentState?.openCreate();
-          },
+          label: 'New user',
+          hint: 'Create',
+          run: () => _goToPage(3, intent: 'utilisateur'),
         ),
       ],
     );
@@ -240,16 +316,27 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
           },
         ),
         Expanded(
-          child: IndexedStack(
-            index: _page,
-            children: [
-              const OverviewPage(),
-              SocietesPage(key: _societesKey),
-              AgencesPage(key: _agencesKey),
-              UtilisateursPage(key: _utilisateursKey),
-              const RapportsPage(),
-              const ParametresPage(),
-            ],
+          child: Padding(
+            // Marge horizontale constante du contenu : aligne toutes les
+            // pages (cartes, tableaux, KPIs) avec le topbar et évite que le
+            // contenu ne colle à la sidebar.
+            padding: EdgeInsets.fromLTRB(
+              mobile ? 16 : 28,
+              16,
+              mobile ? 16 : 28,
+              0,
+            ),
+            child: IndexedStack(
+              index: _page,
+              children: [
+                const OverviewPage(),
+                SocietesPage(key: _societesKey),
+                AgencesPage(key: _agencesKey),
+                UtilisateursPage(key: _utilisateursKey),
+                const RapportsPage(),
+                const ParametresPage(),
+              ],
+            ),
           ),
         ),
       ],
@@ -334,7 +421,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                     Expanded(
                       child: Text.rich(
                         TextSpan(
-                          text: 'Propre',
+                          text: 'Waste',
                           style: SuperAdminTheme.sora(
                             15,
                             weight: FontWeight.w700,
@@ -342,7 +429,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                           ),
                           children: [
                             TextSpan(
-                              text: '237',
+                              text: 'Pro',
                               style: SuperAdminTheme.sora(
                                 15,
                                 weight: FontWeight.w700,
@@ -383,8 +470,8 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                         ),
                         const SizedBox(width: 5),
                         Flexible(
-                          child: Text(
-                            'CONSOLE PLATEFORME',
+                          child:                          Text(
+                            'PLATFORM CONSOLE',
                             overflow: TextOverflow.ellipsis,
                             style: SuperAdminTheme.inter(
                               9.5,
@@ -414,8 +501,8 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                       if (i == 5 && expanded)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
-                          child: Text(
-                            'Système',
+                          child:                          Text(
+                            'System',
                             style: SuperAdminTheme.inter(
                               9.5,
                               weight: FontWeight.w600,
@@ -464,7 +551,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                         if (expanded) ...[
                           const SizedBox(width: 4),
                           Text(
-                            'Réduire',
+                            'Collapse',
                             style: SuperAdminTheme.inter(
                               12,
                               color: SuperAdminTheme.cream.withValues(
@@ -520,7 +607,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                             ),
                           ),
                           Text(
-                            'admin@propre237.cm',
+                            'admin@wastepro.cm',
                             overflow: TextOverflow.ellipsis,
                             style: SuperAdminTheme.inter(
                               10,
@@ -682,7 +769,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        'Rechercher ou agir...',
+                        'Search or take action...',
                         overflow: TextOverflow.ellipsis,
                         style: SuperAdminTheme.inter(
                           12.5,
@@ -703,7 +790,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
             dot: true,
             tooltip: 'Notifications',
             onTap: () =>
-                ToastService.show('Aucune notification pour le moment.'),
+                ToastService.show('No notifications at the moment.'),
           ),
         ],
       ),
@@ -810,7 +897,7 @@ class _ErrorBanner extends StatelessWidget {
                 weight: FontWeight.w600,
               ),
             ),
-            child: const Text('Réessayer'),
+            child: const Text('Retry'),
           ),
         ],
       ),

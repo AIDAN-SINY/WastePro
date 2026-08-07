@@ -3,61 +3,217 @@ rules_version = '2';
 // ============================================================
 // WastePro — règles Firestore (projet : waste-pro-f67a5)
 // ------------------------------------------------------------
-// ⚠️ STADE ACTUEL :
-// L'app n'utilise PAS encore Firebase Auth — la connexion se
-// fait par numéro de téléphone + mot de passe stocké dans la
-// collection `users`. Les règles sont donc ouvertes
-// (lecture/écriture autorisées) pour que l'application
-// fonctionne de bout en bout, y compris la console super admin.
-// → À durcir dès que Firebase Auth sera intégré (request.auth).
+// PHASE 1 — Sécurité :
+//  • Toute lecture/écriture exige une session Firebase Auth
+//    (sauf cas explicitement marqués ci-dessous).
+//  • Le rôle est lu dans `roles/{uid}` → `role` :
+//      'client' | 'collector' | 'admin' | 'super_admin'
+//  • Collections d'administration verrouillées :
+//      - societes / agences / utilisateurs  → super_admin uniquement
+//      - clients / collecteurs / frequences → admin + super_admin
+//  • Le doc de rôle d'un utilisateur ne peut être créé que par lui-même,
+//    avec un rôle qui correspond EXACTEMENT à celui de son doc `users`
+//    (lui-même attribué par la console ou l'inscription) → pas
+//    d'auto-promotion possible.
+// ------------------------------------------------------------
+// ⚠️ RÉSIDU CONNU (transition) : un doc `users` « legacy » (sans champ
+// `email`, créé avant cette migration) est lisible SANS auth (get ciblé
+// uniquement) et peut être lié par la personne qui connaît son mot de
+// passe — c'est le mécanisme de migration à la première connexion. Le
+// trou se referme dès que le compte est migré (champ `email` écrit).
+// → Migrer les comptes admin le plus tôt possible après déploiement.
 // ============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Comptes & profils ---
+    // ---------- Helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Rôle de l'utilisateur courant (doc `roles/{uid}`). Protégé contre les
+    // documents manquants : si le doc n'existe pas, retourne null au lieu
+    // d'une erreur (une erreur dans une expression fait échouer toute la
+    // règle → refus systématique, même des branches valides).
+    function role() {
+      return exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    // Email / rôle d'un utilisateur depuis son doc `users/{phone}` — même
+    // protection : null si le doc n'existe pas.
+    function userEmail(phone) {
+      return exists(/databases/$(database)/documents/users/$(phone))
+        ? get(/databases/$(database)/documents/users/$(phone)).data.email
+        : null;
+    }
+
+    function userRole(phone) {
+      return exists(/databases/$(database)/documents/users/$(phone))
+        ? get(/databases/$(database)/documents/users/$(phone)).data.role
+        : null;
+    }
+
+    // Email Firebase Auth dérivé d'un numéro (`+2376XXXXXXX` →
+    // `2376XXXXXXX@wastepro.cm`) — miroir de `AuthService.authEmail`.
+    function derivedEmail(phone) {
+      return phone.replace('[+]', '') + '@wastepro.cm';
+    }
+
+    function isAdmin() {
+      return signedIn() && role() in ['admin', 'super_admin'];
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && role() == 'super_admin';
+    }
+
+    function isCollector() {
+      return signedIn() && role() == 'collector';
+    }
+
+    // L'email Firebase Auth de l'utilisateur courant.
+    function authEmail() {
+      return request.auth.token.email;
+    }
+
+    // ---------- Rôles (uid Firebase Auth → rôle) ----------
+
+    // Créé par l'utilisateur à sa première connexion / inscription, lié à
+    // son doc `users` via l'email : impossible de prendre le rôle d'un
+    // autre compte (l'email du doc `users` doit être le sien).
+    match /roles/{uid} {
+      allow read: if signedIn() && (uid == request.auth.uid || isAdmin());
+      allow create: if signedIn() && uid == request.auth.uid
+        && request.resource.data.email == authEmail()
+        && request.resource.data.role in
+            ['client', 'collector', 'admin', 'super_admin']
+        && userEmail(request.resource.data.phoneNumber) == authEmail()
+        && userRole(request.resource.data.phoneNumber) == request.resource.data.role;
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ---------- Comptes & profils ----------
+
+    // `users/{phone}` — profil + identifiants hérités.
+    // get : son propre doc (via l'email), les profils collecteurs (flow
+    // d'attribution), ou tout doc si admin/collecteur. Lecture « legacy »
+    // pré-auth réservée aux comptes non migrés (sans champ `email`).
+    // update : champs opérationnels uniquement (abonnement, ramassage…),
+    // rôle et email verrouillés — l'email ne peut être posé que sur son
+    // propre compte (ou un compte legacy non migré).
     match /users/{phone} {
-      allow read, write: if true;
+      allow get: if (signedIn() && (
+            resource.data.email == authEmail()
+            || resource.data.role == 'collector'
+            || isAdmin()
+            || isCollector()
+          ))
+        || (!signedIn() && !('email' in resource.data));
+
+      allow list: if signedIn();
+
+      allow create: if (isAdmin() && request.resource.data.consoleCreated == true)
+        || (request.resource.data.email == authEmail()
+            && request.resource.data.role in ['client', 'collector']);
+
+      allow update: if isAdmin()
+        || (signedIn()
+            && request.resource.data.role == resource.data.role
+            // L'email ne change jamais sauf pendant la migration d'un compte
+            // legacy (doc SANS champ `email` → pose de SON email). Les mises
+            // à jour croisées (collecteur → doc client, client → doc
+            // collecteur) laissent l'email inchangé et restent autorisées.
+            // ⚠️ Dans l'évaluateur, un champ absent ≠ null → tests `in`
+            // explicites obligatoires (sinon update refusée sur docs legacy).
+            && (('email' in resource.data
+                 && request.resource.data.email == resource.data.email)
+                // Migration : doc legacy (SANS email) → ne peut être lié
+                // que par SON propriétaire. L'email dérivé du numéro du doc
+                // doit être le sien : `email == authEmail()` (c'est SON
+                // email) ET `email == numéro-du-doc + @domaine` (le doc est
+                // le sien). Sans ça, n'importe qui connecté pourrait poser
+                // son email sur un doc legacy et s'approprier son rôle
+                // (escalade de privilèges).
+                || (!('email' in resource.data)
+                    && request.resource.data.email == authEmail()
+                    && request.resource.data.email == derivedEmail(phone))
+                || (!('email' in resource.data)
+                    && !('email' in request.resource.data)))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'needsPickup', 'pickupDay', 'pickupTime', 'isSubscribed',
+                'subscription_plan', 'active_contract_id', 'latitude',
+                'longitude', 'fullName', 'lastCollection',
+                'lastCollectedClient', 'lastCollectionAt', 'earnings',
+                'successPickups', 'urgentPickupRequestedAt',
+                'assignedCollector', 'currentUrgentClient',
+                'urgentAssignedAt', 'last_subscription_at', 'email', 'uid',
+              ]));
+
+      allow delete: if isAdmin();
     }
 
-    // Liste blanche des collecteurs (pré-approbation admin)
+    // Liste blanche des collecteurs (pré-approbation admin).
+    // Lecture ouverte : nécessaire pendant l'inscription (avant auth) pour
+    // déterminer le rôle 'collector'. Ne contient que numéro + nom.
     match /collectors/{phone} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Backoffice entreprise : clients & collecteurs gérés par l'admin
+    // ---------- Backoffice entreprise (rôle admin) ----------
+
     match /clients/{id} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
     match /collecteurs/{id} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // --- Abonnements / collectes ---
-    match /subscriptions/{id} {
-      allow read, write: if true;
+    match /frequences/{id} {
+      allow read, write: if isAdmin();
     }
 
+    // ---------- Abonnements / collectes ----------
+
+    // Un client lit son propre doc d'abonnement (id = numéro), les admins
+    // tout. Les écritures sont réservées aux admins.
+    match /subscriptions/{phone} {
+      allow read: if signedIn() && (
+        userEmail(phone) == authEmail()
+        || isAdmin());
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Contrats & ramassages : créés par le client/collecteur pendant le
+    // flow d'abonnement mobile. Suppression réservée aux admins.
     match /contracts/{id} {
-      allow read, write: if true;
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
     }
 
     match /pickups/{id} {
-      allow read, write: if true;
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
     }
 
-    // --- Console super admin ---
+    // ---------- Console super admin (plateforme) ----------
+
     match /societes/{id} {
-      allow read, write: if true;
+      allow read, write: if isSuperAdmin();
     }
 
     match /agences/{id} {
-      allow read, write: if true;
+      allow read, write: if isSuperAdmin();
     }
 
     match /utilisateurs/{id} {
-      allow read, write: if true;
+      allow read, write: if isSuperAdmin();
     }
   }
 }

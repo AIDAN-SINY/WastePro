@@ -902,7 +902,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
   Widget _actionItem(IconData i, String l, Color bg, Color ic) {
     return InkWell(
       onTap: () {
-        if (l.contains("Ma facture"))
+        if (l.contains("My Bill"))
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const HistoryScreen()),
@@ -1013,7 +1013,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 child: _buildNavItem(
                   navProvider: navProvider,
                   icon: Icons.home_rounded,
-                  label: "Accueil",
+                  label: "Home",
                   index: 0,
                   onTap: () {
                     navProvider.setIndex(0);
@@ -1024,7 +1024,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 child: _buildNavItem(
                   navProvider: navProvider,
                   icon: Icons.history_rounded,
-                  label: "Historique",
+                  label: "History",
                   index: 1,
                   onTap: () {
                     navProvider.setIndex(1);
@@ -1039,7 +1039,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 child: _buildNavItem(
                   navProvider: navProvider,
                   icon: Icons.description_rounded,
-                  label: "Facture",
+                  label: "Bill",
                   index: 2,
                   onTap: () {
                     navProvider.setIndex(2);
@@ -1054,7 +1054,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
                 child: _buildNavItem(
                   navProvider: navProvider,
                   icon: Icons.person_rounded,
-                  label: "Profil",
+                  label: "Profile",
                   index: 3,
                   onTap: () {
                     navProvider.setIndex(3);

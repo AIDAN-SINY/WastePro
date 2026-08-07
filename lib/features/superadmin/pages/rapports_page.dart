@@ -17,35 +17,32 @@ class RapportsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Exports disponibles',
+                'Available exports',
                 style: SuperAdminTheme.sora(14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               const _ReportItem(
                 color: SuperAdminTheme.gold,
-                title: 'Rapport mensuel — Juillet 2026',
+                title: 'Monthly report — July 2026',
                 formats: 'PDF · Excel · CSV',
               ),
               const _ReportItem(
                 color: SuperAdminTheme.green,
-                title: 'Rapport consolidé — S2 2026',
+                title: 'Consolidated report — H2 2026',
                 formats: 'PDF · Excel',
               ),
               const _ReportItem(
                 color: SuperAdminTheme.blue,
-                title: 'Journal des paiements',
+                title: 'Payment log',
                 formats: 'CSV',
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(
-            'Génération de rapports — module à connecter à une vraie source de données.',
-            style: SuperAdminTheme.inter(11.5, color: SuperAdminTheme.muted),
-          ),
+        const SizedBox(height: 12),
+        Text(
+          'Report generation — module to be connected to a real data source.',
+          style: SuperAdminTheme.inter(11.5, color: SuperAdminTheme.muted),
         ),
       ],
     );

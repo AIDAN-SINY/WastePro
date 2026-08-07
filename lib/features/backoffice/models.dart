@@ -11,8 +11,8 @@ class ClientModel {
   final String name;
   final String phone;
   final String zone;
-  final String plan; // 'Essentiel' | 'Standard' | 'Premium'
-  final String status; // 'Actif' | 'Suspendu'
+  final String plan; // 'Essential' | 'Standard' | 'Premium'
+  final String status; // 'Active' | 'Suspended'
 
   const ClientModel({
     required this.id,
@@ -55,7 +55,7 @@ class ClientModel {
         phone: map['phone'] as String? ?? '',
         zone: map['zone'] as String? ?? '',
         plan: map['plan'] as String? ?? 'Standard',
-        status: map['status'] as String? ?? 'Actif',
+        status: map['status'] as String? ?? 'Active',
       );
 }
 
@@ -65,7 +65,7 @@ class CollecteurModel {
   final String phone;
   final String zone;
   final double rating;
-  final String status; // 'Actif' | 'Inactif'
+  final String status; // 'Active' | 'Inactive'
 
   const CollecteurModel({
     required this.id,
@@ -108,7 +108,7 @@ class CollecteurModel {
         phone: map['phone'] as String? ?? '',
         zone: map['zone'] as String? ?? '',
         rating: (map['rating'] as num?)?.toDouble() ?? 0,
-        status: map['status'] as String? ?? 'Actif',
+        status: map['status'] as String? ?? 'Active',
       );
 }
 
@@ -117,7 +117,7 @@ class ContratModel {
   final String client; // client name
   final String frequence; // libelle
   final int prix;
-  final String status; // 'Actif' | 'Suspendu' | 'Expiré'
+  final String status; // 'Active' | 'Suspended' | 'Expired'
 
   const ContratModel({
     required this.id,
@@ -155,7 +155,7 @@ class ContratModel {
         client: map['client'] as String? ?? '',
         frequence: map['frequence'] as String? ?? '',
         prix: (map['prix'] as num?)?.toInt() ?? 0,
-        status: map['status'] as String? ?? 'Actif',
+        status: map['status'] as String? ?? 'Active',
       );
 }
 
@@ -165,7 +165,7 @@ class CollecteModel {
   final String collecteur;
   final String date; // yyyy-MM-dd
   final double poids;
-  final String status; // 'Effectué' | 'Prévu' | 'Manqué'
+  final String status; // 'Completed' | 'Scheduled' | 'Missed'
 
   const CollecteModel({
     required this.id,
@@ -208,7 +208,7 @@ class CollecteModel {
         collecteur: map['collecteur'] as String? ?? '',
         date: map['date'] as String? ?? '',
         poids: (map['poids'] as num?)?.toDouble() ?? 0,
-        status: map['status'] as String? ?? 'Prévu',
+        status: map['status'] as String? ?? 'Scheduled',
       );
 }
 
@@ -217,7 +217,7 @@ class FactureModel {
   final String client;
   final int montant;
   final String echeance; // yyyy-MM-dd
-  final String status; // 'Payée' | 'En attente' | 'En retard'
+  final String status; // 'Paid' | 'Pending' | 'Overdue'
 
   const FactureModel({
     required this.id,
@@ -255,7 +255,7 @@ class FactureModel {
         client: map['client'] as String? ?? '',
         montant: (map['montant'] as num?)?.toInt() ?? 0,
         echeance: map['echeance'] as String? ?? '',
-        status: map['status'] as String? ?? 'En attente',
+        status: map['status'] as String? ?? 'Pending',
       );
 }
 

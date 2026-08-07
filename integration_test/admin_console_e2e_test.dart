@@ -46,14 +46,14 @@ void main() {
       );
       await _settle(tester, 10);
 
-      // 1) Naviguer vers la page Sociétés.
-      await tester.tap(find.text('Sociétés'));
+      // 1) Navigate to the Companies page.
+      await tester.tap(find.text('Companies'));
       await _settle(tester, 10);
 
-      // 2) Ouvrir le drawer « Nouvelle société ».
-      await tester.tap(find.text('Nouvelle société'));
+      // 2) Open the "New company" drawer.
+      await tester.tap(find.text('New company'));
       await _settle(tester, 10);
-      expect(find.text('Raison sociale'), findsOneWidget);
+      expect(find.text('Company name'), findsOneWidget);
 
       // 3) Remplir le formulaire (nom unique pour ce run).
       final name = 'Test E2E ${DateTime.now().millisecondsSinceEpoch}';
@@ -61,8 +61,8 @@ void main() {
       await tester.enterText(find.byType(TextFormField).at(1), 'Yaoundé E2E');
       await tester.pump();
 
-      // 4) Enregistrer → écriture Firestore + mise à jour du tableau.
-      await tester.tap(find.text('Enregistrer'));
+      // 4) Save → Firestore write + table update.
+      await tester.tap(find.text('Save'));
       await _settle(tester, 15);
 
       expect(

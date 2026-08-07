@@ -84,21 +84,21 @@ String boMoney(int n) {
   );
 }
 
-/// Formats a `yyyy-MM-dd` date as "04 août".
+/// Formats a `yyyy-MM-dd` date as "04 Aug".
 String boFmtDate(String isoDate) {
   const months = [
-    'janv.',
-    'févr.',
-    'mars',
-    'avr.',
-    'mai',
-    'juin',
-    'juil.',
-    'août',
-    'sept.',
-    'oct.',
-    'nov.',
-    'déc.',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final parts = isoDate.split('-');
   if (parts.length != 3) return isoDate;

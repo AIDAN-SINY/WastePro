@@ -1,7 +1,7 @@
 /// A platform back-office user managed by the super admin.
 ///
-/// These are the "Utilisateurs" entity from the super admin console design:
-/// accounts with a platform role ('Administrateur Général' | "Responsable d'Agence")
+/// These are the "Users" entity from the super admin console design:
+/// accounts with a platform role ('General Administrator' | 'Agency Manager')
 /// attached to an agency. This is distinct from the end-user accounts
 /// (clients/collectors) stored in `users`.
 ///
@@ -12,9 +12,9 @@ class PlatformUserModel {
   final String id;
   final String nom;
   final String telephone;
-  final String role; // 'Administrateur Général' | "Responsable d'Agence"
+  final String role; // 'General Administrator' | 'Agency Manager' (legacy: FR)
   final String agence;
-  final String status; // 'Actif' | 'Suspendu'
+  final String status; // 'Active' | 'Suspended' (legacy: 'Actif'/'Suspendu')
   final String password; // '' = no login account
 
   const PlatformUserModel({
@@ -63,9 +63,9 @@ class PlatformUserModel {
       id: map['id'] as String? ?? '',
       nom: map['nom'] as String? ?? '',
       telephone: map['telephone'] as String? ?? '',
-      role: map['role'] as String? ?? "Responsable d'Agence",
+      role: map['role'] as String? ?? 'Agency Manager',
       agence: map['agence'] as String? ?? '—',
-      status: map['status'] as String? ?? 'Actif',
+      status: map['status'] as String? ?? 'Active',
       password: map['password'] as String? ?? '',
     );
   }

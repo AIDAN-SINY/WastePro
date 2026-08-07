@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models.dart';
 import 'backoffice_store.dart';
@@ -14,16 +16,20 @@ import 'seed_data.dart';
 /// - When a collection is empty on first load, it is seeded with the
 ///   design's default entities (see [seedIfEmpty]) so the backoffice is
 ///   never blank on a fresh project.
-/// - Créer / modifier un client ou un collecteur avec un mot de passe crée
-///   aussi son **compte de connexion** dans `users` (rôle 'client' /
-///   'collector', marqueur `consoleCreated`) : la personne peut alors se
-///   connecter à son interface dédiée. Les collecteurs actifs sont en plus
-///   pré-approuvés dans la liste blanche `collectors`.
+/// - Creating / editing a client or collector with a password also creates
+///   its **login account** in `users` (role 'client' / 'collector', marker
+///   `consoleCreated`) so the person can log in to their dedicated
+///   interface. Active collectors are also pre-approved in the `collectors`
+///   whitelist.
 /// - On failure (network / rules), [error] is set so the screen can show a
 ///   banner with a retry action; the mock data is never shown.
 class FirestoreBackofficeStore extends BackofficeStore {
-  FirestoreBackofficeStore({FirebaseFirestore? db, this.seedIfEmpty = true})
-    : _db = db ?? FirebaseFirestore.instance {
+  FirestoreBackofficeStore({
+    FirebaseFirestore? db,
+    this.seedIfEmpty = true,
+    @visibleForTesting bool Function()? isSignedOut,
+  }) : _isSignedOutOverride = isSignedOut,
+       _db = db ?? FirebaseFirestore.instance {
     // Never flash the design's mock data in the real backoffice.
     clients.clear();
     collecteurs.clear();
@@ -67,13 +73,13 @@ class FirestoreBackofficeStore extends BackofficeStore {
       _db
           .collection('clients')
           .snapshots()
-          .listen(_onClients, onError: _onStreamError),
+          .listen(_onClients, onError: handleStreamError),
     );
     _subs.add(
       _db
           .collection('collecteurs')
           .snapshots()
-          .listen(_onCollecteurs, onError: _onStreamError),
+          .listen(_onCollecteurs, onError: handleStreamError),
     );
 
     await _loadCompleter!.future;
@@ -117,12 +123,36 @@ class FirestoreBackofficeStore extends BackofficeStore {
     notifyListeners();
   }
 
-  void _onStreamError(Object error) {
+  final bool Function()? _isSignedOutOverride;
+
+  /// Point d'entrée des erreurs de flux (exposé pour les tests).
+  ///
+  /// Après une déconnexion, le token est révoqué et les règles rejettent
+  /// les listeners encore actifs (permission-denied…) : c'est attendu — la
+  /// console est en train de se démonter, on n'affiche pas de bannière.
+  @visibleForTesting
+  void handleStreamError(Object error) {
     setLoading(false);
-    setErrorValue(_friendlyError(error));
+    if (!_isSignedOut()) {
+      setErrorValue(_friendlyError(error));
+    }
     final completer = _loadCompleter;
     if (completer != null && !completer.isCompleted) completer.complete();
     notifyListeners();
+  }
+
+  /// Vrai quand aucune session Firebase Auth n'est active (déconnecté ou
+  /// token expiré). Protégé pour les tests (app Firebase non initialisée) :
+  /// on considère alors qu'une session existe, pour ne jamais masquer une
+  /// vraie erreur de règles.
+  bool _isSignedOut() {
+    final override = _isSignedOutOverride;
+    if (override != null) return override();
+    try {
+      return FirebaseAuth.instance.currentUser == null;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _seedCollection(
@@ -146,7 +176,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
   Future<void> _seedCollectorWhitelist() async {
     try {
       final batch = _db.batch();
-      for (final c in seedCollecteurs.where((c) => c.status == 'Actif')) {
+      for (final c in seedCollecteurs.where((c) => c.status == 'Active')) {
         final phone = _canonicalPhone(c.phone);
         if (phone.isNotEmpty) {
           batch.set(_db.collection('collectors').doc(phone), {
@@ -189,9 +219,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: name,
       role: 'client',
       password: password,
-      active: status == 'Actif',
+      active: status == 'Active',
       subscriptionPlan: plan,
-      isSubscribed: status == 'Actif',
+      isSubscribed: status == 'Active',
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
     final index = clients.indexWhere((c) => c.id == model.id);
@@ -227,9 +257,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: updated.name,
       role: 'client',
       password: effective,
-      active: updated.status == 'Actif',
+      active: updated.status == 'Active',
       subscriptionPlan: updated.plan,
-      isSubscribed: updated.status == 'Actif',
+      isSubscribed: updated.status == 'Active',
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
     final index = clients.indexWhere((c) => c.id == updated.id);
@@ -289,7 +319,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: name,
       role: 'collector',
       password: password,
-      active: status == 'Actif',
+      active: status == 'Active',
       whitelist: true,
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
@@ -328,7 +358,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: updated.name,
       role: 'collector',
       password: effective,
-      active: updated.status == 'Actif',
+      active: updated.status == 'Active',
       whitelist: true,
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
@@ -404,8 +434,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       final isConsole = existing.data()?['consoleCreated'] == true;
       if (!isConsole) {
         throw _SyncError(
-          'Un compte existe déjà avec ce numéro. Choisissez un numéro '
-          'différent.',
+          'An account already exists with this number. Choose a different '
+          'number.',
         );
       }
     }
@@ -496,14 +526,14 @@ class FirestoreBackofficeStore extends BackofficeStore {
     if (error is FirebaseException) {
       switch (error.code) {
         case 'unavailable':
-          return 'Service indisponible. Vérifie ta connexion internet.';
+          return 'Service unavailable. Check your internet connection.';
         case 'permission-denied':
-          return 'Accès refusé. Vérifie les règles Firestore du projet.';
+          return 'Access denied. Check the project Firestore rules.';
         default:
-          return error.message ?? 'Erreur Firestore.';
+          return error.message ?? 'Firestore error.';
       }
     }
-    return 'Une erreur est survenue. Réessaie.';
+    return 'An error occurred. Please try again.';
   }
 
   void _cancelSubscriptions() {

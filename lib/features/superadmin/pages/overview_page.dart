@@ -9,7 +9,7 @@ import '../widgets/kpi_card.dart';
 class OverviewPage extends StatelessWidget {
   const OverviewPage({super.key});
 
-  static const _growthLabels = ['Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû'];
+  static const _growthLabels = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +19,7 @@ class OverviewPage extends StatelessWidget {
       builder: (context, constraints) {
         final wide = constraints.maxWidth > 880;
         final chartHeight = 190.0;
+        final kpis = _kpis(store);
 
         return ListView(
           padding: const EdgeInsets.only(bottom: 40),
@@ -27,11 +28,16 @@ class OverviewPage extends StatelessWidget {
             if (wide)
               Row(
                 children: [
-                  for (final kpi in _kpis(store))
+                  for (var i = 0; i < kpis.length; i++)
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: kpi,
+                        // Espacement régulier entre les cartes : pas de
+                        // marge droite sur la dernière (elle s'aligne déjà
+                        // sur le bord du contenu).
+                        padding: EdgeInsets.only(
+                          right: i == kpis.length - 1 ? 0 : 16,
+                        ),
+                        child: kpis[i],
                       ),
                     ),
                 ],
@@ -41,7 +47,7 @@ class OverviewPage extends StatelessWidget {
                 spacing: 16,
                 runSpacing: 16,
                 children: [
-                  for (final kpi in _kpis(store))
+                  for (final kpi in kpis)
                     SizedBox(
                       width: (constraints.maxWidth - 16) / 2,
                       child: kpi,
@@ -59,8 +65,8 @@ class OverviewPage extends StatelessWidget {
                   Expanded(
                     flex: 7,
                     child: _chartCard(
-                      title: 'Nouvelles sociétés',
-                      tag: '6 derniers mois',
+                      title: 'New companies',
+                      tag: 'Last 6 months',
                       height: chartHeight,
                       child: _GrowthChart(),
                     ),
@@ -69,7 +75,7 @@ class OverviewPage extends StatelessWidget {
                   Expanded(
                     flex: 5,
                     child: _chartCard(
-                      title: 'Agences par société',
+                      title: 'Agencies per company',
                       tag: '',
                       height: chartHeight,
                       child: _AgencyChart(store: store),
@@ -79,14 +85,14 @@ class OverviewPage extends StatelessWidget {
               )
             else ...[
               _chartCard(
-                title: 'Nouvelles sociétés',
-                tag: '6 derniers mois',
+                title: 'New companies',
+                tag: 'Last 6 months',
                 height: chartHeight,
                 child: _GrowthChart(),
               ),
               const SizedBox(height: 16),
               _chartCard(
-                title: 'Agences par société',
+                title: 'Agencies per company',
                 tag: '',
                 height: chartHeight,
                 child: _AgencyChart(store: store),
@@ -102,28 +108,27 @@ class OverviewPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _cardHead('Activité plateforme', 'Temps réel'),
+                  _cardHead('Platform activity', 'Live'),
                   const SizedBox(height: 12),
                   const _ActivityItem(
                     color: SuperAdminTheme.gold,
-                    text: 'Nouvelle société inscrite : EcoCollecte Kribi',
-                    time: 'il y a 2 h',
+                    text: 'New company registered: EcoCollecte Kribi',
+                    time: '2 h ago',
                   ),
                   const _ActivityItem(
                     color: SuperAdminTheme.green,
-                    text: 'Agence "Douala — Bassa" activée',
-                    time: 'hier',
+                    text: 'Agency "Douala — Bassa" activated',
+                    time: 'yesterday',
                   ),
                   const _ActivityItem(
                     color: SuperAdminTheme.blue,
-                    text:
-                        "Nouveau Responsable d'Agence créé : Marie Ekwalla",
-                    time: 'il y a 2 j',
+                    text: 'New Agency Manager created: Marie Ekwalla',
+                    time: '2 d ago',
                   ),
                   const _ActivityItem(
                     color: SuperAdminTheme.red,
-                    text: 'Société "EcoCollecte Kribi" suspendue (impayé)',
-                    time: 'il y a 3 j',
+                    text: 'Company "EcoCollecte Kribi" suspended (unpaid)',
+                    time: '3 d ago',
                   ),
                 ],
               ),
@@ -141,7 +146,7 @@ class OverviewPage extends StatelessWidget {
         iconBg: SuperAdminTheme.goldSoft,
         iconColor: SuperAdminTheme.goldDim,
         value: store.societesActives.toDouble(),
-        label: 'Sociétés actives',
+        label: 'Active companies',
         trend: '2',
         trendUp: true,
       ),
@@ -150,7 +155,7 @@ class OverviewPage extends StatelessWidget {
         iconBg: SuperAdminTheme.greenSoft,
         iconColor: SuperAdminTheme.green,
         value: store.agencesCount.toDouble(),
-        label: 'Agences',
+        label: 'Agencies',
         trend: '3',
         trendUp: true,
       ),
@@ -159,7 +164,7 @@ class OverviewPage extends StatelessWidget {
         iconBg: SuperAdminTheme.blueSoft,
         iconColor: SuperAdminTheme.blue,
         value: store.utilisateursCount.toDouble(),
-        label: 'Utilisateurs',
+        label: 'Users',
         trend: '6.4%',
         trendUp: true,
       ),
@@ -169,7 +174,7 @@ class OverviewPage extends StatelessWidget {
         iconColor: SuperAdminTheme.red,
         value: 99.9,
         suffix: '%',
-        label: 'Disponibilité plateforme',
+        label: 'Platform availability',
         trend: '0.1%',
         trendUp: false,
         decimals: 1,

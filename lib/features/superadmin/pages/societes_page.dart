@@ -23,32 +23,32 @@ class SocietesPage extends StatefulWidget {
 }
 
 class SocietesPageState extends State<SocietesPage> {
-  static const List<String> _filters = ['Toutes', 'Actives', 'Suspendues'];
+  static const List<String> _filters = ['All', 'Active', 'Suspended'];
 
   int _filter = 0;
   final Map<String, dynamic> _form = {};
 
-  /// Opens the "Nouvelle société" drawer (used by the command palette).
+  /// Opens the "New company" drawer (used by the command palette).
   void openCreate() {
     _form
       ..clear()
-      ..['status'] = 'Actif';
+      ..['status'] = 'Active';
     showCrudDrawer(
       context,
-      title: 'Nouvelle société',
+      title: 'New company',
       body: _buildForm(),
       onSave: () async {
         try {
           final raisonSociale =
-              requireField(_form, 'raisonSociale', 'Raison sociale');
+              requireField(_form, 'raisonSociale', 'Company name');
           await context.read<PlatformStore>().addSociete(
                 raisonSociale: raisonSociale,
                 adresse: _form['adresse']?.toString().trim() ?? '',
                 telephone: _form['telephone']?.toString().trim() ?? '',
                 email: _form['email']?.toString().trim() ?? '',
-                status: _form['status']?.toString() ?? 'Actif',
+                status: _form['status']?.toString() ?? 'Active',
               );
-          ToastService.show('Société créée avec succès.');
+          ToastService.show('Company created successfully.');
         } catch (e) {
           ToastService.show(e.toString(), isError: true);
           rethrow;
@@ -63,12 +63,12 @@ class SocietesPageState extends State<SocietesPage> {
       ..addAll(societe.toMap());
     showCrudDrawer(
       context,
-      title: 'Modifier la société',
+      title: 'Edit company',
       body: _buildForm(),
       onSave: () async {
         try {
           final raisonSociale =
-              requireField(_form, 'raisonSociale', 'Raison sociale');
+              requireField(_form, 'raisonSociale', 'Company name');
           await context.read<PlatformStore>().updateSociete(
                 societe.copyWith(
                   raisonSociale: raisonSociale,
@@ -78,7 +78,7 @@ class SocietesPageState extends State<SocietesPage> {
                   status: _form['status']?.toString(),
                 ),
               );
-          ToastService.show('Modifications enregistrées.');
+          ToastService.show('Changes saved.');
         } catch (e) {
           ToastService.show(e.toString(), isError: true);
           rethrow;
@@ -97,9 +97,9 @@ class SocietesPageState extends State<SocietesPage> {
         .toList();
     if (agences.isNotEmpty) {
       ToastService.show(
-        'Impossible de supprimer : ${agences.length} agence'
-        '${agences.length > 1 ? 's' : ''} rattachée'
-        '${agences.length > 1 ? 's' : ''} à cette société.',
+        'Cannot delete: ${agences.length} agenc'
+        '${agences.length > 1 ? 'ies' : 'y'} linked'
+        '${agences.length > 1 ? '' : ''} to this company.',
         isError: true,
       );
       return;
@@ -107,14 +107,14 @@ class SocietesPageState extends State<SocietesPage> {
 
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Supprimer cette société ?',
+      title: 'Delete this company?',
       message:
-          '"${societe.raisonSociale}" sera définitivement supprimée. Cette action est irréversible.',
+          '"${societe.raisonSociale}" will be permanently deleted. This action is irreversible.',
     );
     if (confirmed == true && mounted) {
       try {
         await context.read<PlatformStore>().deleteSociete(societe.id);
-        if (mounted) ToastService.show('Élément supprimé.');
+        if (mounted) ToastService.show('Item deleted.');
       } catch (e) {
         if (mounted) ToastService.show(e.toString(), isError: true);
       }
@@ -126,14 +126,14 @@ class SocietesPageState extends State<SocietesPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SaTextField(
-          label: 'Raison sociale',
+          label: 'Company name',
           initial: _form['raisonSociale']?.toString(),
-          hint: 'Ex. Propre237 Douala SARL',
+          hint: 'Ex. WastePro Douala Ltd',
           onChanged: (v) => _form['raisonSociale'] = v,
         ),
         const SizedBox(height: 16),
         SaTextField(
-          label: 'Adresse',
+          label: 'Address',
           initial: _form['adresse']?.toString(),
           hint: 'Ex. Bonanjo, Douala',
           onChanged: (v) => _form['adresse'] = v,
@@ -143,7 +143,7 @@ class SocietesPageState extends State<SocietesPage> {
           children: [
             Expanded(
               child: SaTextField(
-                label: 'Téléphone',
+                label: 'Phone',
                 initial: _form['telephone']?.toString(),
                 hint: '+237 2XX XX XX XX',
                 keyboardType: TextInputType.phone,
@@ -155,7 +155,7 @@ class SocietesPageState extends State<SocietesPage> {
               child: SaTextField(
                 label: 'Email',
                 initial: _form['email']?.toString(),
-                hint: 'contact@societe.cm',
+                hint: 'contact@company.cm',
                 keyboardType: TextInputType.emailAddress,
                 onChanged: (v) => _form['email'] = v,
               ),
@@ -164,9 +164,9 @@ class SocietesPageState extends State<SocietesPage> {
         ),
         const SizedBox(height: 16),
         SaSelectField(
-          label: 'Statut',
-          options: const ['Actif', 'Suspendu'],
-          initial: _form['status']?.toString() ?? 'Actif',
+          label: 'Status',
+          options: const ['Active', 'Suspended'],
+          initial: _form['status']?.toString() ?? 'Active',
           onChanged: (v) => _form['status'] = v,
         ),
       ],
@@ -177,7 +177,7 @@ class SocietesPageState extends State<SocietesPage> {
   Widget build(BuildContext context) {
     final store = context.watch<PlatformStore>();
     final statusFilter =
-        _filter == 1 ? 'Actif' : (_filter == 2 ? 'Suspendu' : null);
+        _filter == 1 ? 'Active' : (_filter == 2 ? 'Suspended' : null);
     final rows = statusFilter == null
         ? store.societes
         : store.societes.where((s) => s.status == statusFilter).toList();
@@ -192,7 +192,7 @@ class SocietesPageState extends State<SocietesPage> {
             onChanged: (i) => setState(() => _filter = i),
           ),
           action: PrimaryButton(
-            label: 'Nouvelle société',
+            label: 'New company',
             icon: Icons.add_rounded,
             onTap: openCreate,
           ),
@@ -200,29 +200,29 @@ class SocietesPageState extends State<SocietesPage> {
         const SizedBox(height: 16),
         AppTable<SocieteModel>(
           rows: rows,
-          emptyText: 'Aucune société trouvée',
-          footer: '${rows.length} société${rows.length > 1 ? 's' : ''}',
+          emptyText: 'No companies found',
+          footer: '${rows.length} compan${rows.length > 1 ? 'ies' : 'y'}',
           columns: [
             TableColumnSpec(
-              label: 'Société',
+              label: 'Company',
               sortValue: (s) => s.raisonSociale,
               flex: 3,
               cell: (s) => saNameCell(s.raisonSociale),
             ),
             TableColumnSpec(
-              label: 'Adresse',
+              label: 'Address',
               sortValue: (s) => s.adresse,
               flex: 2,
               cell: (s) => saTextCell(s.adresse),
             ),
             TableColumnSpec(
-              label: 'Téléphone',
+              label: 'Phone',
               sortValue: (s) => s.telephone,
               flex: 2,
               cell: (s) => saTextCell(s.telephone),
             ),
             TableColumnSpec(
-              label: 'Statut',
+              label: 'Status',
               sortValue: (s) => s.status,
               flex: 1,
               cell: (s) => StatusBadge(status: s.status),

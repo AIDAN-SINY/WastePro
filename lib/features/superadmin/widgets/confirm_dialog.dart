@@ -11,7 +11,7 @@ Future<bool?> showConfirmDialog(
   return showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Fermer',
+    barrierLabel: 'Close',
     barrierColor: Colors.black.withValues(alpha: 0.4),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (context, _, _) => _ConfirmDialog(title: title, message: message),
@@ -93,7 +93,7 @@ class _ConfirmDialog extends StatelessWidget {
                     ),
                     onPressed: () => Navigator.of(context).pop(false),
                     child: Text(
-                      'Annuler',
+                      'Cancel',
                       style: SuperAdminTheme.inter(
                         12.5,
                         weight: FontWeight.w600,
@@ -114,7 +114,7 @@ class _ConfirmDialog extends StatelessWidget {
                     ),
                     onPressed: () => Navigator.of(context).pop(true),
                     child: Text(
-                      'Supprimer',
+                      'Delete',
                       style: SuperAdminTheme.inter(
                         12.5,
                         weight: FontWeight.w600,

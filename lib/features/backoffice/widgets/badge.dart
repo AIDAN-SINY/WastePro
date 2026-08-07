@@ -10,16 +10,16 @@ class BoBadge extends StatelessWidget {
 
   (Color, Color) _colors() {
     switch (status) {
-      case 'Actif':
-      case 'Effectué':
-      case 'Payée':
+      case 'Active' || 'Actif':
+      case 'Completed' || 'Effectué':
+      case 'Paid' || 'Payée':
         return (BackofficeTheme.greenSoft, BackofficeTheme.success);
-      case 'Prévu':
-      case 'En attente':
+      case 'Scheduled' || 'Prévu':
+      case 'Pending' || 'En attente':
         return (BackofficeTheme.goldSoft, BackofficeTheme.goldDim);
-      case 'Suspendu':
-      case 'Manqué':
-      case 'En retard':
+      case 'Suspended' || 'Suspendu':
+      case 'Missed' || 'Manqué':
+      case 'Overdue' || 'En retard':
         return (BackofficeTheme.redSoft, BackofficeTheme.red);
       default:
         return (BackofficeTheme.graySoft, BackofficeTheme.muted);
