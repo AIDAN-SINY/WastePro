@@ -44,8 +44,11 @@ class PlatformStore extends ChangeNotifier {
   final List<PlatformUserModel> utilisateurs = [...seedUtilisateurs];
 
   // --- Dashboard helpers ---
-  int get societesActives =>
-      societes.where((s) => s.status == 'Active').length;
+  // Counts both the English ('Active') and the legacy French ('Actif')
+  // values so companies created before the switch stay on the dashboard.
+  int get societesActives => societes
+      .where((s) => s.status == 'Active' || s.status == 'Actif')
+      .length;
   int get agencesCount => agences.length;
   int get utilisateursCount => utilisateurs.length;
 

@@ -196,9 +196,16 @@ class UtilisateursPageState extends State<UtilisateursPage> {
     final roleFilter = _filter == 1
         ? _roleOptions[0]
         : (_filter == 2 ? _roleOptions[1] : null);
+    // Match both the English roles and the legacy French ones
+    // ('Administrateur Général' / "Responsable d'Agence").
+    bool roleMatches(String role) => roleFilter == null || switch (roleFilter) {
+      'General Administrator' =>
+        role == 'General Administrator' || role == 'Administrateur Général',
+      _ => role == 'Agency Manager' || role == "Responsable d'Agence",
+    };
     final rows = roleFilter == null
         ? store.utilisateurs
-        : store.utilisateurs.where((u) => u.role == roleFilter).toList();
+        : store.utilisateurs.where((u) => roleMatches(u.role)).toList();
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 40),

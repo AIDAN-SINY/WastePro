@@ -44,7 +44,11 @@ class BackofficeScreen extends StatefulWidget {
 }
 
 class _BackofficeScreenState extends State<BackofficeScreen> {
-  late final BackofficeStore _store;
+  late BackofficeStore _store;
+
+  /// Vrai quand l'écran a lui-même créé le store : seul ce cas dispose.
+  /// Un store injecté (tests) appartient à son créateur.
+  late bool _ownsStore;
   final _searchCtrl = TextEditingController();
   String _page = 'dashboard';
   bool _menuOpen = false;
@@ -67,6 +71,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     super.initState();
     // The Firestore store starts loading in its constructor; load() also
     // re-arms the listeners here (same pattern as the super admin console).
+    _ownsStore = widget.store == null;
     _store = widget.store ?? FirestoreBackofficeStore();
     _store.load();
   }
@@ -84,7 +89,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
   void dispose() {
     // Only dispose the store we created ourselves; an injected store is
     // owned by its creator (e.g. tests).
-    if (widget.store == null) _store.dispose();
+    if (_ownsStore) _store.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }

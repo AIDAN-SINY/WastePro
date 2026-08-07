@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models.dart';
@@ -141,18 +140,17 @@ class FirestoreBackofficeStore extends BackofficeStore {
     notifyListeners();
   }
 
-  /// Vrai quand aucune session Firebase Auth n'est active (déconnecté ou
-  /// token expiré). Protégé pour les tests (app Firebase non initialisée) :
-  /// on considère alors qu'une session existe, pour ne jamais masquer une
-  /// vraie erreur de règles.
+  /// Vrai quand aucune session active n'existe (déconnecté).
+  ///
+  /// La connexion n'utilise plus Firebase Auth (restaurée en mode
+  /// « numéro + mot de passe » Firestore) : il n'y a donc jamais de token
+  /// à révoquer au logout et les erreurs de flux ne doivent pas être
+  /// masquées. Le cas « logout → permission-denied attendu » reste testable
+  /// via [_isSignedOutOverride].
   bool _isSignedOut() {
     final override = _isSignedOutOverride;
     if (override != null) return override();
-    try {
-      return FirebaseAuth.instance.currentUser == null;
-    } catch (_) {
-      return false;
-    }
+    return false;
   }
 
   Future<void> _seedCollection(
@@ -176,7 +174,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
   Future<void> _seedCollectorWhitelist() async {
     try {
       final batch = _db.batch();
-      for (final c in seedCollecteurs.where((c) => c.status == 'Active')) {
+      for (final c in seedCollecteurs.where((c) => _isActive(c.status))) {
         final phone = _canonicalPhone(c.phone);
         if (phone.isNotEmpty) {
           batch.set(_db.collection('collectors').doc(phone), {
@@ -219,9 +217,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: name,
       role: 'client',
       password: password,
-      active: status == 'Active',
+      active: _isActive(status),
       subscriptionPlan: plan,
-      isSubscribed: status == 'Active',
+      isSubscribed: _isActive(status),
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
     final index = clients.indexWhere((c) => c.id == model.id);
@@ -257,9 +255,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: updated.name,
       role: 'client',
       password: effective,
-      active: updated.status == 'Active',
+      active: _isActive(updated.status),
       subscriptionPlan: updated.plan,
-      isSubscribed: updated.status == 'Active',
+      isSubscribed: _isActive(updated.status),
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
     final index = clients.indexWhere((c) => c.id == updated.id);
@@ -319,7 +317,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: name,
       role: 'collector',
       password: password,
-      active: status == 'Active',
+      active: _isActive(status),
       whitelist: true,
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
@@ -358,7 +356,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       fullName: updated.name,
       role: 'collector',
       password: effective,
-      active: updated.status == 'Active',
+      active: _isActive(updated.status),
       whitelist: true,
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
@@ -511,6 +509,12 @@ class FirestoreBackofficeStore extends BackofficeStore {
   }
 
   // --- Helpers ---
+
+  /// Vrai pour les statuts « actif » anglais ET hérités français (les
+  /// enregistrements Firestore créés avant le passage à l'anglais gardent
+  /// leurs valeurs : 'Actif'). Sans ça, éditer un client legacy le
+  /// considérerait inactif et supprimerait son compte de connexion.
+  bool _isActive(String status) => status == 'Active' || status == 'Actif';
 
   /// Normalise un numéro de téléphone : sans espaces ni tirets, préfixe +237
   /// (gère aussi le « 237... » saisi sans le +).

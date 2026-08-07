@@ -51,7 +51,15 @@ class _OpenPaletteIntent extends Intent {
 }
 
 class _SuperAdminConsoleState extends State<SuperAdminConsole> {
-  late final PlatformStore _store = widget.store ?? PlatformStore();
+  late PlatformStore _store;
+
+  /// Vrai quand la console a elle-même créé le store (mode mock / preview) :
+  /// dans ce cas seul, elle le dispose. Un store partagé/injecté appartient
+  /// à son créateur (ConsoleStoreScope, AuthWrapper, tests) et ne doit
+  /// jamais être disposé par la console — sinon le store Firestore partagé
+  /// serait détruit au logout et « used after being disposed » au login
+  /// suivant.
+  late bool _ownsStore;
 
   late int _page = consolePageIndex(widget.page);
   bool _collapsed = false;
@@ -93,6 +101,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   @override
   void initState() {
     super.initState();
+    _bindStore();
     _store.load();
     // Ouvre le drawer de création demandé via l'URL (?create=) après le
     // premier rendu (les pages doivent être présentes dans l'IndexedStack).
@@ -104,9 +113,29 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     }
   }
 
+  /// Lie le store fourni (partagé, ex. console connectée) ou en crée un
+  /// (mock, preview debug / tests) et mémorise qui en est propriétaire.
+  void _bindStore() {
+    _ownsStore = widget.store == null;
+    _store = widget.store ?? PlatformStore();
+  }
+
   @override
   void didUpdateWidget(SuperAdminConsole oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Le store peut changer au fil de la vie de la console (session réelle →
+    // preview debug après logout, ou l'inverse après login) : on libère le
+    // store qu'on possédait (jamais un store partagé) et on s'aligne sur le
+    // nouveau. Sans ça, la console continuerait d'utiliser un store mort.
+    // Le `load()` re-arme les listeners : nécessaire quand on passe d'un
+    // mock (rien à charger) à un store Firestore partagé en cours de
+    // session ; inoffensif dans l'autre sens (load() annule et re-crée ses
+    // abonnements).
+    if (oldWidget.store != widget.store) {
+      if (_ownsStore) _store.dispose();
+      _bindStore();
+      _store.load();
+    }
     // Le routeur réutilise la même instance quand l'URL change
     // (/console/overview → /console/societes) : initState ne se
     // ré-exécute pas. On resynchronise donc la page affichée depuis le
@@ -127,9 +156,9 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
 
   @override
   void dispose() {
-    // Only dispose the store we created ourselves; an injected store is
-    // owned by its creator (e.g. AuthWrapper).
-    if (widget.store == null) _store.dispose();
+    // Only dispose the store we created ourselves; a shared/injected store
+    // is owned by its creator (ConsoleStoreScope / AuthWrapper / tests).
+    if (_ownsStore) _store.dispose();
     super.dispose();
   }
 
@@ -220,11 +249,35 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   }
 
   void _handleExit() {
-    if (Navigator.of(context).canPop()) {
-      // Preview mode (pushed from the welcome screen).
+    // Defensive read: standalone widget tests / previews may not provide a
+    // UserProvider above the console.
+    UserProvider? userProvider;
+    try {
+      userProvider = context.read<UserProvider>();
+    } catch (_) {
+      userProvider = null;
+    }
+
+    final hasSession = userProvider?.user != null;
+    final router = GoRouter.maybeOf(context);
+
+    if (hasSession) {
+      // Real session: sign out AND explicitly leave the console route. In
+      // debug builds the console preview (allowConsolePreview) keeps
+      // /console/* reachable without a session, so the router redirect
+      // alone would NOT fire after logout — the console would stay mounted
+      // (swapping to the mock store) and the button would appear to do
+      // nothing. Going to '/' explicitly is what actually takes the user
+      // back to the welcome screen.
+      userProvider!.logout();
+      if (router != null) {
+        router.go('/');
+      } else if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } else if (Navigator.of(context).canPop()) {
+      // Preview mode (pushed from the welcome screen): pop back.
       Navigator.of(context).pop();
-    } else {
-      context.read<UserProvider>().logout();
     }
   }
 

@@ -39,12 +39,16 @@ class StatusBadge extends StatelessWidget {
             decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
           ),
           const SizedBox(width: 5),
-          Text(
-            status,
-            style: SuperAdminTheme.inter(
-              10.5,
-              weight: FontWeight.w600,
-              color: fg,
+          Flexible(
+            child: Text(
+              status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: SuperAdminTheme.inter(
+                10.5,
+                weight: FontWeight.w600,
+                color: fg,
+              ),
             ),
           ),
         ],

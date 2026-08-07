@@ -171,9 +171,15 @@ class AgencesPageState extends State<AgencesPage> {
     final store = context.watch<PlatformStore>();
     final statusFilter =
         _filter == 1 ? 'Active' : (_filter == 2 ? 'Suspended' : null);
+    // Match both the English values and the legacy French ones ('Actif' /
+    // 'Suspendu') so records created before the switch stay visible.
     final rows = statusFilter == null
         ? store.agences
-        : store.agences.where((a) => a.status == statusFilter).toList();
+        : store.agences
+              .where((a) => statusFilter == 'Active'
+                  ? (a.status == 'Active' || a.status == 'Actif')
+                  : (a.status == 'Suspended' || a.status == 'Suspendu'))
+              .toList();
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 40),

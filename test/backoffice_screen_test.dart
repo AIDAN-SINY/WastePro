@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:waste_pro/features/backoffice/backoffice_screen.dart';
 import 'package:waste_pro/features/backoffice/data/backoffice_store.dart';
+import 'package:waste_pro/features/backoffice/widgets/chips.dart';
 import 'package:waste_pro/features/backoffice/widgets/item_card.dart';
 import 'package:waste_pro/features/backoffice/widgets/toast.dart';
 
@@ -198,8 +199,15 @@ void main() {
     await tester.tap(find.byKey(const Key('bo_tab_clients')));
     await tester.pumpAndSettle();
 
-    // Only suspended clients remain after filtering.
-    await tester.tap(find.text('Suspended'));
+    // Only suspended clients remain after filtering. The chip label is
+    // 'Suspended' — the same text as the badges on the cards, so target the
+    // chip row explicitly.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BoChipRow),
+        matching: find.text('Suspended'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Samuel Njoya'), findsOneWidget);

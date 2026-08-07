@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -28,14 +27,6 @@ class UserProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('saved_phone');
     if (phone == null) return;
-
-    // Les règles Firestore exigent une session Firebase Auth : sans token,
-    // la session locale est invalide (ex. token expiré sur le web).
-    if (FirebaseAuth.instance.currentUser == null) {
-      await prefs.remove('saved_phone');
-      return;
-    }
-
     await refreshUser(phone);
   }
 
@@ -44,12 +35,21 @@ class UserProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      var doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(phone)
-          .get();
-      if (doc.exists) {
-        _user = UserModel.fromMap(doc.data()!);
+      // Essaie la clé telle que sauvegardée, puis sa forme canonique
+      // (+237...) : un doc créé à la main dans la console peut avoir une
+      // clé différente du champ phoneNumber (ex. clé '677123456', champ
+      // '+237677123456').
+      _user = null;
+      for (final key in AuthService.canonicalKeys(phone)) {
+        if (key.isEmpty) continue;
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(key)
+            .get();
+        if (doc.exists) {
+          _user = UserModel.fromMap(doc.data()!);
+          break;
+        }
       }
     } catch (e) {
       debugPrint("Error fetching user: $e");
@@ -61,16 +61,8 @@ class UserProvider with ChangeNotifier {
   // 4. Logout and Clear Session
   Future<void> logout() async {
     _user = null;
-    // Notifie AVANT de révoquer le token : le routeur redirige tout de
-    // suite et la console/backoffice se démonte. Si on attendait la fin du
-    // signOut, les listeners Firestore encore actifs échoueraient avec
-    // permission-denied et afficheraient « Accès refusé » à l'écran.
-    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('saved_phone'); // Delete saved session
-    // Déconnecte aussi Firebase Auth (invalide le token côté règles).
-    try {
-      await AuthService().signOut();
-    } catch (_) {}
+    notifyListeners();
   }
 }

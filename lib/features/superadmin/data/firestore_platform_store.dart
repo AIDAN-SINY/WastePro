@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../models/agence_model.dart';
@@ -160,18 +159,17 @@ class FirestorePlatformStore extends PlatformStore {
     notifyListeners();
   }
 
-  /// Vrai quand aucune session Firebase Auth n'est active (déconnecté ou
-  /// token expiré). Protégé pour les tests (app Firebase non initialisée) :
-  /// on considère alors qu'une session existe, pour ne jamais masquer une
-  /// vraie erreur de règles.
+  /// Vrai quand aucune session active n'existe (déconnecté).
+  ///
+  /// La connexion n'utilise plus Firebase Auth (restaurée en mode
+  /// « numéro + mot de passe » Firestore) : il n'y a donc jamais de token
+  /// à révoquer au logout et les erreurs de flux ne doivent pas être
+  /// masquées. Le cas « logout → permission-denied attendu » reste testable
+  /// via [_isSignedOutOverride].
   bool _isSignedOut() {
     final override = _isSignedOutOverride;
     if (override != null) return override();
-    try {
-      return FirebaseAuth.instance.currentUser == null;
-    } catch (_) {
-      return false;
-    }
+    return false;
   }
 
   Future<void> _seedCollection(
@@ -434,7 +432,9 @@ class FirestorePlatformStore extends PlatformStore {
     if (phone.isEmpty || user.password.isEmpty) return;
     final ref = _db.collection('users').doc(phone);
 
-    if (user.status == 'Suspended') {
+    // Accepte aussi le statut hérité français ('Suspendu') : les docs
+    // créés avant le passage à l'anglais gardent leur valeur d'origine.
+    if (user.status == 'Suspended' || user.status == 'Suspendu') {
       final doc = await ref.get();
       if (doc.exists && doc.data()?['consoleCreated'] == true) {
         await ref.delete();

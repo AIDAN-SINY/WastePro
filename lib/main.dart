@@ -88,6 +88,8 @@ class _WasteProAppState extends State<WasteProApp> {
   PlatformStore ensureConsoleStore() {
     final override = widget.consoleStore;
     if (override != null) return override;
+    // Ne réutilise jamais un store disposé : après dispose, on en recrée un
+    // (sinon « A FirestorePlatformStore was used after being disposed »).
     return _consoleStore ??= FirestorePlatformStore();
   }
 
@@ -143,7 +145,13 @@ class _WasteProAppState extends State<WasteProApp> {
   @override
   void dispose() {
     // On ne dispose que le store créé ici (jamais celui injecté par les tests).
-    if (widget.consoleStore == null) _consoleStore?.dispose();
+    if (widget.consoleStore == null) {
+      _consoleStore?.dispose();
+      // Réinitialise la référence : un store disposé ne doit plus jamais
+      // être rendu par ensureConsoleStore() (sinon l'erreur « used after
+      // being disposed » à la prochaine ouverture de la console).
+      _consoleStore = null;
+    }
     super.dispose();
   }
 

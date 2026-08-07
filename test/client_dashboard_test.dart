@@ -49,7 +49,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // La navbar est bien rendue avec ses 4 onglets.
-    expect(find.text('Accueil'), findsOneWidget);
-    expect(find.text('Profil'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
   });
 }

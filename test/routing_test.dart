@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' show Size;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:waste_pro/main.dart';
@@ -19,6 +19,27 @@ class FakeUserProvider extends UserProvider {
 
   @override
   bool get isLoading => fakeIsLoading;
+}
+
+/// Provider whose session can actually be cleared by [logout] — used to test
+/// that the console leaves the `/console/*` route after signing out (even in
+/// debug builds where the session-less console preview is allowed).
+class _MutableUserProvider extends UserProvider {
+  _MutableUserProvider(this._current);
+
+  UserModel? _current;
+
+  @override
+  UserModel? get user => _current;
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  Future<void> logout() async {
+    _current = null;
+    notifyListeners();
+  }
 }
 
 UserModel _user(String role) => UserModel(
@@ -200,6 +221,38 @@ void main() {
       // overview.
       expect(find.text('New company'), findsOneWidget);
       expect(find.text('WastePro Douala Ltd'), findsWidgets);
+    });
+
+    testWidgets('logout depuis la console revient à l écran d accueil', (
+      tester,
+    ) async {
+      // Desktop viewport so the console renders the sidebar with the logout
+      // button (tests run in debug mode: the session-less console preview is
+      // allowed — the exact condition that used to make logout do nothing).
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final provider = _MutableUserProvider(_user('super_admin'));
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: provider,
+          child: WasteProApp(consoleStore: PlatformStore()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The super admin is on the console.
+      expect(find.byType(SuperAdminConsole), findsOneWidget);
+
+      // Click the logout button in the sidebar footer.
+      await tester.tap(find.byIcon(Icons.logout_rounded));
+      await tester.pumpAndSettle();
+
+      // The console unmounts and the welcome screen is shown.
+      expect(find.byType(SuperAdminConsole), findsNothing);
+      expect(find.text('Log In'), findsOneWidget);
     });
   });
 }

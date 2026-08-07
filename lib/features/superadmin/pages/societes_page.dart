@@ -178,9 +178,15 @@ class SocietesPageState extends State<SocietesPage> {
     final store = context.watch<PlatformStore>();
     final statusFilter =
         _filter == 1 ? 'Active' : (_filter == 2 ? 'Suspended' : null);
+    // Match both the English values and the legacy French ones ('Actif' /
+    // 'Suspendu') so records created before the switch stay visible.
     final rows = statusFilter == null
         ? store.societes
-        : store.societes.where((s) => s.status == statusFilter).toList();
+        : store.societes
+              .where((s) => statusFilter == 'Active'
+                  ? (s.status == 'Active' || s.status == 'Actif')
+                  : (s.status == 'Suspended' || s.status == 'Suspendu'))
+              .toList();
 
     return ListView(
       padding: const EdgeInsets.only(bottom: 40),

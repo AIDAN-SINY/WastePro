@@ -58,8 +58,8 @@ class BackofficeStore extends ChangeNotifier {
   final Map<BoEntity, String> _filters = {};
 
   static String _defaultFilter(BoEntity type) => switch (type) {
-    BoEntity.client || BoEntity.collecteur || BoEntity.contrat => 'Tous',
-    BoEntity.collecte || BoEntity.facture || BoEntity.frequence => 'Toutes',
+    BoEntity.client || BoEntity.collecteur || BoEntity.contrat => 'All',
+    BoEntity.collecte || BoEntity.facture || BoEntity.frequence => 'All',
   };
 
   String filterFor(BoEntity type) => _filters[type] ?? _defaultFilter(type);

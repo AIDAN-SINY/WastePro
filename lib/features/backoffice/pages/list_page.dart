@@ -112,6 +112,26 @@ class BoListPage extends StatelessWidget {
     );
   }
 
+  /// Matches a status filter against both the English values and the legacy
+  /// French ones (e.g. 'Active' also matches 'Actif') so records created
+  /// before the switch to English stay visible when filtering.
+  bool _statusMatches(String filter, String status) {
+    if (filter == 'All') return true;
+    const legacy = {
+      'Active': {'Actif'},
+      'Suspended': {'Suspendu'},
+      'Inactive': {'Inactif'},
+      'Completed': {'Effectué'},
+      'Scheduled': {'Prévu'},
+      'Missed': {'Manqué'},
+      'Paid': {'Payée'},
+      'Pending': {'En attente'},
+      'Overdue': {'En retard'},
+      'Expired': {'Expiré'},
+    };
+    return status == filter || (legacy[filter]?.contains(status) ?? false);
+  }
+
   List<Object> _buildList() {
     final q = search.toLowerCase();
     bool match(String value) => q.isEmpty || value.toLowerCase().contains(q);
@@ -120,28 +140,28 @@ class BoListPage extends StatelessWidget {
     switch (type) {
       case BoEntity.client:
         return store.clients
-            .where((c) => (sel == 'All' || c.status == sel) && (match(c.name) || match(c.zone)))
+            .where((c) => _statusMatches(sel, c.status) && (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.collecteur:
         return store.collecteurs
-            .where((c) => (sel == 'All' || c.status == sel) && (match(c.name) || match(c.zone)))
+            .where((c) => _statusMatches(sel, c.status) && (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.contrat:
         return store.contrats
-            .where((c) => (sel == 'All' || c.status == sel) && match(c.client))
+            .where((c) => _statusMatches(sel, c.status) && match(c.client))
             .toList()
             .cast<Object>();
       case BoEntity.collecte:
         final sorted = [...store.collectes]..sort((a, b) => b.date.compareTo(a.date));
         return sorted
-            .where((c) => (sel == 'All' || c.status == sel) && match(c.client))
+            .where((c) => _statusMatches(sel, c.status) && match(c.client))
             .toList()
             .cast<Object>();
       case BoEntity.facture:
         return store.factures
-            .where((f) => (sel == 'All' || f.status == sel) && match(f.client))
+            .where((f) => _statusMatches(sel, f.status) && match(f.client))
             .toList()
             .cast<Object>();
       case BoEntity.frequence:
