@@ -26,9 +26,12 @@ class FirestoreBackofficeStore extends BackofficeStore {
   FirestoreBackofficeStore({
     FirebaseFirestore? db,
     this.seedIfEmpty = true,
+    this.agenceId = '',
+    this.societeId = '',
     @visibleForTesting bool Function()? isSignedOut,
   }) : _isSignedOutOverride = isSignedOut,
        _db = db ?? FirebaseFirestore.instance {
+    _isScoped = agenceId.isNotEmpty;
     // Never flash the design's mock data in the real backoffice.
     clients.clear();
     collecteurs.clear();
@@ -40,6 +43,16 @@ class FirestoreBackofficeStore extends BackofficeStore {
   /// When true, an empty collection is populated with [seedClients] /
   /// [seedCollecteurs] on first load.
   final bool seedIfEmpty;
+
+  /// Id de l'agence du chef connecté (facultatif). Quand non vide, les
+  /// données du backoffice sont filtrées à cette agence.
+  final String agenceId;
+
+  /// Id de l'entreprise (facultatif, porté par le login).
+  final String societeId;
+
+  /// Vrai quand le backoffice est limité à une agence (Phase 3).
+  bool _isScoped = false;
 
   final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>> _subs =
       [];
@@ -68,15 +81,20 @@ class FirestoreBackofficeStore extends BackofficeStore {
     _loadCompleter = Completer<void>();
     notifyListeners();
 
+    // Phase 3 : quand le backoffice est scopé à une agence, les listeners
+    // filtrent sur agenceId — le chef d'agence ne voit que SES données.
+    final clientsQuery = _isScoped
+        ? _db.collection('clients').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('clients');
+    final collecteursQuery = _isScoped
+        ? _db.collection('collecteurs').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('collecteurs');
+
     _subs.add(
-      _db
-          .collection('clients')
-          .snapshots()
-          .listen(_onClients, onError: handleStreamError),
+      clientsQuery.snapshots().listen(_onClients, onError: handleStreamError),
     );
     _subs.add(
-      _db
-          .collection('collecteurs')
+      collecteursQuery
           .snapshots()
           .listen(_onCollecteurs, onError: handleStreamError),
     );
@@ -90,7 +108,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     clients
       ..clear()
       ..addAll(qs.docs.map((d) => ClientModel.fromMap(d.data())));
-    if (seedIfEmpty && qs.docs.isEmpty && !_seededClients) {
+    if (_seedEnabled && qs.docs.isEmpty && !_seededClients) {
       _seededClients = true;
       _seedCollection('clients', seedClients.map((c) => c.toMap()).toList());
     }
@@ -101,7 +119,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     collecteurs
       ..clear()
       ..addAll(qs.docs.map((d) => CollecteurModel.fromMap(d.data())));
-    if (seedIfEmpty && qs.docs.isEmpty && !_seededCollecteurs) {
+    if (_seedEnabled && qs.docs.isEmpty && !_seededCollecteurs) {
       _seededCollecteurs = true;
       _seedCollection(
         'collecteurs',
@@ -190,6 +208,10 @@ class FirestoreBackofficeStore extends BackofficeStore {
     }
   }
 
+  /// Le seed est désactivé quand le backoffice est scopé à une agence
+  /// (les données viennent de l'entreprise, pas du seed).
+  bool get _seedEnabled => seedIfEmpty && !_isScoped;
+
   // --- Clients CRUD ---
 
   @override
@@ -200,7 +222,11 @@ class FirestoreBackofficeStore extends BackofficeStore {
     required String plan,
     required String status,
     String password = '',
+    String agenceId = '',
+    String societeId = '',
   }) async {
+    final finalAgenceId = agenceId.isNotEmpty ? agenceId : this.agenceId;
+    final finalSocieteId = societeId.isNotEmpty ? societeId : this.societeId;
     final model = ClientModel(
       id: nextId(),
       name: name,
@@ -208,6 +234,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       zone: zone,
       plan: plan,
       status: status,
+      agenceId: finalAgenceId,
+      societeId: finalSocieteId,
     );
     await _saveWithLogin(
       collection: 'clients',
@@ -300,7 +328,11 @@ class FirestoreBackofficeStore extends BackofficeStore {
     required double rating,
     required String status,
     String password = '',
+    String agenceId = '',
+    String societeId = '',
   }) async {
+    final finalAgenceId = agenceId.isNotEmpty ? agenceId : this.agenceId;
+    final finalSocieteId = societeId.isNotEmpty ? societeId : this.societeId;
     final model = CollecteurModel(
       id: nextId(),
       name: name,
@@ -308,6 +340,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       zone: zone,
       rating: rating,
       status: status,
+      agenceId: finalAgenceId,
+      societeId: finalSocieteId,
     );
     await _saveWithLogin(
       collection: 'collecteurs',

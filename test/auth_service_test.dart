@@ -16,4 +16,23 @@ void main() {
       expect(AuthService.canonicalPhone('   '), '');
     });
   });
+
+  group('AuthService.canonicalKeys', () {
+    test('ajoute la clé brute sans +237 (docs créés à la main)', () {
+      // Un compte créé à la main peut utiliser la clé brute '653645807'
+      // au lieu de '+237653645807' : le login doit essayer les deux.
+      expect(AuthService.canonicalKeys('653645807'), {
+        '+237653645807',
+        '653645807',
+      });
+      expect(AuthService.canonicalKeys('+237653645807'), {
+        '+237653645807',
+        '653645807',
+      });
+    });
+
+    test('ignore les clés vides', () {
+      expect(AuthService.canonicalKeys(''), {''});
+    });
+  });
 }

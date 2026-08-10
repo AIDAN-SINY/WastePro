@@ -37,6 +37,7 @@ const List<AgenceModel> seedAgences = [
   AgenceModel(
     id: 'ag1',
     societe: 'WastePro Douala Ltd',
+    societeId: 'so1',
     ville: 'Douala — Bonanjo',
     responsable: 'Jean Dooh',
     telephone: '+237 677 12 34 56',
@@ -45,6 +46,7 @@ const List<AgenceModel> seedAgences = [
   AgenceModel(
     id: 'ag2',
     societe: 'WastePro Douala Ltd',
+    societeId: 'so1',
     ville: 'Douala — Bassa',
     responsable: 'Aïcha Bello',
     telephone: '+237 699 33 67 41',
@@ -53,6 +55,7 @@ const List<AgenceModel> seedAgences = [
   AgenceModel(
     id: 'ag3',
     societe: 'WastePro Yaoundé SA',
+    societeId: 'so2',
     ville: 'Yaoundé',
     responsable: 'Marie Ekwalla',
     telephone: '+237 690 45 12 78',
@@ -61,6 +64,7 @@ const List<AgenceModel> seedAgences = [
   AgenceModel(
     id: 'ag4',
     societe: 'EcoCollecte Kribi',
+    societeId: 'so3',
     ville: 'Kribi',
     responsable: 'Samuel Njoya',
     telephone: '+237 655 88 21 09',
@@ -75,6 +79,8 @@ const List<PlatformUserModel> seedUtilisateurs = [
     telephone: '+237 677 12 34 56',
     role: 'Agency Manager',
     agence: 'Douala — Bonanjo',
+    societeId: 'so1',
+    agenceId: 'ag1',
     status: 'Active',
   ),
   PlatformUserModel(
@@ -83,6 +89,8 @@ const List<PlatformUserModel> seedUtilisateurs = [
     telephone: '+237 699 33 67 41',
     role: 'Agency Manager',
     agence: 'Douala — Bassa',
+    societeId: 'so1',
+    agenceId: 'ag2',
     status: 'Active',
   ),
   PlatformUserModel(
@@ -91,6 +99,8 @@ const List<PlatformUserModel> seedUtilisateurs = [
     telephone: '+237 690 45 12 78',
     role: 'Agency Manager',
     agence: 'Yaoundé',
+    societeId: 'so2',
+    agenceId: 'ag3',
     status: 'Active',
   ),
   PlatformUserModel(
@@ -99,6 +109,7 @@ const List<PlatformUserModel> seedUtilisateurs = [
     telephone: '+237 6XX XXX XXX',
     role: 'General Administrator',
     agence: '—',
+    societeId: 'so1',
     status: 'Active',
   ),
 ];

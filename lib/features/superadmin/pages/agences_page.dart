@@ -31,6 +31,15 @@ class AgencesPageState extends State<AgencesPage> {
   List<String> get _societeOptions =>
       context.read<PlatformStore>().societes.map((s) => s.raisonSociale).toList();
 
+  /// Id de la société correspondant à un nom (raisonSociale), ou '' si
+  /// introuvable — pour lier l'agence à sa société (Phase 2).
+  String _societeIdFor(String nom) {
+    for (final s in context.read<PlatformStore>().societes) {
+      if (s.raisonSociale == nom) return s.id;
+    }
+    return '';
+  }
+
   /// Opens the "New agency" drawer (used by the command palette).
   void openCreate() {
     final options = _societeOptions;
@@ -53,8 +62,10 @@ class AgencesPageState extends State<AgencesPage> {
       onSave: () async {
         try {
           final ville = requireField(_form, 'ville', 'City');
+          final societe = _form['societe']?.toString() ?? '';
           await context.read<PlatformStore>().addAgence(
-                societe: _form['societe']?.toString() ?? '',
+                societe: societe,
+                societeId: _societeIdFor(societe),
                 ville: ville,
                 responsable: _form['responsable']?.toString().trim() ?? '',
                 telephone: _form['telephone']?.toString().trim() ?? '',
@@ -80,9 +91,12 @@ class AgencesPageState extends State<AgencesPage> {
       onSave: () async {
         try {
           final ville = requireField(_form, 'ville', 'City');
+          final societe = _form['societe']?.toString();
           await context.read<PlatformStore>().updateAgence(
                 agence.copyWith(
-                  societe: _form['societe']?.toString(),
+                  societe: societe,
+                  societeId:
+                      societe == null ? null : _societeIdFor(societe),
                   ville: ville,
                   responsable: _form['responsable']?.toString().trim(),
                   telephone: _form['telephone']?.toString().trim(),

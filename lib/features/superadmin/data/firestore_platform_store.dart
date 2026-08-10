@@ -279,6 +279,7 @@ class FirestorePlatformStore extends PlatformStore {
   @override
   Future<void> addAgence({
     required String societe,
+    String societeId = '',
     required String ville,
     required String responsable,
     required String telephone,
@@ -287,6 +288,7 @@ class FirestorePlatformStore extends PlatformStore {
     final model = AgenceModel(
       id: nextId(),
       societe: societe,
+      societeId: societeId,
       ville: ville,
       responsable: responsable,
       telephone: telephone,
@@ -338,6 +340,8 @@ class FirestorePlatformStore extends PlatformStore {
     required String telephone,
     required String role,
     required String agence,
+    String societeId = '',
+    String agenceId = '',
     required String status,
     required String password,
   }) async {
@@ -347,14 +351,23 @@ class FirestorePlatformStore extends PlatformStore {
       telephone: telephone,
       role: role,
       agence: agence,
+      societeId: societeId,
+      agenceId: agenceId,
       status: status,
       password: password,
     );
+    // Validé AVANT l'écriture : jamais d'utilisateur « fantôme » qui
+    // apparaîtrait dans la liste sans compte de connexion.
+    _requireLoginPhone(model);
+    await _preflightLogin(model);
     try {
-      await _db.collection('utilisateurs').doc(model.id).set(model.toMap());
-      // Compte de connexion réel : l'utilisateur se connecte avec son
-      // numéro + le mot de passe fixé par le super admin.
-      await _syncLogin(model);
+      // Un seul batch atomique : soit l'utilisateur ET son compte de
+      // connexion sont écrits, soit rien (jamais un utilisateur dans
+      // `utilisateurs` sans compte dans `users`).
+      final batch = _db.batch();
+      batch.set(_db.collection('utilisateurs').doc(model.id), model.toMap());
+      await _stageLoginSync(batch, model);
+      await batch.commit();
     } catch (error) {
       if (error is! FirebaseException) rethrow;
       throw _friendlyError(error);
@@ -371,9 +384,30 @@ class FirestorePlatformStore extends PlatformStore {
 
   @override
   Future<void> updateUtilisateur(PlatformUserModel updated) async {
+    _requireLoginPhone(updated);
     try {
-      await _db.collection('utilisateurs').doc(updated.id).set(updated.toMap());
-      await _syncLogin(updated);
+      // Ancien numéro : si l'édition change le téléphone, l'ancien compte de
+      // connexion users/{oldPhone} doit être supprimé (sinon l'ancien numéro
+      // continuerait de se connecter). Lu depuis Firestore — pas depuis la
+      // liste en mémoire — pour être exact même si le doc a été modifié hors
+      // console.
+      final existingDoc =
+          await _db.collection('utilisateurs').doc(updated.id).get();
+      final oldPhone = existingDoc.exists
+          ? _canonicalPhone(
+              PlatformUserModel.fromMap(existingDoc.data()!).telephone,
+            )
+          : '';
+      await _preflightLogin(updated);
+      // Batch atomique : utilisateur + synchro du compte de connexion +
+      // suppression de l'ancien compte en cas de changement de numéro.
+      final batch = _db.batch();
+      batch.set(
+        _db.collection('utilisateurs').doc(updated.id),
+        updated.toMap(),
+      );
+      await _stageLoginSync(batch, updated, oldPhone: oldPhone);
+      await batch.commit();
     } catch (error) {
       if (error is! FirebaseException) rethrow;
       throw _friendlyError(error);
@@ -401,16 +435,18 @@ class FirestorePlatformStore extends PlatformStore {
       }
     }
     try {
-      await _db.collection('utilisateurs').doc(id).delete();
+      final batch = _db.batch();
+      batch.delete(_db.collection('utilisateurs').doc(id));
       // Ne supprime le compte de connexion que s'il a été créé par la
       // console (marqueur consoleCreated) — jamais un compte client réel.
       final phone = _canonicalPhone(existing.telephone);
       if (phone.isNotEmpty) {
         final loginDoc = await _db.collection('users').doc(phone).get();
         if (loginDoc.exists && loginDoc.data()?['consoleCreated'] == true) {
-          await loginDoc.reference.delete();
+          batch.delete(loginDoc.reference);
         }
       }
+      await batch.commit();
     } catch (error) {
       if (error is! FirebaseException) rethrow;
       throw _friendlyError(error);
@@ -427,9 +463,68 @@ class FirestorePlatformStore extends PlatformStore {
   ///   login possible) tant que l'utilisateur n'est pas réactivé.
   /// - Un numéro déjà utilisé par un compte client/collecteur réel n'est
   ///   jamais écrasé : une erreur est levée à la place.
-  Future<void> _syncLogin(PlatformUserModel user) async {
+  /// Garde : un utilisateur avec un mot de passe DOIT avoir un numéro,
+  /// sinon le compte de connexion users/{phone} ne peut pas exister et il ne
+  /// pourrait jamais se connecter (symptôme : « le bouton charge puis
+  /// s'arrête » au login). Levée avant toute écriture ET en défense dans
+  /// [_syncLogin].
+  void _requireLoginPhone(PlatformUserModel user) {
+    if (user.password.isNotEmpty && _canonicalPhone(user.telephone).isEmpty) {
+      throw _SyncError(
+        'A phone number is required to create the login account. Add a '
+        'number to this user.',
+      );
+    }
+  }
+
+  /// Vérifie AVANT toute écriture que le numéro peut recevoir un compte de
+  /// connexion console : ni compte client/collecteur réel, ni numéro déjà
+  /// utilisé par un autre utilisateur console. Évite de créer un doc
+  /// « fantôme » dans `utilisateurs` sans compte de connexion.
+  Future<void> _preflightLogin(PlatformUserModel user) async {
+    if (user.password.isEmpty) return;
     final phone = _canonicalPhone(user.telephone);
-    if (phone.isEmpty || user.password.isEmpty) return;
+    if (phone.isEmpty) return;
+    // Suspendu → pas de compte à créer (juste à supprimer) : rien à vérifier.
+    if (user.status == 'Suspended' || user.status == 'Suspendu') return;
+    await _assertLoginPhoneAvailable(
+      _db.collection('users').doc(phone),
+      user,
+    );
+  }
+
+  /// Ajoute au batch [batch] la synchronisation du compte de connexion
+  /// `users/{téléphone}` pour [user] (création, mise à jour, suspension ou
+  /// suppression). Appelé entre deux écritures du même batch pour garder
+  /// l'ensemble atomique : soit l'utilisateur console ET son compte de
+  /// connexion existent, soit rien.
+  ///
+  /// - [oldPhone] : ancien numéro avant édition — son compte de connexion
+  ///   est supprimé s'il a été créé par la console (migration de numéro).
+  Future<void> _stageLoginSync(
+    WriteBatch batch,
+    PlatformUserModel user, {
+    String oldPhone = '',
+  }) async {
+    // Défense en profondeur : jamais de compte manquant.
+    _requireLoginPhone(user);
+    final phone = _canonicalPhone(user.telephone);
+
+    // Téléphone changé à l'édition → supprime l'ancien compte de connexion
+    // (s'il a été créé par la console) pour ne pas laisser l'ancien numéro
+    // continuer de se connecter. Placé AVANT le return « sans mot de
+    // passe » : un utilisateur qui perd son mot de passe ne doit pas non
+    // plus garder un ancien compte actif.
+    final oldCanonical = _canonicalPhone(oldPhone);
+    if (oldCanonical.isNotEmpty && oldCanonical != phone) {
+      final oldDoc = await _db.collection('users').doc(oldCanonical).get();
+      if (oldDoc.exists && oldDoc.data()?['consoleCreated'] == true) {
+        batch.delete(_db.collection('users').doc(oldCanonical));
+      }
+    }
+
+    // Sans mot de passe, aucun compte de connexion (ex. utilisateurs seedés).
+    if (user.password.isEmpty) return;
     final ref = _db.collection('users').doc(phone);
 
     // Accepte aussi le statut hérité français ('Suspendu') : les docs
@@ -437,29 +532,69 @@ class FirestorePlatformStore extends PlatformStore {
     if (user.status == 'Suspended' || user.status == 'Suspendu') {
       final doc = await ref.get();
       if (doc.exists && doc.data()?['consoleCreated'] == true) {
-        await ref.delete();
+        batch.delete(ref);
       }
-      return;
+    } else {
+      await _assertLoginPhoneAvailable(ref, user);
+      batch.set(ref, {
+        'phoneNumber': phone,
+        'fullName': user.nom,
+        // Rôle de connexion dérivé du rôle console : le General
+        // Administrator accède à la console de son entreprise, l'Agency
+        // Manager au backoffice de son agence (garde aussi les valeurs
+        // héritées françaises).
+        'role': _loginRoleFor(user.role),
+        'password': user.password,
+        'societeId': user.societeId,
+        'agenceId': user.agenceId,
+        'isSubscribed': false,
+        // Marqueur : ce compte a été créé/géré par la console super admin.
+        'consoleCreated': true,
+        // Propriétaire : empêche un autre utilisateur console d'écraser le
+        // compte de connexion en réutilisant le même numéro.
+        'consoleUserId': user.id,
+      });
     }
+  }
 
+  /// Rôle de connexion (`users`) correspondant à un rôle console
+  /// (`utilisateurs`). Historiquement tous les comptes console recevaient
+  /// `'admin'` ; depuis Phase 1 ils reçoivent leur vrai rôle pour que le
+  /// routeur dirige chacun vers son écran (console entreprise vs backoffice).
+  static String _loginRoleFor(String consoleRole) {
+    final role = consoleRole.trim().toLowerCase();
+    if (role == 'general administrator' ||
+        role == 'administrateur général') {
+      return 'general_admin';
+    }
+    // 'Agency Manager' / "Responsable d'Agence" (et tout rôle inconnu).
+    return 'agency_manager';
+  }
+
+  /// Refuse d'écraser : (1) un compte client/collecteur réel (pas de
+  /// marqueur console), (2) le compte de connexion d'un AUTRE utilisateur
+  /// console (même numéro saisi deux fois). Réécrire le sien est permis
+  /// (édition du même utilisateur, y compris docs hérités sans propriétaire).
+  Future<void> _assertLoginPhoneAvailable(
+    DocumentReference<Map<String, dynamic>> ref,
+    PlatformUserModel user,
+  ) async {
     final existing = await ref.get();
-    if (existing.exists && existing.data()?['consoleCreated'] != true) {
+    if (!existing.exists) return;
+    final data = existing.data()!;
+    if (data['consoleCreated'] != true) {
       throw _SyncError(
         'A client account already exists with this number. Choose a '
         'different number.',
       );
     }
-    await ref.set({
-      'phoneNumber': phone,
-      'fullName': user.nom,
-      // Les deux rôles console pointent vers le dashboard admin existant ;
-      // un dashboard dédié « Responsable d'Agence » pourra être ajouté.
-      'role': 'admin',
-      'password': user.password,
-      'isSubscribed': false,
-      // Marqueur : ce compte a été créé/géré par la console super admin.
-      'consoleCreated': true,
-    });
+    final owner = data['consoleUserId'];
+    if (owner != null && owner != user.id) {
+      throw _SyncError(
+        'Another console user already uses this number for login. Choose a '
+        'different number.',
+      );
+    }
   }
 
   /// Normalise un numéro de téléphone : sans espaces ni tirets, préfixe +237

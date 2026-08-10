@@ -10,14 +10,35 @@ rules_version = '2';
 // On revient donc aux règles ouvertes pour que la connexion par
 // numéro + mot de passe fonctionne de bout en bout, y compris la
 // console super admin et le backoffice.
-// → À durcir à nouveau dès qu'une vraie session sécurisée sera intégrée
-//   (la version durcie est conservée dans l'historique git, commit 8ecd422).
+//
+// 🏗️ STRUCTURE MULTI-TENANT (Phases 2-3) :
+//   - `societes`   : entreprises (doc id = societeId)
+//   - `agences`    : agences, liées à leur entreprise via `societeId`
+//   - `utilisateurs` : comptes console (General Administrator /
+//     Agency Manager), scopés par `societeId` (+ `agenceId`)
+//   - `users`      : comptes de connexion (clé = numéro +237…), portent
+//     `societeId` / `agenceId` et le rôle de connexion
+//     (super_admin | general_admin | agency_manager | client | collector)
+//   - `clients`, `collecteurs` : données d'exploitation scopées par
+//     `agenceId` (Phase 3)
+//
+// 🔒 PLAN DE DURCISSEMENT (à déployer DÈS qu'une vraie session sécurisée
+// sera intégrée — Firebase Auth + hachage des mots de passe) :
+//   1. `users` : read limité au doc du requérant, write via Cloud Functions
+//      ou après vérification du mot de passe actuel.
+//   2. `societes` / `agences` / `utilisateurs` : réservés au super admin
+//      et aux General Administrator de l'entreprise concernée
+//      (`request.resource.data.societeId == request.auth.token.societeId`).
+//   3. `clients` / `collecteurs` : réservés au chef d'agence concerné
+//      (`request.resource.data.agenceId == request.auth.token.agenceId`).
+// La version durcie du commit 8ecd422 reste disponible dans l'historique
+// git comme point de départ.
 // ============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Comptes & profils ---
+    // --- Comptes & profils (login numéro + mot de passe) ---
     match /users/{phone} {
       allow read, write: if true;
     }
@@ -49,7 +70,7 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // --- Console super admin ---
+    // --- Console super admin & console entreprise ---
     match /societes/{id} {
       allow read, write: if true;
     }

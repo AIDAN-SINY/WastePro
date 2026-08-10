@@ -109,6 +109,8 @@ class BackofficeStore extends ChangeNotifier {
     required String plan,
     required String status,
     String password = '',
+    String agenceId = '',
+    String societeId = '',
   }) async {
     clients.add(
       ClientModel(
@@ -118,6 +120,8 @@ class BackofficeStore extends ChangeNotifier {
         zone: zone,
         plan: plan,
         status: status,
+        agenceId: agenceId,
+        societeId: societeId,
       ),
     );
     notifyListeners();
@@ -145,6 +149,8 @@ class BackofficeStore extends ChangeNotifier {
     required double rating,
     required String status,
     String password = '',
+    String agenceId = '',
+    String societeId = '',
   }) async {
     collecteurs.add(
       CollecteurModel(
@@ -154,6 +160,8 @@ class BackofficeStore extends ChangeNotifier {
         zone: zone,
         rating: rating,
         status: status,
+        agenceId: agenceId,
+        societeId: societeId,
       ),
     );
     notifyListeners();

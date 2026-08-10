@@ -33,11 +33,17 @@ const Set<String> _searchablePages = {
 /// Firestore-backed store (real data + login accounts for clients and
 /// collecteurs), the mock store is used by tests.
 class BackofficeScreen extends StatefulWidget {
-  const BackofficeScreen({super.key, this.store});
+  const BackofficeScreen({super.key, this.store, this.agenceId = '', this.societeId = ''});
 
   /// Injectable store (used by tests); a Firestore-backed store is created
   /// otherwise.
   final BackofficeStore? store;
+
+  /// Id de l'agence du chef connecté (Phase 3 : scoping).
+  final String agenceId;
+
+  /// Id de l'entreprise (facultatif).
+  final String societeId;
 
   @override
   State<BackofficeScreen> createState() => _BackofficeScreenState();
@@ -72,7 +78,10 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     // The Firestore store starts loading in its constructor; load() also
     // re-arms the listeners here (same pattern as the super admin console).
     _ownsStore = widget.store == null;
-    _store = widget.store ?? FirestoreBackofficeStore();
+    _store = widget.store ?? FirestoreBackofficeStore(
+      agenceId: widget.agenceId,
+      societeId: widget.societeId,
+    );
     _store.load();
   }
 

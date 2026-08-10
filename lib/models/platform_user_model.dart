@@ -1,19 +1,21 @@
-/// A platform back-office user managed by the super admin.
+/// A platform back-office user managed by the super admin (or by the
+/// General Administrator in the company console).
 ///
 /// These are the "Users" entity from the super admin console design:
 /// accounts with a platform role ('General Administrator' | 'Agency Manager')
-/// attached to an agency. This is distinct from the end-user accounts
-/// (clients/collectors) stored in `users`.
+/// attached to a company and optionally an agency.
 ///
-/// [password] is the login password set by the super admin at creation (no
-/// email flow yet): when non-empty, the Firestore store mirrors the account
-/// into the `users` collection so the user can log in with phone + password.
+/// [password] is the login password set at creation: when non-empty, the
+/// Firestore store mirrors the account into the `users` collection so the
+/// user can log in with phone + password.
 class PlatformUserModel {
   final String id;
   final String nom;
   final String telephone;
   final String role; // 'General Administrator' | 'Agency Manager' (legacy: FR)
   final String agence;
+  final String societeId; // foreign key to the parent company
+  final String agenceId; // foreign key to the agency ('' for GAs)
   final String status; // 'Active' | 'Suspended' (legacy: 'Actif'/'Suspendu')
   final String password; // '' = no login account
 
@@ -23,6 +25,8 @@ class PlatformUserModel {
     required this.telephone,
     required this.role,
     required this.agence,
+    this.societeId = '',
+    this.agenceId = '',
     required this.status,
     this.password = '',
   });
@@ -32,6 +36,8 @@ class PlatformUserModel {
     String? telephone,
     String? role,
     String? agence,
+    String? societeId,
+    String? agenceId,
     String? status,
     String? password,
   }) {
@@ -41,6 +47,8 @@ class PlatformUserModel {
       telephone: telephone ?? this.telephone,
       role: role ?? this.role,
       agence: agence ?? this.agence,
+      societeId: societeId ?? this.societeId,
+      agenceId: agenceId ?? this.agenceId,
       status: status ?? this.status,
       password: password ?? this.password,
     );
@@ -53,6 +61,8 @@ class PlatformUserModel {
       'telephone': telephone,
       'role': role,
       'agence': agence,
+      'societeId': societeId,
+      'agenceId': agenceId,
       'status': status,
       'password': password,
     };
@@ -65,6 +75,8 @@ class PlatformUserModel {
       telephone: map['telephone'] as String? ?? '',
       role: map['role'] as String? ?? 'Agency Manager',
       agence: map['agence'] as String? ?? '—',
+      societeId: map['societeId'] as String? ?? '',
+      agenceId: map['agenceId'] as String? ?? '',
       status: map['status'] as String? ?? 'Active',
       password: map['password'] as String? ?? '',
     );

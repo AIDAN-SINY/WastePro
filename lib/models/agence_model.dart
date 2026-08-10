@@ -4,6 +4,7 @@
 class AgenceModel {
   final String id;
   final String societe; // raisonSociale of the parent company
+  final String societeId; // foreign key to the parent company
   final String ville;
   final String responsable;
   final String telephone;
@@ -12,6 +13,7 @@ class AgenceModel {
   const AgenceModel({
     required this.id,
     required this.societe,
+    this.societeId = '',
     required this.ville,
     required this.responsable,
     required this.telephone,
@@ -20,6 +22,7 @@ class AgenceModel {
 
   AgenceModel copyWith({
     String? societe,
+    String? societeId,
     String? ville,
     String? responsable,
     String? telephone,
@@ -28,6 +31,7 @@ class AgenceModel {
     return AgenceModel(
       id: id,
       societe: societe ?? this.societe,
+      societeId: societeId ?? this.societeId,
       ville: ville ?? this.ville,
       responsable: responsable ?? this.responsable,
       telephone: telephone ?? this.telephone,
@@ -39,6 +43,7 @@ class AgenceModel {
     return {
       'id': id,
       'societe': societe,
+      'societeId': societeId,
       'ville': ville,
       'responsable': responsable,
       'telephone': telephone,
@@ -50,6 +55,7 @@ class AgenceModel {
     return AgenceModel(
       id: map['id'] as String? ?? '',
       societe: map['societe'] as String? ?? '',
+      societeId: map['societeId'] as String? ?? '',
       ville: map['ville'] as String? ?? '',
       responsable: map['responsable'] as String? ?? '',
       telephone: map['telephone'] as String? ?? '',

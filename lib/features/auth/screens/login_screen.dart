@@ -379,22 +379,13 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      // Add +237 prefix if not present; strip spaces/dashes so the lookup
-      // matches the canonical phone stored when the super admin created the
-      // account (e.g. '+237 677 12 34 56' ⇄ '+237677123456').
-      String phoneNumber = _phoneController.text.trim().replaceAll(
-        RegExp(r'[\s-]'),
-        '',
-      );
-      if (!phoneNumber.startsWith('+')) {
-        // Gère aussi le « 237... » saisi sans le +.
-        phoneNumber = phoneNumber.startsWith('237')
-            ? '+$phoneNumber'
-            : '+237$phoneNumber';
-      }
-
+      // La normalisation du numéro (+237, espaces, tirets) est gérée par
+      // AuthService.login via canonicalKeys : on lui passe la saisie brute
+      // pour qu'il essaie aussi la clé telle que stockée — un compte créé
+      // à la main dans la console Firebase peut utiliser le numéro sans
+      // préfixe +237 (ex. '653645807' au lieu de '+237653645807').
       final user = await AuthService().login(
-        phoneNumber,
+        _phoneController.text.trim(),
         _passwordController.text,
       );
 

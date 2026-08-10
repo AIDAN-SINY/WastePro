@@ -25,12 +25,21 @@ class AuthService {
     return '+237$cleaned';
   }
 
-  /// Clés de doc `users` à essayer pour un numéro : la forme canonique
-  /// (+237…) puis le numéro tel que saisi. Un doc créé à la main dans la
-  /// console peut utiliser un autre format de clé — le premier doc trouvé
-  /// fait foi.
-  static Set<String> canonicalKeys(String raw) =>
-      {canonicalPhone(raw), raw.trim()};
+  /// Clés de doc `users` à essayer pour un numéro :
+  ///   1. la forme canonique (+237…) ;
+  ///   2. le numéro tel que saisi ;
+  ///   3. le numéro sans le préfixe +237 (un compte créé à la main dans la
+  ///      console Firebase peut utiliser la clé brute, ex. `'653645807'` au
+  ///      lieu de `'+237653645807'`).
+  /// Le premier doc trouvé fait foi.
+  static Set<String> canonicalKeys(String raw) {
+    final canonical = canonicalPhone(raw);
+    final trimmed = raw.trim();
+    final bare = canonical.startsWith('+237')
+        ? canonical.substring(4)
+        : trimmed;
+    return {canonical, trimmed, bare};
+  }
 
   Future<T> _runWithRetry<T>(
     Future<T> Function() action, {
@@ -100,8 +109,21 @@ class AuthService {
     });
   }
 
+  /// Rôles réservés aux comptes console (protégés contre l'écrasement par
+  /// l'inscription publique).
+  static const _consoleRoles = {
+    'admin',
+    'super_admin',
+    'general_admin',
+    'agency_manager',
+  };
+
   /// Crée le profil `users/{téléphone}` (le mot de passe est stocké en clair,
   /// comme avant la migration Firebase Auth).
+  ///
+  /// Protège les comptes console : si le numéro est déjà utilisé par un
+  /// General Administrator, Agency Manager, Super Admin, ou un compte créé
+  /// par la console, l'inscription est refusée.
   Future<void> register(UserModel user) async {
     final phone = canonicalPhone(user.phoneNumber);
     if (phone.isEmpty) {
@@ -109,6 +131,18 @@ class AuthService {
     }
 
     await _runWithRetry(() async {
+      // Vérifie que le numéro n'appartient pas à un compte console.
+      final existing = await _db.collection('users').doc(phone).get();
+      if (existing.exists) {
+        final data = existing.data()!;
+        final role = (data['role'] as String?)?.trim().toLowerCase() ?? '';
+        if (_consoleRoles.contains(role) ||
+            data['consoleCreated'] == true) {
+          throw 'This number is already registered as a platform account. '
+              'Please use a different number.';
+        }
+      }
+
       await _db.collection('users').doc(phone).set({
         ...user.toMap(),
         'phoneNumber': phone,
@@ -124,21 +158,25 @@ class AuthService {
   /// - Sinon, une erreur est levée (mot de passe incorrect).
   Future<UserModel?> login(String phone, String password) async {
     return _runWithRetry<UserModel?>(() async {
-      // Essaie la forme canonique (+237...), puis le numéro tel que saisi
-      // (un doc créé à la main dans la console peut utiliser un autre
-      // format). Le premier doc trouvé fait foi.
+      // Essaie toutes les clés candidates (canonique +237…, saisie brute,
+      // et numéro sans +237 pour les docs créés à la main). Un doc trouvé
+      // avec un mauvais mot de passe n'interrompt pas la recherche : une
+      // autre clé peut porter le bon compte (ex. clé brute legacy).
+      var found = false;
       for (final key in canonicalKeys(phone)) {
         if (key.isEmpty) continue;
         final doc = await _db.collection('users').doc(key).get();
         if (!doc.exists) continue;
-
+        found = true;
         final user = UserModel.fromMap(doc.data()!);
         if (user.password == password) {
           return user;
         }
-        throw 'Incorrect Password';
       }
 
+      // Un compte existe pour ce numéro mais le mot de passe ne correspond
+      // à aucune de ses clés.
+      if (found) throw 'Incorrect Password';
       return null;
     });
   }

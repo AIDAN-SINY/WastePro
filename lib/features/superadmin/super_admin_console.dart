@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../routing.dart';
 import 'command_palette.dart';
+import 'data/firestore_platform_store.dart';
 import 'data/platform_store.dart';
 import 'pages/agences_page.dart';
 import 'pages/overview_page.dart';
@@ -119,6 +120,10 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     _ownsStore = widget.store == null;
     _store = widget.store ?? PlatformStore();
   }
+
+  /// Vrai quand la console tourne sur le store mock en mémoire (aperçu
+  /// démo / tests) : les créations ne sont PAS enregistrées dans Firestore.
+  bool get _isDemo => _store is! FirestorePlatformStore;
 
   @override
   void didUpdateWidget(SuperAdminConsole oldWidget) {
@@ -368,6 +373,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
             return const SizedBox.shrink();
           },
         ),
+        if (_isDemo) const _DemoBanner(),
         Expanded(
           child: Padding(
             // Marge horizontale constante du contenu : aligne toutes les
@@ -951,6 +957,40 @@ class _ErrorBanner extends StatelessWidget {
               ),
             ),
             child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bandeau affiché quand la console tourne en aperçu démo (store mock en
+/// mémoire, pas de session super admin) : les créations ne sont pas
+/// enregistrées dans Firestore. Évite le piège « je crée des utilisateurs
+/// mais personne ne peut se connecter ».
+class _DemoBanner extends StatelessWidget {
+  const _DemoBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: SuperAdminTheme.gold.withValues(alpha: 0.14),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.science_outlined,
+            size: 15,
+            color: SuperAdminTheme.gold,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Demo preview — changes are not saved. Log in as a super '
+              'admin to manage real data.',
+              style: SuperAdminTheme.inter(12, color: SuperAdminTheme.ink),
+            ),
           ),
         ],
       ),

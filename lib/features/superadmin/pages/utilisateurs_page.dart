@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/platform_user_model.dart';
+import '../data/firestore_platform_store.dart';
 import '../data/platform_store.dart';
 import '../widgets/app_table.dart';
 import '../widgets/app_toast.dart';
@@ -42,6 +43,40 @@ class UtilisateursPageState extends State<UtilisateursPage> {
     return ['—', ...agences];
   }
 
+  List<String> get _societeOptions {
+    final societes = context
+        .read<PlatformStore>()
+        .societes
+        .map((s) => s.raisonSociale)
+        .toList();
+    return ['—', ...societes];
+  }
+
+  /// Résout [societeId] et [agenceId] à partir des sélections du
+  /// formulaire (Phase 2). Un Agency Manager avec une agence non vide
+  /// hérite de la societeId de son agence ; un General Administrator
+  /// choisit une société directement.
+  ({String societeId, String agenceId}) _resolveIds() {
+    final store = context.read<PlatformStore>();
+    final agenceVille = _form['agence']?.toString() ?? '—';
+    if (agenceVille != '—') {
+      for (final a in store.agences) {
+        if (a.ville == agenceVille) {
+          return (societeId: a.societeId, agenceId: a.id);
+        }
+      }
+    }
+    final societeNom = _form['societe']?.toString() ?? '—';
+    if (societeNom != '—') {
+      for (final s in store.societes) {
+        if (s.raisonSociale == societeNom) {
+          return (societeId: s.id, agenceId: '');
+        }
+      }
+    }
+    return (societeId: '', agenceId: '');
+  }
+
   /// Opens the "New user" drawer (used by the command palette).
   void openCreate() {
     _form
@@ -56,14 +91,20 @@ class UtilisateursPageState extends State<UtilisateursPage> {
       onSave: () async {
         try {
           final nom = requireField(_form, 'nom', 'Full name');
+          // Phone is the login identifier: without it no login account
+          // (users/{phone}) can be created and the user could never sign in.
+          final telephone = requireField(_form, 'telephone', 'Phone');
           // The super admin sets the initial password (no email yet): the
           // user will use it to log in.
           final password = requireField(_form, 'password', 'Password');
+          final ids = _resolveIds();
           await context.read<PlatformStore>().addUtilisateur(
                 nom: nom,
-                telephone: _form['telephone']?.toString().trim() ?? '',
+                telephone: telephone,
                 role: _form['role']?.toString() ?? _roleOptions[0],
                 agence: _form['agence']?.toString() ?? '—',
+                societeId: ids.societeId,
+                agenceId: ids.agenceId,
                 status: _form['status']?.toString() ?? 'Active',
                 password: password,
               );
@@ -93,14 +134,20 @@ class UtilisateursPageState extends State<UtilisateursPage> {
       onSave: () async {
         try {
           final nom = requireField(_form, 'nom', 'Full name');
+          // Phone is the login identifier: it must stay set so the login
+          // account (users/{phone}) keeps existing.
+          final telephone = requireField(_form, 'telephone', 'Phone');
           // Empty field when editing = keep the current password.
           final password = _form['password']?.toString().trim() ?? '';
+          final ids = _resolveIds();
           await context.read<PlatformStore>().updateUtilisateur(
                 user.copyWith(
                   nom: nom,
-                  telephone: _form['telephone']?.toString().trim(),
+                  telephone: telephone,
                   role: _form['role']?.toString(),
                   agence: _form['agence']?.toString(),
+                  societeId: ids.societeId.isEmpty ? null : ids.societeId,
+                  agenceId: ids.agenceId.isEmpty ? null : ids.agenceId,
                   status: _form['status']?.toString(),
                   password: password.isEmpty ? user.password : password,
                 ),
@@ -172,6 +219,13 @@ class UtilisateursPageState extends State<UtilisateursPage> {
           ],
         ),
         const SizedBox(height: 16),
+        SaSelectField(
+          label: 'Linked company',
+          options: _societeOptions,
+          initial: _form['societe']?.toString(),
+          onChanged: (v) => _form['societe'] = v,
+        ),
+        const SizedBox(height: 16),
         SaTextField(
           label: 'Password',
           initial: _form['password']?.toString(),
@@ -219,7 +273,13 @@ class UtilisateursPageState extends State<UtilisateursPage> {
           action: PrimaryButton(
             label: 'New user',
             icon: Icons.add_rounded,
-            onTap: openCreate,
+            onTap: store is! FirestorePlatformStore
+                ? () => ToastService.show(
+                      'Demo preview — log in as a super admin to create '
+                      'real users.',
+                      isError: true,
+                    )
+                : openCreate,
           ),
         ),
         const SizedBox(height: 16),

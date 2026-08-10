@@ -90,6 +90,59 @@ void main() {
     });
   });
 
+  group('comptes legacy créés à la main avec une clé brute', () {
+    test('se connecte via un doc users/{numéro sans +237}', () async {
+      final db = FakeFirebaseFirestore();
+      // Compte super admin créé à la main dans la console Firebase avec
+      // une clé NON canonique ('653645807' au lieu de '+237653645807').
+      // Le login doit quand même le retrouver (clé brute ajoutée aux clés
+      // candidates par canonicalKeys).
+      await db.collection('users').doc('653645807').set({
+        'phoneNumber': '653645807',
+        'fullName': 'Adams',
+        'role': 'super_admin',
+        'password': 'motdepasse',
+      });
+
+      final auth = AuthService(db: db);
+      final user = await auth.login('653645807', 'motdepasse');
+
+      expect(user, isNotNull);
+      expect(user!.role, 'super_admin');
+      expect(user.fullName, 'Adams');
+    });
+
+    test('privilégie le doc canonique quand il existe aussi', () async {
+      final db = FakeFirebaseFirestore();
+      // Doublon legacy (clé brute, mdp vide) + compte canonique correct :
+      // le login doit aboutir via la clé canonique et non échouer sur le
+      // doublon (le mot de passe vide ne matche pas la saisie).
+      await db.collection('users').doc('696713899').set({
+        'phoneNumber': '696713899',
+        'fullName': 'Nadia (legacy)',
+        'role': 'admin',
+        'password': '',
+      });
+      await db.collection('users').doc('+237696713899').set({
+        'phoneNumber': '+237696713899',
+        'fullName': 'Nadia',
+        'role': 'admin',
+        'password': 'secret123',
+      });
+
+      final auth = AuthService(db: db);
+      final user = await auth.login('696713899', 'secret123');
+      expect(user, isNotNull);
+      expect(user!.fullName, 'Nadia');
+
+      // Et un mauvais mot de passe reste rejeté malgré le doublon.
+      expect(
+        () => auth.login('696713899', 'mauvais'),
+        throwsA('Incorrect Password'),
+      );
+    });
+  });
+
   group('utilisateurs créés par la console superadmin', () {
     test('peuvent se connecter après création via la console', () async {
       final db = FakeFirebaseFirestore();
@@ -112,10 +165,11 @@ void main() {
         password: 'secret123',
       );
 
-      // Le compte de connexion a bien été écrit.
+      // Le compte de connexion a bien été écrit avec le VRAI rôle console
+      // (General Administrator → general_admin, Phase 1).
       final loginDoc = await db.collection('users').doc('+237699999999').get();
       expect(loginDoc.exists, isTrue);
-      expect(loginDoc.data()?['role'], 'admin');
+      expect(loginDoc.data()?['role'], 'general_admin');
       expect(loginDoc.data()?['password'], 'secret123');
 
       // L'utilisateur se connecte avec le numéro + le mot de passe fixé par
@@ -124,7 +178,7 @@ void main() {
       final user = await auth.login('+237 699 99 99 99', 'secret123');
 
       expect(user, isNotNull);
-      expect(user!.role, 'admin');
+      expect(user!.role, 'general_admin');
       expect(user.fullName, 'Marie Ekwalla');
 
       store.dispose();

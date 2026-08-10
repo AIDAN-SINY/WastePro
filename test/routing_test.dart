@@ -4,6 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:waste_pro/main.dart';
 import 'package:waste_pro/models/user_model.dart';
 import 'package:waste_pro/providers/user_provider.dart';
+import 'package:waste_pro/features/backoffice/backoffice_screen.dart';
+import 'package:waste_pro/features/backoffice/data/backoffice_store.dart';
+import 'package:waste_pro/features/backoffice/widgets/toast.dart';
+import 'package:waste_pro/features/company/company_console.dart';
 import 'package:waste_pro/features/superadmin/data/platform_store.dart';
 import 'package:waste_pro/features/superadmin/super_admin_console.dart';
 import 'package:waste_pro/routing.dart';
@@ -42,14 +46,19 @@ class _MutableUserProvider extends UserProvider {
   }
 }
 
-UserModel _user(String role) => UserModel(
+UserModel _user(String role, {String agenceId = '', String societeId = ''}) =>
+    UserModel(
       phoneNumber: '+237677123456',
       fullName: 'Test',
       role: role,
       password: 'x',
+      agenceId: agenceId,
+      societeId: societeId,
     );
 
 void main() {
+  setUp(BoToastService.resetForTesting);
+
   group('consolePageIndex', () {
     test('mappe les noms d URL vers les pages de la console', () {
       expect(consolePageIndex(null), 0);
@@ -107,6 +116,16 @@ void main() {
         consoleRedirect(user: _user('collector'), path: '/console/rapports'),
         '/',
       );
+      // Phase 1 : le General Administrator (console entreprise) n a pas
+      // accès à la console plateforme, et l'Agency Manager non plus.
+      expect(
+        consoleRedirect(user: _user('general_admin'), path: '/console/agences'),
+        '/',
+      );
+      expect(
+        consoleRedirect(user: _user('agency_manager'), path: '/console/users'),
+        '/',
+      );
     });
 
     test('envoie le super admin vers la console depuis l accueil', () {
@@ -116,6 +135,11 @@ void main() {
       );
       expect(consoleRedirect(user: _user('client'), path: '/'), isNull);
       expect(consoleRedirect(user: null, path: '/'), isNull);
+      // Les autres rôles restent sur l accueil (AuthWrapper choisit leur
+      // écran) : ni le General Administrator ni l'Agency Manager ne sont
+      // redirigés vers la console plateforme.
+      expect(consoleRedirect(user: _user('general_admin'), path: '/'), isNull);
+      expect(consoleRedirect(user: _user('agency_manager'), path: '/'), isNull);
     });
 
     test('interdit les écrans d auth une fois connecté', () {
@@ -146,6 +170,83 @@ void main() {
       expect(find.byType(SuperAdminConsole), findsOneWidget);
       // The "Overview" page is shown (index 0).
       expect(find.text('Overview'), findsWidgets);
+    });
+
+    testWidgets('general admin loggé → console entreprise', (tester) async {
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: FakeUserProvider(fakeUser: _user('general_admin')),
+          child: WasteProApp(consoleStore: PlatformStore()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CompanyConsole), findsOneWidget);
+      expect(find.byType(SuperAdminConsole), findsNothing);
+    });
+
+    testWidgets('agency manager loggé → backoffice de son agence', (
+      tester,
+    ) async {
+      // Phase 3 : le chef d'agence avec une agence assignée arrive au
+      // backoffice scopé à son agence (agenceId transmis à l'écran).
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: FakeUserProvider(
+            fakeUser: _user('agency_manager', agenceId: 'ag1'),
+          ),
+          child: WasteProApp(
+            consoleStore: PlatformStore(),
+            backofficeStore: BackofficeStore(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BackofficeScreen), findsOneWidget);
+      expect(find.byType(SuperAdminConsole), findsNothing);
+      expect(find.byType(CompanyConsole), findsNothing);
+    });
+
+    testWidgets('agency manager SANS agence → écran « No agency assigned »', (
+      tester,
+    ) async {
+      // Phase 3 (défense) : jamais de backoffice non scopé pour un chef
+      // d'agence — il verrait les données de toutes les agences.
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: FakeUserProvider(fakeUser: _user('agency_manager')),
+          child: WasteProApp(
+            consoleStore: PlatformStore(),
+            backofficeStore: BackofficeStore(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BackofficeScreen), findsNothing);
+      expect(find.text('No agency assigned yet'), findsOneWidget);
+    });
+
+    testWidgets('legacy rôle admin loggé → backoffice (pré-Phase 1)', (
+      tester,
+    ) async {
+      // Comptes créés avant la Phase 1 : leur doc users porte encore le
+      // rôle générique 'admin' — ils doivent continuer d'arriver au
+      // backoffice (régression guard).
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: FakeUserProvider(fakeUser: _user('admin')),
+          child: WasteProApp(
+            consoleStore: PlatformStore(),
+            backofficeStore: BackofficeStore(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BackofficeScreen), findsOneWidget);
+      expect(find.byType(CompanyConsole), findsNothing);
     });
 
     testWidgets('non connecté → écran d accueil', (tester) async {

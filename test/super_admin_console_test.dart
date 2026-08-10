@@ -201,6 +201,34 @@ void main() {
     expect(find.text('Open console'), findsOneWidget);
   });
 
+  testWidgets('demo preview banner is shown when using the mock store', (
+    tester,
+  ) async {
+    await pumpConsole(tester);
+
+    // Sans store Firestore injecté, la console tourne sur le mock en
+    // mémoire : un bandeau doit prévenir que rien n'est enregistré.
+    expect(find.textContaining('Demo preview'), findsOneWidget);
+  });
+
+  testWidgets('creating a user is blocked in demo preview', (tester) async {
+    await pumpConsole(tester);
+
+    await tester.tap(find.text('Users').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New user'));
+    await tester.pumpAndSettle();
+
+    // Pas de drawer de création : un toast explique qu il faut se
+    // connecter en super admin (« to create real users » n'apparaît que
+    // dans le toast, pas dans le bandeau).
+    expect(find.text('Full name'), findsNothing);
+    expect(find.textContaining('to create real users'), findsOneWidget);
+
+    // Flush le timer du toast (3 s).
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   testWidgets('command palette opens and closes with Escape', (tester) async {
     await pumpConsole(tester);
 

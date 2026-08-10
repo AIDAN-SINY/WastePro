@@ -232,7 +232,8 @@ void main() {
     );
 
     // Avec mot de passe → compte de connexion créé (téléphone canonique,
-    // rôle admin, mot de passe identique).
+    // vrai rôle console = agency_manager pour un Agency Manager, mot de
+    // passe identique).
     await store.addUtilisateur(
       nom: 'Marie Ekwalla',
       telephone: '+237 699 99 99 99',
@@ -243,7 +244,7 @@ void main() {
     );
     final login = await db.collection('users').doc('+237699999999').get();
     expect(login.exists, isTrue);
-    expect(login.data()?['role'], 'admin');
+    expect(login.data()?['role'], 'agency_manager');
     expect(login.data()?['password'], 'secret123');
     expect(login.data()?['fullName'], 'Marie Ekwalla');
 
@@ -309,6 +310,45 @@ void main() {
     final client = await db.collection('users').doc('+237688888888').get();
     expect(client.data()?['role'], 'client');
     expect(client.data()?['password'], 'clientpass');
+
+    store.dispose();
+  });
+
+  test('editing a legacy console user migrates its login role (Phase 1)',
+      () async {
+    final db = FakeFirebaseFirestore();
+    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    await store.initialLoad;
+    await _settle();
+
+    // Compte de connexion legacy créé AVANT la Phase 1 : rôle générique
+    // 'admin' dans `users`, propriétaire = l'utilisateur console.
+    await db.collection('users').doc('+237677111111').set({
+      'phoneNumber': '+237677111111',
+      'fullName': 'Legacy',
+      'role': 'admin',
+      'password': 'oldpass',
+      'consoleCreated': true,
+      'consoleUserId': 'legacy-user',
+    });
+    await db.collection('utilisateurs').doc('legacy-user').set({
+      'id': 'legacy-user',
+      'nom': 'Legacy',
+      'telephone': '+237 677 11 11 11',
+      'role': 'Agency Manager',
+      'agence': 'Douala',
+      'status': 'Active',
+      'password': 'oldpass',
+    });
+    await _settle();
+    final user = store.utilisateurs.firstWhere((u) => u.id == 'legacy-user');
+
+    // Une édition (nouveau mot de passe) réécrit le vrai rôle console dans
+    // `users` : le legacy 'admin' devient 'agency_manager'.
+    await store.updateUtilisateur(user.copyWith(password: 'newpass'));
+    final migrated = await db.collection('users').doc('+237677111111').get();
+    expect(migrated.data()?['role'], 'agency_manager');
+    expect(migrated.data()?['password'], 'newpass');
 
     store.dispose();
   });

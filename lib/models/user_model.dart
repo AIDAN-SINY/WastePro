@@ -7,6 +7,8 @@ class UserModel {
   final double? longitude;
   final String? subscriptionPlan;
   final bool? isSubscribed;
+  final String societeId; // '' for clients/collectors without a console link
+  final String agenceId;
 
   UserModel({
     required this.phoneNumber,
@@ -17,6 +19,8 @@ class UserModel {
     this.longitude,
     this.subscriptionPlan,
     this.isSubscribed,
+    this.societeId = '',
+    this.agenceId = '',
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +33,8 @@ class UserModel {
       'longitude': longitude,
       'subscription_plan': subscriptionPlan,
       'isSubscribed': isSubscribed,
+      'societeId': societeId,
+      'agenceId': agenceId,
     };
   }
 
@@ -42,6 +48,8 @@ class UserModel {
       longitude: map['longitude']?.toDouble(),
       subscriptionPlan: map['subscription_plan'] as String?,
       isSubscribed: map['isSubscribed'] as bool?,
+      societeId: map['societeId'] as String? ?? '',
+      agenceId: map['agenceId'] as String? ?? '',
     );
   }
 }

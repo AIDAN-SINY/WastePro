@@ -13,6 +13,8 @@ class ClientModel {
   final String zone;
   final String plan; // 'Essential' | 'Standard' | 'Premium'
   final String status; // 'Active' | 'Suspended'
+  final String agenceId;
+  final String societeId;
 
   const ClientModel({
     required this.id,
@@ -21,6 +23,8 @@ class ClientModel {
     required this.zone,
     required this.plan,
     required this.status,
+    this.agenceId = '',
+    this.societeId = '',
   });
 
   ClientModel copyWith({
@@ -29,6 +33,8 @@ class ClientModel {
     String? zone,
     String? plan,
     String? status,
+    String? agenceId,
+    String? societeId,
   }) {
     return ClientModel(
       id: id,
@@ -37,6 +43,8 @@ class ClientModel {
       zone: zone ?? this.zone,
       plan: plan ?? this.plan,
       status: status ?? this.status,
+      agenceId: agenceId ?? this.agenceId,
+      societeId: societeId ?? this.societeId,
     );
   }
 
@@ -47,6 +55,8 @@ class ClientModel {
         'zone': zone,
         'plan': plan,
         'status': status,
+        'agenceId': agenceId,
+        'societeId': societeId,
       };
 
   factory ClientModel.fromMap(Map<String, dynamic> map) => ClientModel(
@@ -56,6 +66,8 @@ class ClientModel {
         zone: map['zone'] as String? ?? '',
         plan: map['plan'] as String? ?? 'Standard',
         status: map['status'] as String? ?? 'Active',
+        agenceId: map['agenceId'] as String? ?? '',
+        societeId: map['societeId'] as String? ?? '',
       );
 }
 
@@ -66,6 +78,8 @@ class CollecteurModel {
   final String zone;
   final double rating;
   final String status; // 'Active' | 'Inactive'
+  final String agenceId;
+  final String societeId;
 
   const CollecteurModel({
     required this.id,
@@ -74,6 +88,8 @@ class CollecteurModel {
     required this.zone,
     required this.rating,
     required this.status,
+    this.agenceId = '',
+    this.societeId = '',
   });
 
   CollecteurModel copyWith({
@@ -82,6 +98,8 @@ class CollecteurModel {
     String? zone,
     double? rating,
     String? status,
+    String? agenceId,
+    String? societeId,
   }) {
     return CollecteurModel(
       id: id,
@@ -90,6 +108,8 @@ class CollecteurModel {
       zone: zone ?? this.zone,
       rating: rating ?? this.rating,
       status: status ?? this.status,
+      agenceId: agenceId ?? this.agenceId,
+      societeId: societeId ?? this.societeId,
     );
   }
 
@@ -100,6 +120,8 @@ class CollecteurModel {
         'zone': zone,
         'rating': rating,
         'status': status,
+        'agenceId': agenceId,
+        'societeId': societeId,
       };
 
   factory CollecteurModel.fromMap(Map<String, dynamic> map) => CollecteurModel(
@@ -109,6 +131,8 @@ class CollecteurModel {
         zone: map['zone'] as String? ?? '',
         rating: (map['rating'] as num?)?.toDouble() ?? 0,
         status: map['status'] as String? ?? 'Active',
+        agenceId: map['agenceId'] as String? ?? '',
+        societeId: map['societeId'] as String? ?? '',
       );
 }
 

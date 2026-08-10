@@ -434,6 +434,76 @@ void main() {
     store.dispose();
   });
 
+  test('scoped store only sees the connected agency data (Phase 3)', () async {
+    final db = FakeFirebaseFirestore();
+    // Des clients et collecteurs de DEUX agences différentes.
+    await db.collection('clients').doc('clA').set({
+      'id': 'clA',
+      'name': 'Client A',
+      'phone': '+237 611 11 11 11',
+      'zone': 'Bonanjo',
+      'plan': 'Standard',
+      'status': 'Active',
+      'agenceId': 'agA',
+      'societeId': 'so1',
+    });
+    await db.collection('clients').doc('clB').set({
+      'id': 'clB',
+      'name': 'Client B',
+      'phone': '+237 622 22 22 22',
+      'zone': 'Akwa',
+      'plan': 'Standard',
+      'status': 'Active',
+      'agenceId': 'agB',
+      'societeId': 'so1',
+    });
+    await db.collection('collecteurs').doc('coA').set({
+      'id': 'coA',
+      'name': 'Collecteur A',
+      'phone': '+237 655 11 11 11',
+      'zone': 'Bonanjo',
+      'rating': 4.5,
+      'status': 'Active',
+      'agenceId': 'agA',
+    });
+    await db.collection('collecteurs').doc('coB').set({
+      'id': 'coB',
+      'name': 'Collecteur B',
+      'phone': '+237 655 22 22 22',
+      'zone': 'Akwa',
+      'rating': 4.0,
+      'status': 'Active',
+      'agenceId': 'agB',
+    });
+
+    // Le chef d'agence de agA ne voit QUE les données de agA.
+    final store = FirestoreBackofficeStore(
+      db: db,
+      seedIfEmpty: false,
+      agenceId: 'agA',
+      societeId: 'so1',
+    );
+    await store.initialLoad;
+    await _settle();
+
+    expect(store.clients.single.id, 'clA');
+    expect(store.collecteurs.single.id, 'coA');
+
+    // Créer un client le rattache automatiquement à l'agence du chef.
+    await store.addClient(
+      name: 'Nouveau Client',
+      phone: '+237 633 33 33 33',
+      zone: 'Bonanjo',
+      plan: 'Premium',
+      status: 'Active',
+      password: 'secret',
+    );
+    expect(store.clients.firstWhere((c) => c.name == 'Nouveau Client').agenceId,
+        'agA');
+
+    store.dispose();
+  });
+
   test('changing the phone number migrates the login account', () async {
     final db = FakeFirebaseFirestore();
     final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);

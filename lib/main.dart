@@ -17,6 +17,8 @@ import 'features/auth/screens/registration_sreen.dart';
 import 'features/home/client_dashboard.dart';
 import 'features/home/collector_dashboard.dart';
 import 'features/backoffice/backoffice_screen.dart';
+import 'features/backoffice/data/backoffice_store.dart';
+import 'features/company/company_console.dart';
 import 'features/superadmin/data/firestore_platform_store.dart';
 import 'features/superadmin/data/platform_store.dart';
 import 'features/superadmin/super_admin_console.dart';
@@ -70,11 +72,15 @@ class ConsoleStoreScope extends InheritedWidget {
 }
 
 class WasteProApp extends StatefulWidget {
-  const WasteProApp({super.key, this.consoleStore});
+  const WasteProApp({super.key, this.consoleStore, this.backofficeStore});
 
   /// Store de la console injecté par les tests (mock) — sinon un
   /// [FirestorePlatformStore] est créé paresseusement.
   final PlatformStore? consoleStore;
+
+  /// Store du backoffice injecté par les tests (mock) — sinon un
+  /// [FirestoreBackofficeStore] est créé par l'écran.
+  final BackofficeStore? backofficeStore;
 
   @override
   State<WasteProApp> createState() => _WasteProAppState();
@@ -105,7 +111,11 @@ class _WasteProAppState extends State<WasteProApp> {
         allowConsolePreview: kDebugMode,
       ),
       routes: [
-        GoRoute(path: '/', builder: (context, state) => const AuthWrapper()),
+        GoRoute(
+          path: '/',
+          builder: (context, state) =>
+              AuthWrapper(backofficeStore: widget.backofficeStore),
+        ),
         GoRoute(
           path: '/login',
           builder: (context, state) => const LoginScreen(),
@@ -173,10 +183,90 @@ class _WasteProAppState extends State<WasteProApp> {
 }
 
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  const AuthWrapper({super.key, this.backofficeStore});
+
+  /// Store du backoffice injecté par les tests (mock) — sinon l'écran crée
+  /// son [FirestoreBackofficeStore].
+  final BackofficeStore? backofficeStore;
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+/// Écran affiché à un Agency Manager dont le compte n'a pas encore
+/// d'agence assignée (Phase 3).
+///
+/// Sans agence, le backoffice n'aurait aucun périmètre : plutôt que de
+/// laisser l'utilisateur voir les données de toutes les agences, on lui
+/// demande de contacter son administrateur. L'entreprise (General
+/// Administrator) ou le super admin doit assigner le chef d'agence à une
+/// agence dans la console ; la prochaine connexion lui donnera accès.
+class UnassignedManagerScreen extends StatelessWidget {
+  const UnassignedManagerScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.storefront_rounded,
+                    size: 30,
+                    color: Colors.amber,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'No agency assigned yet',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your account is not linked to any agency. Contact your '
+                  'company administrator so they can assign you to an '
+                  'agency — then log in again to access the backoffice.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                OutlinedButton(
+                  onPressed: () {
+                    final provider = context.read<UserProvider>();
+                    if (provider.user != null) provider.logout();
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                  ),
+                  child: const Text('Log out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
@@ -194,15 +284,38 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     // 2. If user is logged in, direct to their specific Dashboard
-    final role = userProvider.user!.role.trim().toLowerCase();
+    final user = userProvider.user!;
+    final role = user.role.trim().toLowerCase();
     if (role == 'super_admin') {
       // Normalement redirigé vers /console/overview par le routeur ; ce
       // fallback garde la console accessible même si le routeur ne passe pas.
       return SuperAdminConsole(store: ConsoleStoreScope.storeOf(context));
+    } else if (role == 'general_admin') {
+      // General Administrator → console de SON entreprise.
+      return CompanyConsole(societeId: user.societeId);
     } else if (role == 'collector') {
       return const CollectorDashboard();
+    } else if (role == 'agency_manager') {
+      // Phase 3 (défense en profondeur) : un chef d'agence sans agence
+      // assignée ne doit JAMAIS tomber sur le backoffice non scopé (il
+      // verrait les données de toutes les agences). Un écran dédié lui
+      // demande de contacter son administrateur.
+      if (user.agenceId.isEmpty) {
+        return const UnassignedManagerScreen();
+      }
+      return BackofficeScreen(
+        store: widget.backofficeStore,
+        agenceId: user.agenceId,
+        societeId: user.societeId,
+      );
     } else if (role == 'admin') {
-      return const BackofficeScreen();
+      // 'admin' : comptes créés avant la Phase 1 (legacy) → backoffice
+      // global (comportement conservé).
+      return BackofficeScreen(
+        store: widget.backofficeStore,
+        agenceId: user.agenceId,
+        societeId: user.societeId,
+      );
     } else {
       return const ClientDashboard();
     }

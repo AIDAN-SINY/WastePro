@@ -99,6 +99,7 @@ class PlatformStore extends ChangeNotifier {
   // --- Agences CRUD ---
   Future<void> addAgence({
     required String societe,
+    String societeId = '',
     required String ville,
     required String responsable,
     required String telephone,
@@ -108,6 +109,7 @@ class PlatformStore extends ChangeNotifier {
       AgenceModel(
         id: nextId(),
         societe: societe,
+        societeId: societeId,
         ville: ville,
         responsable: responsable,
         telephone: telephone,
@@ -134,6 +136,8 @@ class PlatformStore extends ChangeNotifier {
     required String telephone,
     required String role,
     required String agence,
+    String societeId = '',
+    String agenceId = '',
     required String status,
     required String password,
   }) async {
@@ -144,6 +148,8 @@ class PlatformStore extends ChangeNotifier {
         telephone: telephone,
         role: role,
         agence: agence,
+        societeId: societeId,
+        agenceId: agenceId,
         status: status,
         password: password,
       ),
