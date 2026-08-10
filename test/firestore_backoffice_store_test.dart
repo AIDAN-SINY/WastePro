@@ -504,6 +504,226 @@ void main() {
     store.dispose();
   });
 
+  test(
+    'approving a registration creates the client + its login account',
+    () async {
+      final db = FakeFirebaseFirestore();
+      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      await store.initialLoad;
+      await _settle();
+
+      await db.collection('registrations').doc('rgX').set({
+        'id': 'rgX',
+        'fullName': 'Carine Mbappe',
+        'phone': '+237 698 22 44 66',
+        'zone': 'Bonanjo',
+        'agenceId': 'ag1',
+        'agenceName': 'Douala — Bonanjo',
+        'societeId': 'so1',
+        'status': 'pending',
+        'collecteurId': '',
+        'password': 'secret123',
+        'createdAt': '2026-08-10',
+      });
+      await _settle();
+      expect(store.registrations.single.status, 'pending');
+
+      await store.approveRegistration(
+        store.registrations.single,
+        collecteurId: 'co1',
+      );
+
+      // Candidature approuvée avec le collecteur assigné (Firestore).
+      final regDoc = await db.collection('registrations').doc('rgX').get();
+      expect(regDoc.data()?['status'], 'approved');
+      expect(regDoc.data()?['collecteurId'], 'co1');
+
+      // Client créé, rattaché à l'agence + au collecteur.
+      final client = store.clients.singleWhere(
+        (c) => c.name == 'Carine Mbappe',
+      );
+      expect(client.collecteurId, 'co1');
+      expect(client.agenceId, 'ag1');
+      expect(client.zone, 'Bonanjo');
+
+      // Compte de connexion créé avec le mot de passe choisi par le client.
+      final login = await db.collection('users').doc('+237698224466').get();
+      expect(login.exists, isTrue);
+      expect(login.data()?['role'], 'client');
+      expect(login.data()?['password'], 'secret123');
+      expect(login.data()?['fullName'], 'Carine Mbappe');
+
+      store.dispose();
+    },
+  );
+
+  test('rejecting a registration marks it rejected without creating a client',
+      () async {
+    final db = FakeFirebaseFirestore();
+    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    await store.initialLoad;
+    await _settle();
+
+    await db.collection('registrations').doc('rgX').set({
+      'id': 'rgX',
+      'fullName': 'Carine Mbappe',
+      'phone': '+237 698 22 44 66',
+      'zone': 'Bonanjo',
+      'agenceId': 'ag1',
+      'agenceName': 'Douala — Bonanjo',
+      'societeId': 'so1',
+      'status': 'pending',
+      'collecteurId': '',
+      'password': 'secret123',
+      'createdAt': '2026-08-10',
+    });
+    await _settle();
+
+    await store.rejectRegistration(store.registrations.single);
+
+    final regDoc = await db.collection('registrations').doc('rgX').get();
+    expect(regDoc.data()?['status'], 'rejected');
+    expect(store.registrations.single.status, 'rejected');
+    expect(store.clients, isEmpty);
+    expect(
+      (await db.collection('users').doc('+237698224466').get()).exists,
+      isFalse,
+    );
+
+    store.dispose();
+  });
+
+  test(
+    'reassigning a collector updates the client, the login account and '
+    'the upcoming collections',
+    () async {
+      final db = FakeFirebaseFirestore();
+      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      await store.initialLoad;
+      await _settle();
+
+      // Collecteurs connus (résolution id → nom).
+      await db.collection('collecteurs').doc('co1').set({
+        'id': 'co1',
+        'name': 'Paul Mbarga',
+        'phone': '+237 678 90 11 22',
+        'zone': 'Bonanjo / Akwa',
+        'rating': 4.8,
+        'status': 'Active',
+      });
+      await db.collection('collecteurs').doc('co2').set({
+        'id': 'co2',
+        'name': 'Vincent Onana',
+        'phone': '+237 693 55 44 33',
+        'zone': 'Bonapriso / Bali',
+        'rating': 4.5,
+        'status': 'Active',
+      });
+      // Client assigné à Paul Mbarga + son compte de connexion console.
+      await db.collection('clients').doc('clX').set({
+        'id': 'clX',
+        'name': 'Carine Mbappe',
+        'phone': '+237 698 22 44 66',
+        'zone': 'Bonanjo',
+        'plan': 'Standard',
+        'status': 'Active',
+        'agenceId': 'ag1',
+        'societeId': 'so1',
+        'collecteurId': 'co1',
+      });
+      await db.collection('users').doc('+237698224466').set({
+        'phoneNumber': '+237698224466',
+        'fullName': 'Carine Mbappe',
+        'role': 'client',
+        'password': 'secret123',
+        'consoleCreated': true,
+        'agenceId': 'ag1',
+        'societeId': 'so1',
+        'collecteurId': 'co1',
+      });
+      // Collectes : une à venir (Scheduled) + une effectuée, par co1.
+      await db.collection('collectes').doc('ccX').set({
+        'id': 'ccX',
+        'client': 'Carine Mbappe',
+        'collecteur': 'Paul Mbarga',
+        'date': '2026-08-12',
+        'poids': 0,
+        'status': 'Scheduled',
+      });
+      await db.collection('collectes').doc('ccY').set({
+        'id': 'ccY',
+        'client': 'Carine Mbappe',
+        'collecteur': 'Paul Mbarga',
+        'date': '2026-08-05',
+        'poids': 4.1,
+        'status': 'Completed',
+      });
+      await _settle();
+
+      await store.reassignCollecteur(clientId: 'clX', collecteurId: 'co2');
+
+      // 1. La fiche client porte le nouveau collecteur.
+      final clientDoc = await db.collection('clients').doc('clX').get();
+      expect(clientDoc.data()?['collecteurId'], 'co2');
+      // 2. Le compte de connexion est mis à jour (l'app client le sait).
+      final login = await db.collection('users').doc('+237698224466').get();
+      expect(login.data()?['collecteurId'], 'co2');
+      // 3. La collecte à venir bascule, l'historique effectué ne change pas.
+      final upcoming = await db.collection('collectes').doc('ccX').get();
+      expect(upcoming.data()?['collecteur'], 'Vincent Onana');
+      final done = await db.collection('collectes').doc('ccY').get();
+      expect(done.data()?['collecteur'], 'Paul Mbarga');
+
+      store.dispose();
+    },
+  );
+
+  test('reassigning works even when the client has no login account',
+      () async {
+    final db = FakeFirebaseFirestore();
+    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    await store.initialLoad;
+    await _settle();
+
+    await db.collection('collecteurs').doc('co1').set({
+      'id': 'co1',
+      'name': 'Paul Mbarga',
+      'phone': '+237 678 90 11 22',
+      'zone': 'Bonanjo / Akwa',
+      'rating': 4.8,
+      'status': 'Active',
+    });
+    await db.collection('collecteurs').doc('co2').set({
+      'id': 'co2',
+      'name': 'Vincent Onana',
+      'phone': '+237 693 55 44 33',
+      'zone': 'Bonapriso / Bali',
+      'rating': 4.5,
+      'status': 'Active',
+    });
+    // Client sans compte de connexion (créé sans mot de passe).
+    await db.collection('clients').doc('clY').set({
+      'id': 'clY',
+      'name': 'Client Sans Compte',
+      'phone': '+237 600 00 00 00',
+      'zone': 'Akwa',
+      'plan': 'Essential',
+      'status': 'Active',
+      'agenceId': 'ag1',
+      'societeId': 'so1',
+      'collecteurId': 'co1',
+    });
+    await _settle();
+
+    // Ne doit PAS lever d'erreur (pas de users/{phone} à mettre à jour).
+    await store.reassignCollecteur(clientId: 'clY', collecteurId: 'co2');
+
+    final clientDoc = await db.collection('clients').doc('clY').get();
+    expect(clientDoc.data()?['collecteurId'], 'co2');
+
+    store.dispose();
+  });
+
   test('changing the phone number migrates the login account', () async {
     final db = FakeFirebaseFirestore();
     final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);

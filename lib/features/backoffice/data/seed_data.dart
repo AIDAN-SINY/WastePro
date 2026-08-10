@@ -9,6 +9,7 @@ const List<ClientModel> seedClients = [
     zone: 'Bonanjo',
     plan: 'Standard',
     status: 'Active',
+    collecteurId: 'co1', // Paul Mbarga
   ),
   ClientModel(
     id: 'cl2',
@@ -17,6 +18,7 @@ const List<ClientModel> seedClients = [
     zone: 'Akwa',
     plan: 'Premium',
     status: 'Active',
+    collecteurId: 'co2', // Vincent Onana
   ),
   ClientModel(
     id: 'cl3',
@@ -33,6 +35,7 @@ const List<ClientModel> seedClients = [
     zone: 'Deido',
     plan: 'Standard',
     status: 'Active',
+    collecteurId: 'co1', // Paul Mbarga
   ),
   ClientModel(
     id: 'cl5',
@@ -41,6 +44,7 @@ const List<ClientModel> seedClients = [
     zone: 'Bali',
     plan: 'Premium',
     status: 'Active',
+    collecteurId: 'co2', // Vincent Onana
   ),
   ClientModel(
     id: 'cl6',
@@ -49,6 +53,7 @@ const List<ClientModel> seedClients = [
     zone: 'Bonanjo',
     plan: 'Essential',
     status: 'Active',
+    collecteurId: 'co4', // Serge Ateba
   ),
   ClientModel(
     id: 'cl7',
@@ -233,6 +238,50 @@ const List<FrequenceModel> seedFrequences = [
   FrequenceModel(id: 'fr1', libelle: 'Weekly (1x/week)', jours: 7),
   FrequenceModel(id: 'fr2', libelle: 'Twice a week (2x/week)', jours: 3),
   FrequenceModel(id: 'fr3', libelle: 'Monthly', jours: 30),
+];
+
+/// Candidatures clients (pré-inscriptions) de démonstration.
+///
+/// Deux en attente (à approuver par le chef d'agence) + une approuvée déjà
+/// traitée. Les vrais docs arrivent via `registrations` (Firestore).
+const List<RegistrationModel> seedRegistrations = [
+  RegistrationModel(
+    id: 'rg1',
+    fullName: 'Carine Mbappe',
+    phone: '+237 698 22 44 66',
+    zone: 'Bonanjo',
+    agenceId: 'ag1',
+    agenceName: 'Douala — Bonanjo',
+    societeId: 'so1',
+    status: 'pending',
+    password: '',
+    createdAt: '2026-08-09',
+  ),
+  RegistrationModel(
+    id: 'rg2',
+    fullName: 'Landry Fokou',
+    phone: '+237 677 55 88 99',
+    zone: 'Deido',
+    agenceId: 'ag1',
+    agenceName: 'Douala — Bonanjo',
+    societeId: 'so1',
+    status: 'pending',
+    password: '',
+    createdAt: '2026-08-10',
+  ),
+  RegistrationModel(
+    id: 'rg3',
+    fullName: 'Yolande Essomba',
+    phone: '+237 690 88 12 34',
+    zone: 'Akwa',
+    agenceId: 'ag1',
+    agenceName: 'Douala — Bonanjo',
+    societeId: 'so1',
+    status: 'approved',
+    collecteurId: 'co2',
+    password: '',
+    createdAt: '2026-08-06',
+  ),
 ];
 
 /// Activity feed entries (design's `activity` array).

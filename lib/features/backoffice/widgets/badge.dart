@@ -13,10 +13,13 @@ class BoBadge extends StatelessWidget {
       case 'Active' || 'Actif':
       case 'Completed' || 'Effectué':
       case 'Paid' || 'Payée':
+      case 'Approved':
         return (BackofficeTheme.greenSoft, BackofficeTheme.success);
       case 'Scheduled' || 'Prévu':
       case 'Pending' || 'En attente':
         return (BackofficeTheme.goldSoft, BackofficeTheme.goldDim);
+      case 'Rejected':
+        return (BackofficeTheme.redSoft, BackofficeTheme.red);
       case 'Suspended' || 'Suspendu':
       case 'Missed' || 'Manqué':
       case 'Overdue' || 'En retard':

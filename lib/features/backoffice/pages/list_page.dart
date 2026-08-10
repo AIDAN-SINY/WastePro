@@ -182,10 +182,12 @@ class BoListPage extends StatelessWidget {
     switch (type) {
       case BoEntity.client:
         final c = item as ClientModel;
+        final collector = collecteurNameFor(store.collecteurs, c.collecteurId);
         return BoItemCard(
           avatarText: boInitials(c.name),
           title: c.name,
-          subtitle: '${c.zone} · ${c.plan}',
+          subtitle:
+              '${c.zone} · ${c.plan}${collector.isEmpty ? '' : ' · $collector'}',
           status: c.status,
           onKebab: () => _onKebab(context, c),
         );
@@ -238,10 +240,21 @@ class BoListPage extends StatelessWidget {
   }
 
   void _onKebab(BuildContext context, Object item) {
+    // Les clients ont une action dédiée : réassigner leur collecteur.
+    final isClient = type == BoEntity.client;
     showBoActionSheet(
       context,
-      onEdit: () => showBoFormSheet(context, store: store, type: type, existing: item),
+      onEdit: () =>
+          showBoFormSheet(context, store: store, type: type, existing: item),
       onDelete: () => _delete(context, item),
+      extraLabel: isClient ? 'Reassign collector' : null,
+      onExtra: isClient
+          ? () => showBoReassignSheet(
+                context,
+                store: store,
+                client: item as ClientModel,
+              )
+          : null,
     );
   }
 

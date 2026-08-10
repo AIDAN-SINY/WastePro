@@ -33,6 +33,41 @@ void main() {
     store.dispose();
   });
 
+  test('loads clients and collecteurs for the agency detail stats', () async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('clients').doc('c1').set({
+      'id': 'c1',
+      'name': 'Jean Dooh',
+      'phone': '+237 677 12 34 56',
+      'zone': 'Bonanjo',
+      'plan': 'Standard',
+      'status': 'Active',
+      'agenceId': 'ag1',
+      'societeId': 'so1',
+    });
+    await db.collection('collecteurs').doc('co1').set({
+      'id': 'co1',
+      'name': 'Paul Mbarga',
+      'phone': '+237 678 90 11 22',
+      'zone': 'Bonanjo',
+      'rating': 4.8,
+      'status': 'Active',
+      'agenceId': 'ag1',
+      'societeId': 'so1',
+    });
+
+    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    await store.initialLoad;
+    await _settle();
+
+    // Les clients/collecteurs alimentent la fiche détail d'une agence.
+    expect(store.clients.single.agenceId, 'ag1');
+    expect(store.collecteurs.single.rating, 4.8);
+    expect(store.clientsForAgence('ag1').single.name, 'Jean Dooh');
+
+    store.dispose();
+  });
+
   test('keeps existing data and only seeds the empty collections', () async {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('custom').set({

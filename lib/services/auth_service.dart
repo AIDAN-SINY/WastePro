@@ -60,6 +60,18 @@ class AuthService {
           throw 'The database service is temporarily unavailable. Please check your internet connection and try again.';
         }
 
+        // `permission-denied` = les règles Firestore DÉPLOYÉES sur Firebase
+        // refusent l'opération. Le fichier local (firestore.rules) est
+        // ouvert, mais si la collection `registrations` (ou autre) n'a pas
+        // été déployée après son ajout, Firebase refuse — message brut
+        // « Missing or insufficient permissions » incompréhensible pour le
+        // client. On le traduit en action concrète.
+        if (e.code == 'permission-denied') {
+          throw 'Access denied: the Firestore rules deployed on Firebase are '
+              'out of date. Deploy the latest rules with: firebase deploy '
+              '--only firestore:rules';
+        }
+
         throw e.message ?? 'Firestore request failed.';
       } on Exception {
         // Autres exceptions : réessaie une fois (le premier échec est
@@ -73,81 +85,6 @@ class AuthService {
     }
 
     throw 'Unable to complete the request right now.';
-  }
-
-  /// Assigns a role at registration.
-  ///
-  /// Admins pre-approve collector numbers in the `collectors` collection
-  /// (whitelist). If the number is whitelisted the account becomes a
-  /// 'collector', otherwise it is a regular 'client'.
-  Future<String> determineRole(String phone) async {
-    final normalizedPhone = canonicalPhone(phone);
-
-    if (normalizedPhone.isEmpty) {
-      return 'client';
-    }
-
-    return _runWithRetry(() async {
-      final doc = await _db.collection('collectors').doc(normalizedPhone).get();
-      return doc.exists ? 'collector' : 'client';
-    });
-  }
-
-  /// Returns true when an account already exists for this phone number.
-  ///
-  /// Même logique de clés que [login] : la clé canonique (+237…) puis le
-  /// numéro tel que saisi (un doc créé à la main dans la console peut
-  /// utiliser un autre format) — pour éviter les doublons d'inscription.
-  Future<bool> isPhoneRegistered(String phone) async {
-    return _runWithRetry(() async {
-      for (final key in canonicalKeys(phone)) {
-        if (key.isEmpty) continue;
-        final doc = await _db.collection('users').doc(key).get();
-        if (doc.exists) return true;
-      }
-      return false;
-    });
-  }
-
-  /// Rôles réservés aux comptes console (protégés contre l'écrasement par
-  /// l'inscription publique).
-  static const _consoleRoles = {
-    'admin',
-    'super_admin',
-    'general_admin',
-    'agency_manager',
-  };
-
-  /// Crée le profil `users/{téléphone}` (le mot de passe est stocké en clair,
-  /// comme avant la migration Firebase Auth).
-  ///
-  /// Protège les comptes console : si le numéro est déjà utilisé par un
-  /// General Administrator, Agency Manager, Super Admin, ou un compte créé
-  /// par la console, l'inscription est refusée.
-  Future<void> register(UserModel user) async {
-    final phone = canonicalPhone(user.phoneNumber);
-    if (phone.isEmpty) {
-      throw 'Invalid phone number.';
-    }
-
-    await _runWithRetry(() async {
-      // Vérifie que le numéro n'appartient pas à un compte console.
-      final existing = await _db.collection('users').doc(phone).get();
-      if (existing.exists) {
-        final data = existing.data()!;
-        final role = (data['role'] as String?)?.trim().toLowerCase() ?? '';
-        if (_consoleRoles.contains(role) ||
-            data['consoleCreated'] == true) {
-          throw 'This number is already registered as a platform account. '
-              'Please use a different number.';
-        }
-      }
-
-      await _db.collection('users').doc(phone).set({
-        ...user.toMap(),
-        'phoneNumber': phone,
-      });
-    });
   }
 
   /// Se connecte avec un numéro + un mot de passe : lit le doc
@@ -178,6 +115,122 @@ class AuthService {
       // à aucune de ses clés.
       if (found) throw 'Incorrect Password';
       return null;
+    });
+  }
+
+  /// Soumet une candidature client (pré-inscription).
+  ///
+  /// Le client remplit ses infos + choisit son agence ; la candidature est
+  /// écrite dans `registrations` avec le statut `pending` et apparaît dans
+  /// le dashboard du chef d'agence qui l'approuvera (en assignant un
+  /// collecteur). Aucun compte `users/{téléphone}` n'est créé ici — le
+  /// client n'existe qu'après approbation.
+  ///
+  /// - Un numéro déjà utilisé par un compte existant est refusé (le client
+  ///   doit se connecter à la place).
+  /// - Une candidature déjà en attente pour ce numéro est refusée.
+  Future<void> submitPreRegistration({
+    required String fullName,
+    required String phone,
+    required String zone,
+    required String agenceId,
+    required String agenceName,
+    required String societeId,
+    required String password,
+  }) async {
+    final canonical = canonicalPhone(phone);
+    if (canonical.isEmpty) throw 'Invalid phone number.';
+    if (fullName.trim().isEmpty) throw 'Please enter your full name.';
+    if (password.length < 4) {
+      throw 'Password must be at least 4 characters.';
+    }
+    if (agenceId.isEmpty && agenceName.trim().isEmpty) {
+      throw 'Please choose an agency.';
+    }
+
+    await _runWithRetry(() async {
+      // Compte existant → connexion, pas de candidature.
+      final existing = await _db.collection('users').doc(canonical).get();
+      if (existing.exists) {
+        throw 'This number already has an account. Please log in instead.';
+      }
+
+      // Candidature déjà en attente pour ce numéro.
+      // ⚠️ Un seul where sur `phone` : un double where (phone + status)
+      // exigerait un index composé Firestore non déployé (FAILED_PRECONDITION
+      // en production) — le statut est filtré en mémoire ici.
+      final existingRegs = await _db
+          .collection('registrations')
+          .where('phone', isEqualTo: canonical)
+          .get();
+      final hasPending = existingRegs.docs.any(
+        (d) => (d.data()['status'] as String? ?? '') == 'pending',
+      );
+      if (hasPending) {
+        throw 'You already have a pending application. The agency will '
+            'contact you soon.';
+      }
+
+      // Le client peut taper le nom de l'agence au lieu de la choisir : on
+      // résout ce nom contre les agences connues pour rattacher la
+      // candidature à une agence — sinon elle n'apparaîtrait jamais dans le
+      // backoffice (scopé par agenceId) du chef d'agence.
+      var finalAgenceId = agenceId;
+      var finalSocieteId = societeId;
+      if (finalAgenceId.isEmpty && agenceName.trim().isNotEmpty) {
+        final name = agenceName.trim().toLowerCase();
+        final agences = await _db.collection('agences').get();
+        // D'abord le nom EXACT (ex. « douala — bonanjo »), puis un nom
+        // PARTIEL unique (ex. « bonanjo ») — sinon la candidature serait
+        // écrite sans agenceId et n'apparaîtrait jamais dans le backoffice
+        // scopé du chef d'agence.
+        final exact = agences.docs
+            .where((d) =>
+                (d.data()['ville'] as String? ?? '').toLowerCase() == name)
+            .toList();
+        final matches =
+            exact.isNotEmpty ? exact
+            : agences.docs
+                  .where((d) =>
+                      (d.data()['ville'] as String? ?? '')
+                          .toLowerCase()
+                          .contains(name))
+                  .toList();
+        if (matches.length == 1) {
+          finalAgenceId = matches.single.id;
+          finalSocieteId =
+              matches.single.data()['societeId'] as String? ?? '';
+        } else {
+          // Aucune correspondance (nom inconnu) OU nom ambigu (ex. « douala »
+          // → deux agences) : refuser plutôt que d'écrire une candidature
+          // « orpheline » (agenceId vide) que le client croira envoyée mais
+          // qu'aucun chef d'agence ne pourra jamais voir ni traiter.
+          throw matches.isEmpty
+              ? 'Agency not found. Choose one of the suggested agencies.'
+              : 'Several agencies match this name. Choose one from the '
+                    'suggestions.';
+        }
+      }
+
+      final now = DateTime.now();
+      final iso =
+          '${now.year.toString().padLeft(4, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.day.toString().padLeft(2, '0')}';
+      final id = 'reg${now.microsecondsSinceEpoch}';
+      await _db.collection('registrations').doc(id).set({
+        'id': id,
+        'fullName': fullName.trim(),
+        'phone': canonical,
+        'zone': zone.trim(),
+        'agenceId': finalAgenceId,
+        'agenceName': agenceName.trim(),
+        'societeId': finalSocieteId,
+        'status': 'pending',
+        'collecteurId': '',
+        'password': password,
+        'createdAt': iso,
+      });
     });
   }
 

@@ -140,7 +140,8 @@ void main() {
     expect(find.text('New company'), findsOneWidget);
   });
 
-  testWidgets('mobile: tapping a card opens the edit form', (tester) async {
+  testWidgets('mobile: tapping a company card opens the company detail page',
+      (tester) async {
     await pumpConsoleMobile(tester);
 
     // Open the drawer and go to the companies page (cards layout).
@@ -149,10 +150,12 @@ void main() {
     await tester.tap(find.text('Companies').hitTestable());
     await tester.pumpAndSettle();
 
-    // Tapping the first card opens the edit form (parity with desktop rows).
+    // Tapping the first card opens the full company detail page (parity
+    // with desktop rows).
     await tester.tap(find.text('WastePro Douala Ltd').first);
     await tester.pumpAndSettle();
-    expect(find.text('Edit company'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Back to companies'), findsOneWidget);
     await tester.pumpAndSettle();
   });
 
@@ -229,28 +232,46 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('clicking an agency row opens the full detail view', (
+  testWidgets('clicking a company row opens the full company detail page', (
     tester,
   ) async {
     await pumpConsole(tester);
 
-    // Navigate to Agencies (sidebar nav item).
-    await tester.tap(find.text('Agencies').first);
+    // Navigate to Companies (sidebar nav item).
+    await tester.tap(find.text('Companies').first);
     await tester.pumpAndSettle();
-    expect(find.text('New agency'), findsOneWidget);
+    expect(find.text('New company'), findsOneWidget);
 
-    // Click the first agency row: "Douala — Bonanjo" (seed data).
-    await tester.tap(find.text('Douala — Bonanjo').first);
+    // Click the first company row: "WastePro Douala Ltd" (seed data).
+    await tester.tap(find.text('WastePro Douala Ltd').first);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
 
-    // The detail drawer is open: sections unique to the detail view.
-    expect(find.text('MANAGERS — 1'), findsOneWidget);
-    // Linked company (seed: WastePro Douala Ltd for so1) + manager.
+    // Full page detail: back to the list + company identity.
+    expect(find.text('Back to companies'), findsOneWidget);
     expect(find.text('WastePro Douala Ltd'), findsWidgets);
-    expect(find.text('Jean Dooh'), findsWidgets);
-    // Edit / Delete actions are available from the detail view.
+
+    // KPI cards + charts specific to the detail page.
+    expect(find.text('Agencies'), findsWidgets);
+    expect(find.text('Managers'), findsWidgets);
+    expect(find.text('Clients'), findsWidgets);
+    expect(find.text('Collectors'), findsWidgets);
+    expect(find.text('Clients by status'), findsOneWidget);
+    expect(find.text('Clients by plan'), findsOneWidget);
+
+    // Actions in the header.
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+
+    // Scroll down to the agences table: the company's agencies + managers.
+    await tester.drag(
+      find.byType(ListView).first,
+      const Offset(0, -1000),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Douala — Bonanjo'), findsWidgets);
+    expect(find.text('Jean Dooh'), findsWidgets);
 
     await tester.pumpAndSettle();
   });

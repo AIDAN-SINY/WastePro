@@ -13,7 +13,7 @@ import 'providers/navigation_provider.dart';
 // Screens
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/login_screen.dart';
-import 'features/auth/screens/registration_sreen.dart';
+import 'features/auth/screens/pre_register_screen.dart';
 import 'features/home/client_dashboard.dart';
 import 'features/home/collector_dashboard.dart';
 import 'features/backoffice/backoffice_screen.dart';
@@ -121,8 +121,10 @@ class _WasteProAppState extends State<WasteProApp> {
           builder: (context, state) => const LoginScreen(),
         ),
         GoRoute(
+          // Pré-inscription client (candidature) : le compte réel n'est créé
+          // qu'après approbation par le chef d'agence.
           path: '/register',
-          builder: (context, state) => const RegistrationScreen(),
+          builder: (context, state) => const PreRegisterScreen(),
         ),
         GoRoute(
           path: '/console/:page',

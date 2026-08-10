@@ -6,6 +6,66 @@ import '../models.dart';
 import '../theme.dart';
 import 'toast.dart';
 
+/// Seuil de bascule web-first du backoffice (≥ 900 px, comme la sidebar).
+bool _isBoDesktop(BuildContext context) =>
+    MediaQuery.sizeOf(context).width >= 900;
+
+/// Rayon des coins d'une sheet : tous les coins sur desktop (dialogue
+/// centré), uniquement les coins hauts sur mobile (bottom sheet).
+BorderRadius _boSheetRadius(BuildContext context, {double radius = 22}) {
+  final r = Radius.circular(radius);
+  return _isBoDesktop(context) ? BorderRadius.all(r) : BorderRadius.vertical(top: r);
+}
+
+/// Ouvre une « sheet » du backoffice en mode web-first : dialogue centré
+/// sur desktop (≥ 900 px), bottom sheet classique sur mobile.
+///
+/// Le contenu [builder] est partagé — chaque feuille s'adapte au mode via
+/// [_isBoDesktop] (coins, poignée de drag, largeur bornée).
+Future<void> showBoSheet(
+  BuildContext context, {
+  required WidgetBuilder builder,
+}) {
+  if (_isBoDesktop(context)) {
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black45,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(
+          horizontal: 28,
+          vertical: 40,
+        ),
+        child: builder(dialogContext),
+      ),
+    );
+  }
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black45,
+    builder: builder,
+  );
+}
+
+/// Opens the review sheet for a client application (pre-registration).
+///
+/// The agency manager sees the applicant's details, picks the collector who
+/// will be assigned, then approves (which creates the client + login account)
+/// or rejects the application.
+Future<void> showBoReviewSheet(
+  BuildContext context, {
+  required BackofficeStore store,
+  required RegistrationModel reg,
+}) {
+  return showBoSheet(
+    context,
+    builder: (_) => _BoReviewSheet(store: store, reg: reg),
+  );
+}
+
 /// Opens the create/edit bottom sheet for an entity. [existing] is the model
 /// being edited, or null when creating.
 Future<void> showBoFormSheet(
@@ -14,35 +74,37 @@ Future<void> showBoFormSheet(
   required BoEntity type,
   Object? existing,
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black45,
+  return showBoSheet(
+    context,
     builder: (_) => _BoFormSheet(store: store, type: type, existing: existing),
   );
 }
 
 /// Opens the action sheet (Edit / Delete) for an item.
+///
+/// [extraLabel] / [onExtra] ajoute une action supplémentaire entre Edit et
+/// Delete (ex. « Reassign collector » pour un client).
 Future<void> showBoActionSheet(
   BuildContext context, {
   required VoidCallback onEdit,
   required VoidCallback onDelete,
+  String? extraLabel,
+  VoidCallback? onExtra,
 }) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black45,
-    builder: (_) => SafeArea(
+  return showBoSheet(
+    context,
+    builder: (sheetContext) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxWidth: 360),
               decoration: BoxDecoration(
                 color: BackofficeTheme.surface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: _boSheetRadius(sheetContext, radius: 16),
               ),
               child: Column(
                 children: [
@@ -54,7 +116,17 @@ Future<void> showBoActionSheet(
                       onEdit();
                     },
                   ),
-                  Divider(height: 1, color: BackofficeTheme.border),
+                  Divider(height: 1, color: BackofficeTheme.border),if (extraLabel != null && onExtra != null) ...[
+                  _ActionButton(
+                    icon: Icons.swap_horiz_rounded,
+                    label: extraLabel,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onExtra();
+                    },
+                  ),
+                    Divider(height: 1, color: BackofficeTheme.border),
+                  ],
                   _ActionButton(
                     icon: Icons.delete_outline_rounded,
                     label: 'Delete',
@@ -75,10 +147,11 @@ Future<void> showBoActionSheet(
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   width: double.infinity,
+                  constraints: const BoxConstraints(maxWidth: 360),
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   decoration: BoxDecoration(
                     color: BackofficeTheme.surface,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: _boSheetRadius(sheetContext, radius: 16),
                   ),
                   child: Text(
                     'Cancel',
@@ -464,82 +537,92 @@ class _BoFormSheetState extends State<_BoFormSheet> {
   @override
   Widget build(BuildContext context) {
     final inset = MediaQuery.of(context).viewInsets.bottom;
+    final desktop = _isBoDesktop(context);
     return Padding(
-      padding: EdgeInsets.only(bottom: inset),
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.88,
-        ),
-        decoration: const BoxDecoration(
-          color: BackofficeTheme.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 10),
-              decoration: BoxDecoration(
-                color: BackofficeTheme.border,
-                borderRadius: BorderRadius.circular(3),
-              ),
+      padding: EdgeInsets.only(bottom: desktop ? 0 : inset),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            // Desktop (web-first) : dialogue centré borné à 560 px ; mobile :
+            // pleine largeur (bottom sheet).
+            maxWidth: desktop ? 560 : double.infinity,
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: BackofficeTheme.surface,
+              borderRadius: _boSheetRadius(context),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 2, 12, 14),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(
-                      'Cancel',
-                      style: BackofficeTheme.inter(
-                        13,
-                        weight: FontWeight.w600,
-                        color: BackofficeTheme.muted,
-                      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Poignée de drag : réservée à la bottom sheet mobile.
+                if (!desktop)
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: BackofficeTheme.border,
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      _title,
-                      textAlign: TextAlign.center,
-                      style: BackofficeTheme.sora(
-                        14.5,
-                        weight: FontWeight.w700,
+                Padding(
+                  padding: EdgeInsets.fromLTRB(18, desktop ? 10 : 2, 12, 14),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Cancel',
+                          style: BackofficeTheme.inter(
+                            13,
+                            weight: FontWeight.w600,
+                            color: BackofficeTheme.muted,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  TextButton(
-                    key: const Key('bo_sheet_save'),
-                    onPressed: _save,
-                    child: Text(
-                      'OK',
-                      style: BackofficeTheme.inter(
-                        13,
-                        weight: FontWeight.w700,
-                        color: BackofficeTheme.green,
+                      Expanded(
+                        child: Text(
+                          _title,
+                          textAlign: TextAlign.center,
+                          style: BackofficeTheme.sora(
+                            14.5,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: BackofficeTheme.border),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _fields(),
+                      TextButton(
+                        key: const Key('bo_sheet_save'),
+                        onPressed: _save,
+                        child: Text(
+                          'OK',
+                          style: BackofficeTheme.inter(
+                            13,
+                            weight: FontWeight.w700,
+                            color: BackofficeTheme.green,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                Divider(height: 1, color: BackofficeTheme.border),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _fields(),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -888,6 +971,585 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: BackofficeTheme.green),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Review sheet (client applications)
+// ---------------------------------------------------------------------------
+
+class _BoReviewSheet extends StatefulWidget {
+  const _BoReviewSheet({required this.store, required this.reg});
+
+  final BackofficeStore store;
+  final RegistrationModel reg;
+
+  @override
+  State<_BoReviewSheet> createState() => _BoReviewSheetState();
+}
+
+class _BoReviewSheetState extends State<_BoReviewSheet> {
+  String _collecteurId = '';
+  bool _busy = false;
+
+  /// Collecteurs actifs disponibles pour l'assignation.
+  List<CollecteurModel> get _collecteurs => widget.store.collecteurs
+      .where((c) => c.status == 'Active' || c.status == 'Actif')
+      .toList();
+
+  String get _collecteurName {
+    for (final c in _collecteurs) {
+      if (c.id == _collecteurId) return c.name;
+    }
+    return '';
+  }
+
+  Future<void> _approve() async {
+    if (_collecteurId.isEmpty) {
+      BoToastService.show(
+        _collecteurs.isEmpty
+            ? 'Create an active collector first'
+            : 'Choose the collector to assign',
+        isError: true,
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.store.approveRegistration(
+        widget.reg,
+        collecteurId: _collecteurId,
+      );
+      if (mounted) Navigator.of(context).pop();
+      BoToastService.show(
+        '${widget.reg.fullName} approved and assigned to $_collecteurName',
+      );
+    } catch (e) {
+      if (mounted) BoToastService.show(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reject() async {
+    setState(() => _busy = true);
+    try {
+      await widget.store.rejectRegistration(widget.reg);
+      if (mounted) Navigator.of(context).pop();
+      BoToastService.show('Application rejected');
+    } catch (e) {
+      if (mounted) BoToastService.show(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reg = widget.reg;
+    final desktop = _isBoDesktop(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: desktop ? 0 : MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: desktop ? 560 : double.infinity,
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: BackofficeTheme.surface,
+              borderRadius: _boSheetRadius(context),
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(20, desktop ? 18 : 12, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!desktop)
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: BackofficeTheme.border,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  Text(
+                    'Review application',
+                    textAlign: TextAlign.center,
+                    style: BackofficeTheme.sora(15, weight: FontWeight.w700),
+                  ),
+              const SizedBox(height: 18),
+
+              // Applicant identity
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.greenSoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reg.fullName,
+                      style: BackofficeTheme.inter(
+                        15,
+                        weight: FontWeight.w700,
+                        color: BackofficeTheme.green,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _detail(Icons.phone_outlined, reg.phone),
+                    _detail(Icons.map_outlined, reg.zone),
+                    _detail(Icons.storefront_outlined, reg.agenceName),
+                    _detail(
+                      Icons.event_outlined,
+                      'Applied ${boFmtDate(reg.createdAt)}',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Collector assignment
+              Text(
+                'Assign a collector',
+                style: BackofficeTheme.inter(
+                  11.5,
+                  weight: FontWeight.w600,
+                  color: BackofficeTheme.muted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                key: const Key('bo_review_collector'),
+                initialValue: _collecteurId.isEmpty ? null : _collecteurId,
+                isExpanded: true,
+                hint: Text(
+                  _collecteurs.isEmpty
+                      ? 'No active collector yet'
+                      : 'Choose a collector',
+                  style: BackofficeTheme.inter(
+                    13,
+                    color: BackofficeTheme.muted,
+                  ),
+                ),
+                style: BackofficeTheme.inter(13.5),
+                dropdownColor: BackofficeTheme.surface,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: BackofficeTheme.muted,
+                ),
+                decoration: _dec(null),
+                items: [
+                  for (final c in _collecteurs)
+                    DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        '${c.name} · ★ ${c.rating.toStringAsFixed(1)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _collecteurId = v ?? ''),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'One collector can serve several clients — you can reassign '
+                'them anytime from the Clients page.',
+                style: BackofficeTheme.inter(
+                  10.5,
+                  color: BackofficeTheme.muted,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Actions
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('bo_review_reject'),
+                      onPressed: _busy ? null : _reject,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: BackofficeTheme.red,
+                        side: const BorderSide(color: BackofficeTheme.red),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                      ),
+                      child: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      key: const Key('bo_review_approve'),
+                      onPressed: _busy ? null : _approve,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: BackofficeTheme.green,
+                        foregroundColor: BackofficeTheme.cream,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                      ),
+                      child: _busy
+                          ? const SizedBox(
+                              width: 15,
+                              height: 15,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: BackofficeTheme.cream,
+                              ),
+                            )
+                          : const Text('Approve'),
+                    ),
+                  ),
+                ],
+              ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  Widget _detail(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: BackofficeTheme.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: BackofficeTheme.inter(
+                12.5,
+                color: BackofficeTheme.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _dec(String? hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: BackofficeTheme.inter(13, color: BackofficeTheme.muted),
+      filled: true,
+      fillColor: BackofficeTheme.bg,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: BackofficeTheme.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: BackofficeTheme.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: BackofficeTheme.green),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reassign collector sheet (client)
+// ---------------------------------------------------------------------------
+
+/// Opens the reassign sheet for a client: pick the collector who will now
+/// serve this client. Updates the client, its login account and the upcoming
+/// collections.
+Future<void> showBoReassignSheet(
+  BuildContext context, {
+  required BackofficeStore store,
+  required ClientModel client,
+}) {
+  return showBoSheet(
+    context,
+    builder: (_) => _BoReassignSheet(store: store, client: client),
+  );
+}
+
+class _BoReassignSheet extends StatefulWidget {
+  const _BoReassignSheet({required this.store, required this.client});
+
+  final BackofficeStore store;
+  final ClientModel client;
+
+  @override
+  State<_BoReassignSheet> createState() => _BoReassignSheetState();
+}
+
+class _BoReassignSheetState extends State<_BoReassignSheet> {
+  late String _collecteurId;
+  bool _busy = false;
+
+  /// Collecteurs actifs disponibles pour l'assignation.
+  List<CollecteurModel> get _collecteurs => widget.store.collecteurs
+      .where((c) => c.status == 'Active' || c.status == 'Actif')
+      .toList();
+
+  String get _collecteurName {
+    for (final c in _collecteurs) {
+      if (c.id == _collecteurId) return c.name;
+    }
+    return '';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Pré-sélectionne le collecteur actuel s'il est toujours actif.
+    _collecteurId = _collecteurs.any((c) => c.id == widget.client.collecteurId)
+        ? widget.client.collecteurId
+        : '';
+  }
+
+  Future<void> _confirm() async {
+    if (_collecteurId.isEmpty) {
+      BoToastService.show('Choose the collector to assign', isError: true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await widget.store.reassignCollecteur(
+        clientId: widget.client.id,
+        collecteurId: _collecteurId,
+      );
+      if (mounted) Navigator.of(context).pop();
+      BoToastService.show(
+        '${widget.client.name} is now assigned to $_collecteurName',
+      );
+    } catch (e) {
+      if (mounted) BoToastService.show(e.toString(), isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final client = widget.client;
+    final desktop = _isBoDesktop(context);
+    final current = widget.store.collecteurs
+        .where((c) => c.id == client.collecteurId)
+        .map((c) => c.name)
+        .toList();
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: desktop ? 0 : MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: desktop ? 560 : double.infinity,
+            maxHeight: MediaQuery.of(context).size.height * 0.88,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: BackofficeTheme.surface,
+              borderRadius: _boSheetRadius(context),
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(20, desktop ? 18 : 12, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!desktop)
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: BackofficeTheme.border,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  Text(
+                    'Reassign collector',
+                    textAlign: TextAlign.center,
+                    style: BackofficeTheme.sora(15, weight: FontWeight.w700),
+                  ),
+              const SizedBox(height: 18),
+
+              // Client identity
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.greenSoft,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      client.name,
+                      style: BackofficeTheme.inter(
+                        15,
+                        weight: FontWeight.w700,
+                        color: BackofficeTheme.green,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _detail(Icons.map_outlined, client.zone),
+                    _detail(
+                      Icons.person_outline_rounded,
+                      current.isEmpty
+                          ? 'No collector assigned'
+                          : 'Current collector: ${current.first}',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              Text(
+                'New collector',
+                style: BackofficeTheme.inter(
+                  11.5,
+                  weight: FontWeight.w600,
+                  color: BackofficeTheme.muted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                key: const Key('bo_reassign_collector'),
+                initialValue: _collecteurId.isEmpty ? null : _collecteurId,
+                isExpanded: true,
+                hint: Text(
+                  _collecteurs.isEmpty
+                      ? 'No active collector yet'
+                      : 'Choose a collector',
+                  style: BackofficeTheme.inter(
+                    13,
+                    color: BackofficeTheme.muted,
+                  ),
+                ),
+                style: BackofficeTheme.inter(13.5),
+                dropdownColor: BackofficeTheme.surface,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: BackofficeTheme.muted,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: BackofficeTheme.bg,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: BackofficeTheme.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: BackofficeTheme.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: BackofficeTheme.green),
+                  ),
+                ),
+                items: [
+                  for (final c in _collecteurs)
+                    DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        '${c.name} · ★ ${c.rating.toStringAsFixed(1)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _collecteurId = v ?? ''),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'One collector can serve several clients. The client, its '
+                'login account and the upcoming collections will be '
+                'updated. Completed pickups keep their history.',
+                style: BackofficeTheme.inter(
+                  10.5,
+                  color: BackofficeTheme.muted,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                key: const Key('bo_reassign_confirm'),
+                onPressed: _busy ? null : _confirm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BackofficeTheme.green,
+                  foregroundColor: BackofficeTheme.cream,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                ),
+                child: _busy
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: BackofficeTheme.cream,
+                        ),
+                      )
+                    : Text(
+                        _collecteurId.isEmpty
+                            ? 'Choose a collector'
+                            : 'Confirm reassignment',
+                        style: BackofficeTheme.inter(
+                          13.5,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  Widget _detail(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: BackofficeTheme.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: BackofficeTheme.inter(
+                12.5,
+                color: BackofficeTheme.text,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

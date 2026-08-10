@@ -50,7 +50,8 @@ void main() {
 
     expect(find.text('Jean Dooh'), findsOneWidget);
     expect(find.text('Marie Ekwalla'), findsOneWidget);
-    expect(find.text('Bonanjo · Standard'), findsOneWidget);
+    // La carte affiche aussi le collecteur assigné au client.
+    expect(find.text('Bonanjo · Standard · Paul Mbarga'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -218,7 +219,7 @@ void main() {
     await tester.tap(find.text('Clients').first);
     await tester.pumpAndSettle();
     expect(find.text('Jean Dooh'), findsOneWidget);
-    expect(find.text('Bonanjo · Standard'), findsOneWidget);
+    expect(find.text('Bonanjo · Standard · Paul Mbarga'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // Bouton d'action web-first visible (remplace le FAB mobile) et toggle
@@ -250,6 +251,257 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('desktop : le review d\'application est un dialogue centré', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: BackofficeScreen(store: BackofficeStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Aller sur la page Applications via la sidebar.
+    await tester.tap(find.text('Applications').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review').first);
+    await tester.pumpAndSettle();
+
+    // Web-first : dialogue centré (Dialog), pas de bottom sheet.
+    expect(find.text('Review application'), findsOneWidget);
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // Ferme le dialogue en tapant sur la barrière (hors de la boîte).
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+  });
+
+  testWidgets('desktop : la sidebar affiche le nom de l\'agence', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final store = _NamedBackofficeStore('Douala — Bonanjo');
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: BackofficeScreen(store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Nom de l'agence dans le footer de la sidebar (desktop).
+    expect(find.text('Douala — Bonanjo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile : le review d\'application reste une bottom sheet', (
+    tester,
+  ) async {
+    // Petit écran → bottom sheet (pas de dialogue centré).
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: BackofficeScreen(store: BackofficeStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_applications')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Review application'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('dashboard shows the pending applications section', (
+    tester,
+  ) async {
+    await pumpBackoffice(tester, BackofficeStore());
+
+    // Titre de section + en-tête de la carte (le menu latéral porte un
+    // libellé « Applications », distinct).
+    expect(find.text('Pending applications'), findsWidgets);
+    expect(find.text('2 to review'), findsOneWidget);
+    expect(find.text('Carine Mbappe'), findsOneWidget);
+    expect(find.text('Landry Fokou'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('applications page lists the applications', (tester) async {
+    await pumpBackoffice(tester, BackofficeStore());
+
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_applications')));
+    await tester.pumpAndSettle();
+
+    // Les 3 candidatures (2 pending + 1 approved) sont listées.
+    expect(find.text('Carine Mbappe'), findsOneWidget);
+    expect(find.text('Landry Fokou'), findsOneWidget);
+    expect(find.text('Yolande Essomba'), findsOneWidget);
+    // Seules les candidatures en attente ont un bouton Review.
+    expect(find.text('Review'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('review flow approves an application and assigns a collector', (
+    tester,
+  ) async {
+    final store = BackofficeStore();
+    await pumpBackoffice(tester, store);
+
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_applications')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Review').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Review application'), findsOneWidget);
+
+    // Choisir un collecteur actif puis approuver.
+    await tester.tap(find.byKey(const Key('bo_review_collector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paul Mbarga · ★ 4.8').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_review_approve')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3)); // toast timer
+
+    // La candidature est approuvée avec le collecteur assigné…
+    expect(store.pendingRegistrations.length, 1);
+    final approved = store.registrations.firstWhere(
+      (r) => r.fullName == 'Carine Mbappe',
+    );
+    expect(approved.status, 'approved');
+    expect(approved.collecteurId, 'co1');
+    // … et le client a été créé (un collecteur peut avoir plusieurs clients).
+    final client = store.clients.firstWhere((c) => c.name == 'Carine Mbappe');
+    expect(client.collecteurId, 'co1');
+    expect(client.status, 'Active');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('review flow can reject an application', (tester) async {
+    final store = BackofficeStore();
+    await pumpBackoffice(tester, store);
+
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_applications')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Review').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_review_reject')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+
+    final rejected = store.registrations.firstWhere(
+      (r) => r.fullName == 'Carine Mbappe',
+    );
+    expect(rejected.status, 'rejected');
+    expect(store.pendingRegistrations.length, 1);
+    expect(store.clients.any((c) => c.name == 'Carine Mbappe'), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reassign collector from the client card', (tester) async {
+    final store = BackofficeStore();
+    await pumpBackoffice(tester, store);
+
+    await tester.tap(find.byKey(const Key('bo_tab_clients')));
+    await tester.pumpAndSettle();
+
+    // Kebab de Jean Dooh → action « Reassign collector ».
+    final card = find.ancestor(
+      of: find.text('Jean Dooh'),
+      matching: find.byType(BoItemCard),
+    );
+    await tester.tap(
+      find.descendant(
+        of: card,
+        matching: find.byIcon(Icons.more_horiz_rounded),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Edit'), findsOneWidget);
+    await tester.tap(find.text('Reassign collector'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reassign collector'), findsWidgets);
+
+    // Choisir Vincent Onana puis confirmer.
+    await tester.tap(find.byKey(const Key('bo_reassign_collector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vincent Onana · ★ 4.5').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_reassign_confirm')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3)); // toast timer
+
+    // La fiche client porte le nouveau collecteur.
+    final client = store.clients.firstWhere((c) => c.name == 'Jean Dooh');
+    expect(client.collecteurId, 'co2');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reassign sheet refuses without a chosen collector', (
+    tester,
+  ) async {
+    final store = BackofficeStore();
+    await pumpBackoffice(tester, store);
+
+    await tester.tap(find.byKey(const Key('bo_tab_clients')));
+    await tester.pumpAndSettle();
+
+    // Samuel Njoya (suspendu) n'a pas de collecteur assigné : le champ est
+    // vide par défaut, confirmer sans choisir est refusé.
+    final card = find.ancestor(
+      of: find.text('Samuel Njoya'),
+      matching: find.byType(BoItemCard),
+    );
+    await tester.tap(
+      find.descendant(
+        of: card,
+        matching: find.byIcon(Icons.more_horiz_rounded),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reassign collector'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reassign collector'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('bo_reassign_confirm')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+
+    // La feuille reste ouverte, aucune réassignation.
+    expect(find.text('Reassign collector'), findsWidgets);
+    expect(
+      store.clients.firstWhere((c) => c.name == 'Samuel Njoya').collecteurId,
+      '',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filter chips narrow the client list', (tester) async {
     await pumpBackoffice(tester, BackofficeStore());
 
@@ -272,4 +524,12 @@ void main() {
     expect(find.text('Jean Dooh'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
+
+/// Store mock avec un nom d'agence pré-rempli (simule le store Firestore
+/// scopé qui charge `agences/{agenceId}`).
+class _NamedBackofficeStore extends BackofficeStore {
+  _NamedBackofficeStore(String agenceName) {
+    setAgenceName(agenceName);
+  }
 }

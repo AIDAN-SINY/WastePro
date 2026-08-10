@@ -7,6 +7,7 @@ import '../../providers/user_provider.dart';
 import 'data/backoffice_store.dart';
 import 'data/firestore_backoffice_store.dart';
 import 'models.dart';
+import 'pages/applications_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/list_page.dart';
 import 'pages/settings_page.dart';
@@ -66,6 +67,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
 
   static const _titles = <String, String>{
     'dashboard': 'Overview',
+    'applications': 'Applications',
     'clients': 'Clients',
     'collecteurs': 'Collectors',
     'contrats': 'Contracts',
@@ -77,6 +79,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
   /// Entrées de la sidebar desktop : (page, icône, label).
   static const List<(String, IconData, String)> _desktopNav = [
     ('dashboard', Icons.home_rounded, 'Overview'),
+    ('applications', Icons.how_to_reg_rounded, 'Applications'),
     ('clients', Icons.people_outline_rounded, 'Clients'),
     ('collecteurs', Icons.person_search_rounded, 'Collectors'),
     ('contrats', Icons.description_outlined, 'Contracts'),
@@ -130,6 +133,8 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
 
   String get _subtitle {
     switch (_page) {
+      case 'applications':
+        return '${_store.pendingRegistrations.length} pending';
       case 'clients':
         return '${_store.clients.length} registered';
       case 'collecteurs':
@@ -326,12 +331,22 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final entry in _desktopNav)
-                      _desktopNavItem(entry.$1, entry.$2, entry.$3),
-                  ],
+                child: ListenableBuilder(
+                  listenable: _store,
+                  builder: (context, _) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final entry in _desktopNav)
+                        _desktopNavItem(
+                          entry.$1,
+                          entry.$2,
+                          entry.$3,
+                          badge: entry.$1 == 'applications'
+                              ? _pendingBadge
+                              : null,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -343,7 +358,18 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     );
   }
 
-  Widget _desktopNavItem(String page, IconData icon, String label) {
+  /// Badge « N à revoir » des candidatures en attente (null si rien).
+  String? get _pendingBadge {
+    final n = _store.pendingRegistrations.length;
+    return n > 0 ? '$n' : null;
+  }
+
+  Widget _desktopNavItem(
+    String page,
+    IconData icon,
+    String label, {
+    String? badge,
+  }) {
     final active = _page == page;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -388,7 +414,32 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                   ),
                 ),
               ),
+              _navBadge(badge),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Badge de navigation nullable : `SizedBox.shrink` quand il n'y a rien à
+  /// afficher (évite les problèmes de promotion de type dans les collections).
+  static Widget _navBadge(String? text) {
+    if (text == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: BackofficeTheme.gold,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          style: BackofficeTheme.inter(
+            9.5,
+            weight: FontWeight.w700,
+            color: const Color(0xFF2A1B05),
           ),
         ),
       ),
@@ -406,51 +457,60 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     }
     final user = userProvider?.user;
     final label = user != null ? user.fullName : 'Agency Manager';
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 18),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0x1FE9F2ED))),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: BackofficeTheme.inter(
-                    12,
-                    weight: FontWeight.w600,
-                    color: BackofficeTheme.cream,
+    return ListenableBuilder(
+      listenable: _store,
+      builder: (context, _) => Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 18),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Color(0x1FE9F2ED))),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: BackofficeTheme.inter(
+                      12,
+                      weight: FontWeight.w600,
+                      color: BackofficeTheme.cream,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Agency Manager',
-                  style: BackofficeTheme.inter(
-                    10.5,
-                    color: const Color(0x80E9F2ED),
+                  const SizedBox(height: 2),
+                  // Nom de l'agence quand il est chargé (store scopé) —
+                  // sinon le rôle.
+                  Text(
+                    _store.agenceName.isEmpty
+                        ? 'Agency Manager'
+                        : _store.agenceName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: BackofficeTheme.inter(
+                      10.5,
+                      color: const Color(0x80E9F2ED),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          if (user != null)
-            IconButton(
-              key: const Key('bo_bo_logout'),
-              tooltip: 'Log out',
-              onPressed: () =>
-                  Provider.of<UserProvider>(context, listen: false).logout(),
-              icon: const Icon(
-                Icons.logout_rounded,
-                size: 18,
-                color: Color(0x80E9F2ED),
+                ],
               ),
             ),
-        ],
+            if (user != null)
+              IconButton(
+                key: const Key('bo_bo_logout'),
+                tooltip: 'Log out',
+                onPressed: () =>
+                    Provider.of<UserProvider>(context, listen: false).logout(),
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  size: 18,
+                  color: Color(0x80E9F2ED),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -584,6 +644,8 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
 
   Widget _pageContent({bool desktop = false}) {
     switch (_page) {
+      case 'applications':
+        return BoApplicationsPage(store: _store, desktop: desktop);
       case 'clients':
         return BoListPage(
           store: _store,
@@ -954,61 +1016,78 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
           color: BackofficeTheme.green,
           child: SafeArea(
             right: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 10, 20, 22),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.recycling_rounded,
-                        size: 26,
-                        color: BackofficeTheme.gold,
-                      ),
-                      SizedBox(width: 9),
-                      Text.rich(
-                        TextSpan(
-                          text: 'Waste',
-                          style: TextStyle(
-                            fontFamily: 'Sora',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: BackofficeTheme.cream,
-                          ),
-                          children: [
-                            TextSpan(
-                              text: 'Pro',
-                              style: TextStyle(
-                                fontFamily: 'Sora',
-                                fontWeight: FontWeight.w700,
-                                color: BackofficeTheme.gold,
-                              ),
-                            ),
-                          ],
+            child: ListenableBuilder(
+              listenable: _store,
+              builder: (context, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 22),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.recycling_rounded,
+                          size: 26,
+                          color: BackofficeTheme.gold,
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 9),
+                        Text.rich(
+                          TextSpan(
+                            text: 'Waste',
+                            style: TextStyle(
+                              fontFamily: 'Sora',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: BackofficeTheme.cream,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: 'Pro',
+                                style: TextStyle(
+                                  fontFamily: 'Sora',
+                                  fontWeight: FontWeight.w700,
+                                  color: BackofficeTheme.gold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                _menuItem('dashboard', Icons.home_rounded, 'Overview'),
-                _menuItem('clients', Icons.people_outline_rounded, 'Clients'),
-                _menuItem(
-                  'collecteurs',
-                  Icons.person_search_rounded,
-                  'Collectors',
-                ),
-                _menuItem('contrats', Icons.description_outlined, 'Contracts'),
-                _menuItem('collectes', Icons.event_note_rounded, 'Collections'),
-                _menuItem(
-                  'facturation',
-                  Icons.payments_outlined,
-                  'Billing',
-                ),
-                _menuItem('parametres', Icons.settings_outlined, 'Settings'),
-                const Spacer(),
-                _menuFooter(),
-              ],
+                  _menuItem('dashboard', Icons.home_rounded, 'Overview'),
+                  _menuItem(
+                    'applications',
+                    Icons.how_to_reg_rounded,
+                    'Applications',
+                    badge: _pendingBadge,
+                  ),
+                  _menuItem('clients', Icons.people_outline_rounded, 'Clients'),
+                  _menuItem(
+                    'collecteurs',
+                    Icons.person_search_rounded,
+                    'Collectors',
+                  ),
+                  _menuItem(
+                    'contrats',
+                    Icons.description_outlined,
+                    'Contracts',
+                  ),
+                  _menuItem(
+                    'collectes',
+                    Icons.event_note_rounded,
+                    'Collections',
+                  ),
+                  _menuItem(
+                    'facturation',
+                    Icons.payments_outlined,
+                    'Billing',
+                  ),
+                  _menuItem('parametres', Icons.settings_outlined, 'Settings'),
+                  const Spacer(),
+                  _menuFooter(),
+                ],
+              ),
             ),
           ),
         ),
@@ -1016,7 +1095,12 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     );
   }
 
-  Widget _menuItem(String page, IconData icon, String label) {
+  Widget _menuItem(
+    String page,
+    IconData icon,
+    String label, {
+    String? badge,
+  }) {
     final active = _page == page;
     return InkWell(
       key: Key('bo_menu_$page'),
@@ -1034,14 +1118,18 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
               color: active ? BackofficeTheme.gold : const Color(0xBFE9F2ED),
             ),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: BackofficeTheme.inter(
-                13.5,
-                weight: FontWeight.w500,
-                color: active ? BackofficeTheme.gold : const Color(0xBFE9F2ED),
+            Expanded(
+              child: Text(
+                label,
+                style: BackofficeTheme.inter(
+                  13.5,
+                  weight: FontWeight.w500,
+                  color:
+                      active ? BackofficeTheme.gold : const Color(0xBFE9F2ED),
+                ),
               ),
             ),
+            _navBadge(badge),
           ],
         ),
       ),
@@ -1081,8 +1169,12 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                   ),
                 ),
                 const SizedBox(height: 2),
+                // Nom de l'agence quand il est chargé (store scopé) —
+                // sinon le rôle.
                 Text(
-                  'Admin',
+                  _store.agenceName.isEmpty ? 'Admin' : _store.agenceName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: BackofficeTheme.inter(
                     10.5,
                     color: const Color(0x80E9F2ED),

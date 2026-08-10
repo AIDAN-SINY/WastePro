@@ -14,6 +14,7 @@ import '../widgets/form_validation.dart';
 import '../widgets/page_toolbar.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/status_badge.dart';
+import 'societe_detail_page.dart';
 
 class SocietesPage extends StatefulWidget {
   const SocietesPage({super.key});
@@ -27,6 +28,10 @@ class SocietesPageState extends State<SocietesPage> {
 
   int _filter = 0;
   final Map<String, dynamic> _form = {};
+
+  /// Id de la société affichée dans la fiche détail (pleine page). Null =
+  /// on est sur la liste.
+  String? _detailSocieteId;
 
   /// Opens the "New company" drawer (used by the command palette).
   void openCreate() {
@@ -87,6 +92,18 @@ class SocietesPageState extends State<SocietesPage> {
     );
   }
 
+  /// Ouvre la fiche détail d'une société — page pleine grandeur (le super
+  /// admin voit tout : KPIs, graphiques, agences, managers, clients,
+  /// collecteurs de la compagnie).
+  void openDetail(SocieteModel societe) {
+    setState(() => _detailSocieteId = societe.id);
+  }
+
+  /// Revient de la fiche détail à la liste des sociétés.
+  void _closeDetail() {
+    setState(() => _detailSocieteId = null);
+  }
+
   Future<void> confirmDelete(SocieteModel societe) async {
     // A société with attached agences cannot be deleted: this would leave
     // orphan agences referencing a company that no longer exists.
@@ -114,6 +131,8 @@ class SocietesPageState extends State<SocietesPage> {
     if (confirmed == true && mounted) {
       try {
         await context.read<PlatformStore>().deleteSociete(societe.id);
+        // Supprimée depuis la fiche détail → retour à la liste.
+        if (mounted && _detailSocieteId == societe.id) _closeDetail();
         if (mounted) ToastService.show('Item deleted.');
       } catch (e) {
         if (mounted) ToastService.show(e.toString(), isError: true);
@@ -176,6 +195,29 @@ class SocietesPageState extends State<SocietesPage> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<PlatformStore>();
+
+    // Fiche détail pleine page : on remplace la liste tant qu'une société
+    // est sélectionnée. La société est re-résolue à chaque build depuis le
+    // store (elle peut avoir été éditée/supprimée entre-temps).
+    if (_detailSocieteId != null) {
+      SocieteModel? societe;
+      for (final s in store.societes) {
+        if (s.id == _detailSocieteId) {
+          societe = s;
+          break;
+        }
+      }
+      // Supprimée depuis la fiche → retour à la liste.
+      if (societe != null) {
+        return SocieteDetailPage(
+          societeId: societe.id,
+          onBack: _closeDetail,
+          onEdit: openEdit,
+          onDelete: (s) => confirmDelete(s),
+        );
+      }
+    }
+
     final statusFilter =
         _filter == 1 ? 'Active' : (_filter == 2 ? 'Suspended' : null);
     // Match both the English values and the legacy French ones ('Actif' /
@@ -248,7 +290,8 @@ class SocietesPageState extends State<SocietesPage> {
               ),
             ],
           ),
-          onRowTap: openEdit,
+          // Clic sur une ligne → fiche détail pleine page de la société.
+          onRowTap: openDetail,
         ),
       ],
     );

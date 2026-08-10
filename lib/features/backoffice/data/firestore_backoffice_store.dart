@@ -35,6 +35,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     // Never flash the design's mock data in the real backoffice.
     clients.clear();
     collecteurs.clear();
+    registrations.clear();
     load();
   }
 
@@ -53,6 +54,11 @@ class FirestoreBackofficeStore extends BackofficeStore {
 
   /// Vrai quand le backoffice est limité à une agence (Phase 3).
   bool _isScoped = false;
+
+  /// Vrai après [dispose] : aucune notification ne doit plus être émise
+  /// (garde pour les lectures one-shot comme [_loadAgenceName], qui ne
+  /// passent pas par un abonnement annulable).
+  bool _disposed = false;
 
   final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>> _subs =
       [];
@@ -75,7 +81,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     _cancelSubscriptions();
     setLoading(true);
     setErrorValue(null);
-    _pending = 2;
+    _pending = 3;
     _seededClients = false;
     _seededCollecteurs = false;
     _loadCompleter = Completer<void>();
@@ -89,6 +95,13 @@ class FirestoreBackofficeStore extends BackofficeStore {
     final collecteursQuery = _isScoped
         ? _db.collection('collecteurs').where('agenceId', isEqualTo: agenceId)
         : _db.collection('collecteurs');
+    // Candidatures : celles adressées à cette agence (sélection dans le
+    // formulaire client).
+    final registrationsQuery = _isScoped
+        ? _db
+              .collection('registrations')
+              .where('agenceId', isEqualTo: agenceId)
+        : _db.collection('registrations');
 
     _subs.add(
       clientsQuery.snapshots().listen(_onClients, onError: handleStreamError),
@@ -98,8 +111,33 @@ class FirestoreBackofficeStore extends BackofficeStore {
           .snapshots()
           .listen(_onCollecteurs, onError: handleStreamError),
     );
+    _subs.add(
+      registrationsQuery
+          .snapshots()
+          .listen(_onRegistrations, onError: handleStreamError),
+    );
+
+    // Phase 3 : charge le nom de l'agence (affiché dans la sidebar) depuis
+    // `agences/{agenceId}`. Silencieux : le nom est décoratif, un échec ne
+    // doit pas bloquer le backoffice.
+    if (_isScoped && agenceId.isNotEmpty) {
+      _loadAgenceName();
+    }
 
     await _loadCompleter!.future;
+  }
+
+  /// Lit `agences/{agenceId}` et expose son `ville` comme nom d'agence.
+  Future<void> _loadAgenceName() async {
+    try {
+      final doc = await _db.collection('agences').doc(agenceId).get();
+      if (_disposed) return;
+      if (!doc.exists) return;
+      final name = doc.data()?['ville'] as String? ?? '';
+      if (name.isNotEmpty) setAgenceName(name);
+    } catch (_) {
+      // Silencieux (voir [load]).
+    }
   }
 
   // --- Snapshot handlers ---
@@ -127,6 +165,13 @@ class FirestoreBackofficeStore extends BackofficeStore {
       );
       _seedCollectorWhitelist();
     }
+    _markLoaded();
+  }
+
+  void _onRegistrations(QuerySnapshot<Map<String, dynamic>> qs) {
+    registrations
+      ..clear()
+      ..addAll(qs.docs.map((d) => RegistrationModel.fromMap(d.data())));
     _markLoaded();
   }
 
@@ -212,6 +257,183 @@ class FirestoreBackofficeStore extends BackofficeStore {
   /// (les données viennent de l'entreprise, pas du seed).
   bool get _seedEnabled => seedIfEmpty && !_isScoped;
 
+  // --- Candidatures (pré-inscriptions clients) ---
+
+  @override
+  Future<void> approveRegistration(
+    RegistrationModel reg, {
+    required String collecteurId,
+  }) async {
+    final clientId = nextId();
+    final client = ClientModel(
+      id: clientId,
+      name: reg.fullName,
+      phone: reg.phone,
+      zone: reg.zone,
+      plan: 'Standard',
+      status: 'Active',
+      agenceId: reg.agenceId,
+      societeId: reg.societeId,
+      collecteurId: collecteurId,
+    );
+    final canonical = _canonicalPhone(reg.phone);
+    // Garde anti-doublon : une candidature déjà traitée (ou supprimée) ne
+    // doit jamais créer un second client + compte de connexion. Vérifiée
+    // AVANT l'écriture — l'approbation est atomique ou rien.
+    final regDoc = await _db.collection('registrations').doc(reg.id).get();
+    if (!regDoc.exists) {
+      throw _SyncError('This application no longer exists.');
+    }
+    if (regDoc.data()?['status'] != 'pending') {
+      throw _SyncError('This application has already been reviewed.');
+    }
+    try {
+      final batch = _db.batch();
+      // 1. Le client (le mot de passe choisi par le client est conservé
+      //    dans le doc, comme pour les clients créés à la main).
+      batch.set(_db.collection('clients').doc(clientId), {
+        ...client.toMap(),
+        'password': reg.password,
+      });
+      // 2. Son compte de connexion : il peut enfin se connecter.
+      if (canonical.isNotEmpty && reg.password.isNotEmpty) {
+        batch.set(_db.collection('users').doc(canonical), {
+          'phoneNumber': canonical,
+          'fullName': reg.fullName,
+          'role': 'client',
+          'password': reg.password,
+          'subscription_plan': 'Standard',
+          'isSubscribed': true,
+          'agenceId': reg.agenceId,
+          'societeId': reg.societeId,
+          'collecteurId': collecteurId,
+          // Marqueur : compte créé/géré par le backoffice admin.
+          'consoleCreated': true,
+        });
+      }
+      // 3. La candidature passe à 'approved' avec le collecteur assigné.
+      batch.update(_db.collection('registrations').doc(reg.id), {
+        'status': 'approved',
+        'collecteurId': collecteurId,
+      });
+      await batch.commit();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    // Mise à jour locale optimiste (le snapshot confirmera).
+    final index = registrations.indexWhere((r) => r.id == reg.id);
+    final updated = reg.copyWith(status: 'approved', collecteurId: collecteurId);
+    if (index != -1) {
+      registrations[index] = updated;
+    } else {
+      registrations.add(updated);
+    }
+    if (!clients.any((c) => c.id == clientId)) clients.add(client);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> rejectRegistration(RegistrationModel reg) async {
+    try {
+      await _db.collection('registrations').doc(reg.id).update({
+        'status': 'rejected',
+      });
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = registrations.indexWhere((r) => r.id == reg.id);
+    final updated = reg.copyWith(status: 'rejected');
+    if (index != -1) {
+      registrations[index] = updated;
+    } else {
+      registrations.add(updated);
+    }
+    notifyListeners();
+  }
+
+  /// Réassigne le collecteur d'un client — atomiquement :
+  ///   1. `clients/{id}` porte le nouveau `collecteurId` ;
+  ///   2. le compte de connexion `users/{téléphone}` est mis à jour (l'app
+  ///      client connaît son nouveau collecteur) ;
+  ///   3. les collectes à venir du client (Scheduled / Missed) portant
+  ///      l'ancien collecteur basculent vers le nouveau — l'historique des
+  ///      collectes effectuées ne change pas.
+  @override
+  Future<void> reassignCollecteur({
+    required String clientId,
+    required String collecteurId,
+  }) async {
+    ClientModel? client;
+    for (final c in clients) {
+      if (c.id == clientId) {
+        client = c;
+        break;
+      }
+    }
+    if (client == null) return;
+    if (client.collecteurId == collecteurId) return;
+
+    final oldName = collecteurNameFor(collecteurs, client.collecteurId);
+    final newName = collecteurNameFor(collecteurs, collecteurId);
+    final canonical = _canonicalPhone(client.phone);
+
+    try {
+      final batch = _db.batch();
+      // 1. Le client porte son nouveau collecteur (merge : on ne touche qu'à
+      //    ce champ, même si le doc a été modifié hors console).
+      batch.set(
+        _db.collection('clients').doc(clientId),
+        {'collecteurId': collecteurId},
+        SetOptions(merge: true),
+      );
+      // 2. Le compte de connexion est mis à jour s'il existe.
+      if (canonical.isNotEmpty) {
+        final login = await _db.collection('users').doc(canonical).get();
+        if (login.exists) {
+          batch.update(login.reference, {'collecteurId': collecteurId});
+        }
+      }
+      // 3. Les collectes à venir de ce client portant l'ancien collecteur.
+      //    ⚠️ CollecteModel n'a pas encore d'agenceId : la correspondance se
+      //    fait par NOM de client. Tant que deux agences ne partagent pas le
+      //    même nom de client, c'est sans risque — à réviser quand `collectes`
+      //    portera agenceId (multi-tenant).
+      if (newName.isNotEmpty && oldName.isNotEmpty) {
+        final upcoming = await _db
+            .collection('collectes')
+            .where('client', isEqualTo: client.name)
+            .get();
+        for (final doc in upcoming.docs) {
+          final data = doc.data();
+          final status = data['status'] as String? ?? '';
+          final isDone = status == 'Completed' || status == 'Effectué';
+          if (!isDone && data['collecteur'] == oldName) {
+            batch.update(doc.reference, {'collecteur': newName});
+          }
+        }
+      }
+      await batch.commit();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+
+    // Mise à jour locale optimiste (le snapshot confirmera).
+    final idx = clients.indexWhere((c) => c.id == clientId);
+    if (idx != -1) clients[idx] = client.copyWith(collecteurId: collecteurId);
+    if (newName.isNotEmpty && oldName.isNotEmpty) {
+      for (var i = 0; i < collectes.length; i++) {
+        final col = collectes[i];
+        final isDone = col.status == 'Completed' || col.status == 'Effectué';
+        if (!isDone &&
+            col.client == client.name &&
+            col.collecteur == oldName) {
+          collectes[i] = col.copyWith(collecteur: newName);
+        }
+      }
+    }
+    notifyListeners();
+  }
+
   // --- Clients CRUD ---
 
   @override
@@ -248,6 +470,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       active: _isActive(status),
       subscriptionPlan: plan,
       isSubscribed: _isActive(status),
+      collecteurId: model.collecteurId,
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
     final index = clients.indexWhere((c) => c.id == model.id);
@@ -286,6 +509,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       active: _isActive(updated.status),
       subscriptionPlan: updated.plan,
       isSubscribed: _isActive(updated.status),
+      collecteurId: updated.collecteurId,
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
     final index = clients.indexWhere((c) => c.id == updated.id);
@@ -452,6 +676,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     bool? isSubscribed,
     bool whitelist = false,
     String? oldPhone,
+    String collecteurId = '',
   }) async {
     final canonical = _canonicalPhone(phone);
     final oldCanonical = oldPhone == null ? '' : _canonicalPhone(oldPhone);
@@ -489,6 +714,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
             'password': finalPassword,
             'subscription_plan': ?subscriptionPlan,
             'isSubscribed': ?isSubscribed,
+            // Le collecteur du client est porté par son compte : l'app
+            // client peut afficher / contacter le bon collecteur.
+            'collecteurId': collecteurId,
             // Marqueur : compte créé/géré par le backoffice admin — seul ce
             // type de compte peut être écrasé ou supprimé proprement.
             'consoleCreated': true,
@@ -566,7 +794,14 @@ class FirestoreBackofficeStore extends BackofficeStore {
         case 'unavailable':
           return 'Service unavailable. Check your internet connection.';
         case 'permission-denied':
-          return 'Access denied. Check the project Firestore rules.';
+          // Les règles LOCALES (firestore.rules) sont ouvertes : si Firebase
+          // refuse quand même, c'est que les règles DÉPLOYÉES sur le projet
+          // sont périmées (ex. collection `registrations` ajoutée après le
+          // dernier déploiement). Le correctif est `firebase deploy
+          // --only firestore:rules`.
+          return 'Access denied: the Firestore rules deployed on Firebase '
+              'are out of date. Deploy the latest rules with: firebase '
+              'deploy --only firestore:rules';
         default:
           return error.message ?? 'Firestore error.';
       }
@@ -583,6 +818,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
 
   @override
   void dispose() {
+    _disposed = true;
     _cancelSubscriptions();
     super.dispose();
   }

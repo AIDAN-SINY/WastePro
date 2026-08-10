@@ -51,6 +51,57 @@ void main() {
     expect(find.text('New companies'), findsOneWidget);
   });
 
+  testWidgets('console : fiche détail d une société sans débordement',
+      (tester) async {
+    await pumpConsole(tester, const Size(1440, 900));
+
+    // Aller sur la page Sociétés puis ouvrir la fiche détail de la 1re.
+    await tester.tap(find.text('Companies').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('WastePro Douala Ltd').first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(tester.takeException(), isNull,
+        reason: 'exception pendant le rendu de la fiche société desktop');
+    expect(find.text('Back to companies'), findsOneWidget);
+    expect(find.text('Clients by status'), findsOneWidget);
+  });
+
+  testWidgets('console mobile : fiche détail d une société sans débordement',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '/console/societes';
+    addTearDown(() {
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue();
+    });
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UserProvider>.value(
+        value: FakeUserProvider(fakeUser: _sa()),
+        child: WasteProApp(consoleStore: PlatformStore()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(tester.takeException(), isNull);
+
+    // Mode cartes mobile : cliquer sur une carte de société ouvre la fiche
+    // détail pleine page.
+    await tester.ensureVisible(find.text('WastePro Douala Ltd').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('WastePro Douala Ltd').first,
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(tester.takeException(), isNull,
+        reason: 'exception pendant le rendu de la fiche société mobile');
+    expect(find.text('Back to companies'), findsOneWidget);
+  });
+
   testWidgets('console desktop : sociétés rendues sans débordement',
       (tester) async {
     tester.view.physicalSize = const Size(1440, 900);

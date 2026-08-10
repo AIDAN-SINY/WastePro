@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../superadmin/super_admin_console.dart';
 import 'login_screen.dart';
-import 'registration_sreen.dart';
+import 'pre_register_screen.dart';
 
 /// Écran d'accueil — responsive.
 ///
@@ -220,7 +220,7 @@ class WelcomeScreen extends StatelessWidget {
           const SizedBox(height: 10),
           TextButton(
             onPressed: () =>
-                _goToAuth(context, '/register', const RegistrationScreen()),
+                _goToAuth(context, '/register', const PreRegisterScreen()),
             child: Text(
               'Create an account',
               style: GoogleFonts.sora(

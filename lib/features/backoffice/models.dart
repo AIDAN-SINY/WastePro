@@ -15,6 +15,7 @@ class ClientModel {
   final String status; // 'Active' | 'Suspended'
   final String agenceId;
   final String societeId;
+  final String collecteurId; // collecteur assigné (un collecteur = plusieurs clients)
 
   const ClientModel({
     required this.id,
@@ -25,6 +26,7 @@ class ClientModel {
     required this.status,
     this.agenceId = '',
     this.societeId = '',
+    this.collecteurId = '',
   });
 
   ClientModel copyWith({
@@ -35,6 +37,7 @@ class ClientModel {
     String? status,
     String? agenceId,
     String? societeId,
+    String? collecteurId,
   }) {
     return ClientModel(
       id: id,
@@ -45,6 +48,7 @@ class ClientModel {
       status: status ?? this.status,
       agenceId: agenceId ?? this.agenceId,
       societeId: societeId ?? this.societeId,
+      collecteurId: collecteurId ?? this.collecteurId,
     );
   }
 
@@ -57,6 +61,7 @@ class ClientModel {
         'status': status,
         'agenceId': agenceId,
         'societeId': societeId,
+        'collecteurId': collecteurId,
       };
 
   factory ClientModel.fromMap(Map<String, dynamic> map) => ClientModel(
@@ -68,6 +73,97 @@ class ClientModel {
         status: map['status'] as String? ?? 'Active',
         agenceId: map['agenceId'] as String? ?? '',
         societeId: map['societeId'] as String? ?? '',
+        collecteurId: map['collecteurId'] as String? ?? '',
+      );
+}
+
+/// Candidature d'un futur client (pré-inscription côté app client).
+///
+/// Le client remplit ses infos + choisit son agence (suggestions par zone /
+/// recherche libre). La candidature arrive avec le statut `pending` dans le
+/// dashboard du chef d'agence qui l'approuve (en assignant un collecteur)
+/// ou la rejette. À l'approbation, un vrai [ClientModel] + compte de
+/// connexion `users/{téléphone}` sont créés.
+class RegistrationModel {
+  final String id;
+  final String fullName;
+  final String phone;
+  final String zone;
+  final String agenceId; // '' si l'agence a été saisie par son nom
+  final String agenceName;
+  final String societeId;
+  final String status; // 'pending' | 'approved' | 'rejected'
+  final String collecteurId; // assigné par le chef d'agence à l'approbation
+  final String password; // mot de passe choisi par le client
+  final String createdAt; // yyyy-MM-dd
+
+  const RegistrationModel({
+    required this.id,
+    required this.fullName,
+    required this.phone,
+    required this.zone,
+    required this.agenceId,
+    required this.agenceName,
+    required this.societeId,
+    required this.status,
+    required this.password,
+    required this.createdAt,
+    this.collecteurId = '',
+  });
+
+  RegistrationModel copyWith({
+    String? fullName,
+    String? phone,
+    String? zone,
+    String? agenceId,
+    String? agenceName,
+    String? societeId,
+    String? status,
+    String? collecteurId,
+    String? password,
+  }) {
+    return RegistrationModel(
+      id: id,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      zone: zone ?? this.zone,
+      agenceId: agenceId ?? this.agenceId,
+      agenceName: agenceName ?? this.agenceName,
+      societeId: societeId ?? this.societeId,
+      status: status ?? this.status,
+      collecteurId: collecteurId ?? this.collecteurId,
+      password: password ?? this.password,
+      createdAt: createdAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'fullName': fullName,
+        'phone': phone,
+        'zone': zone,
+        'agenceId': agenceId,
+        'agenceName': agenceName,
+        'societeId': societeId,
+        'status': status,
+        'collecteurId': collecteurId,
+        'password': password,
+        'createdAt': createdAt,
+      };
+
+  factory RegistrationModel.fromMap(Map<String, dynamic> map) =>
+      RegistrationModel(
+        id: map['id'] as String? ?? '',
+        fullName: map['fullName'] as String? ?? '',
+        phone: map['phone'] as String? ?? '',
+        zone: map['zone'] as String? ?? '',
+        agenceId: map['agenceId'] as String? ?? '',
+        agenceName: map['agenceName'] as String? ?? '',
+        societeId: map['societeId'] as String? ?? '',
+        status: map['status'] as String? ?? 'pending',
+        collecteurId: map['collecteurId'] as String? ?? '',
+        password: map['password'] as String? ?? '',
+        createdAt: map['createdAt'] as String? ?? '',
       );
 }
 
@@ -309,4 +405,16 @@ class FrequenceModel {
         libelle: map['libelle'] as String? ?? '',
         jours: (map['jours'] as num?)?.toInt() ?? 7,
       );
+}
+
+/// Nom du collecteur correspondant à un id ('' si inconnu / non assigné).
+///
+/// Partagé par le backoffice (cartes clients, réassignation) — les collectes
+/// référencent le collecteur par son NOM, d'où la résolution id → nom.
+String collecteurNameFor(List<CollecteurModel> collecteurs, String id) {
+  if (id.isEmpty) return '';
+  for (final c in collecteurs) {
+    if (c.id == id) return c.name;
+  }
+  return '';
 }

@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../providers/user_provider.dart';
 import '../../../main.dart';
-import 'registration_sreen.dart';
+import 'pre_register_screen.dart';
 
 /// Écran de connexion — responsive.
 ///
@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocusNode = FocusNode();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
@@ -56,6 +57,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _passwordFocusNode.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -359,7 +361,7 @@ class _LoginScreenState extends State<LoginScreen>
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const RegistrationScreen(),
+                    builder: (context) => const PreRegisterScreen(),
                   ),
                 );
               }
@@ -508,6 +510,10 @@ class _LoginScreenState extends State<LoginScreen>
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               style: TextStyle(color: cream, fontSize: 14.5),
+              // Entrée → passe au champ mot de passe (l'action « Next » du
+              // clavier mobile remplit le même rôle).
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => _passwordFocusNode.requestFocus(),
               decoration: InputDecoration(
                 hintText: '6 XX XX XX XX',
                 hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),
@@ -537,7 +543,11 @@ class _LoginScreenState extends State<LoginScreen>
             child: TextField(
               controller: _passwordController,
               obscureText: _obscurePassword,
+              focusNode: _passwordFocusNode,
               style: TextStyle(color: cream, fontSize: 14.5),
+              // Entrée → déclenche directement le login.
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _handleAuth(),
               decoration: InputDecoration(
                 hintText: '••••••••',
                 hintStyle: TextStyle(color: muted.withValues(alpha: 0.5)),

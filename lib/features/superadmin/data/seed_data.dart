@@ -1,6 +1,7 @@
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
+import '../../backoffice/models.dart';
 
 /// Default platform data (same entities as `super-admin-desktop.html`).
 ///
@@ -111,5 +112,144 @@ const List<PlatformUserModel> seedUtilisateurs = [
     agence: '—',
     societeId: 'so1',
     status: 'Active',
+  ),
+];
+
+/// Clients de démonstration liés à une agence (Phase 3) — alimentent la
+/// fiche détail d'une agence dans la console super admin.
+const List<ClientModel> seedClientsParAgence = [
+  ClientModel(
+    id: 'pc1',
+    name: 'Jean Dooh',
+    phone: '+237 677 12 34 56',
+    zone: 'Bonanjo',
+    plan: 'Standard',
+    status: 'Active',
+    agenceId: 'ag1',
+    societeId: 'so1',
+  ),
+  ClientModel(
+    id: 'pc2',
+    name: 'Sarah Mbida',
+    phone: '+237 691 77 04 22',
+    zone: 'Bonanjo',
+    plan: 'Essential',
+    status: 'Active',
+    agenceId: 'ag1',
+    societeId: 'so1',
+  ),
+  ClientModel(
+    id: 'pc3',
+    name: 'Éric Tchoua',
+    phone: '+237 656 40 88 15',
+    zone: 'Ndogbong',
+    plan: 'Standard',
+    status: 'Suspended',
+    agenceId: 'ag1',
+    societeId: 'so1',
+  ),
+  ClientModel(
+    id: 'pc4',
+    name: 'Aïcha Bello',
+    phone: '+237 699 33 67 41',
+    zone: 'Deido',
+    plan: 'Standard',
+    status: 'Active',
+    agenceId: 'ag2',
+    societeId: 'so1',
+  ),
+  ClientModel(
+    id: 'pc5',
+    name: 'Patrice Fotso',
+    phone: '+237 674 20 15 63',
+    zone: 'Bali',
+    plan: 'Premium',
+    status: 'Active',
+    agenceId: 'ag2',
+    societeId: 'so1',
+  ),
+  ClientModel(
+    id: 'pc6',
+    name: 'Marie Ekwalla',
+    phone: '+237 690 45 12 78',
+    zone: 'Bastos',
+    plan: 'Premium',
+    status: 'Active',
+    agenceId: 'ag3',
+    societeId: 'so2',
+  ),
+  ClientModel(
+    id: 'pc7',
+    name: 'Samuel Njoya',
+    phone: '+237 655 88 21 09',
+    zone: 'Centre',
+    plan: 'Essential',
+    status: 'Suspended',
+    agenceId: 'ag3',
+    societeId: 'so2',
+  ),
+  ClientModel(
+    id: 'pc8',
+    name: 'Nadine Onguéné',
+    phone: '+237 670 22 45 88',
+    zone: 'Centre-ville',
+    plan: 'Standard',
+    status: 'Active',
+    agenceId: 'ag4',
+    societeId: 'so3',
+  ),
+];
+
+/// Collecteurs de démonstration liés à une agence (Phase 3).
+const List<CollecteurModel> seedCollecteursParAgence = [
+  CollecteurModel(
+    id: 'pco1',
+    name: 'Paul Mbarga',
+    phone: '+237 678 90 11 22',
+    zone: 'Bonanjo / Akwa',
+    rating: 4.8,
+    status: 'Active',
+    agenceId: 'ag1',
+    societeId: 'so1',
+  ),
+  CollecteurModel(
+    id: 'pco2',
+    name: 'Serge Ateba',
+    phone: '+237 690 10 55 40',
+    zone: 'Ndogbong',
+    rating: 4.9,
+    status: 'Active',
+    agenceId: 'ag1',
+    societeId: 'so1',
+  ),
+  CollecteurModel(
+    id: 'pco3',
+    name: 'Vincent Onana',
+    phone: '+237 693 55 44 33',
+    zone: 'Bonapriso / Bali',
+    rating: 4.5,
+    status: 'Active',
+    agenceId: 'ag2',
+    societeId: 'so1',
+  ),
+  CollecteurModel(
+    id: 'pco4',
+    name: 'André Kamdem',
+    phone: '+237 657 22 19 88',
+    zone: 'Bastos',
+    rating: 4.2,
+    status: 'Inactive',
+    agenceId: 'ag3',
+    societeId: 'so2',
+  ),
+  CollecteurModel(
+    id: 'pco5',
+    name: 'Chantal Mvondo',
+    phone: '+237 652 88 12 30',
+    zone: 'Centre-ville',
+    rating: 4.1,
+    status: 'Active',
+    agenceId: 'ag4',
+    societeId: 'so3',
   ),
 ];

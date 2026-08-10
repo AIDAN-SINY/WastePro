@@ -23,6 +23,19 @@ class BackofficeStore extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  /// Nom de l'agence du backoffice (rempli par le store Firestore quand le
+  /// backoffice est scopé à une agence ; vide pour le store mock / tests).
+  String _agenceName = '';
+
+  String get agenceName => _agenceName;
+
+  @protected
+  void setAgenceName(String value) {
+    if (_agenceName == value) return;
+    _agenceName = value;
+    notifyListeners();
+  }
+
   @protected
   void setLoading(bool value) => _isLoading = value;
 
@@ -53,6 +66,13 @@ class BackofficeStore extends ChangeNotifier {
   final List<CollecteModel> collectes = [...seedCollectes];
   final List<FactureModel> factures = [...seedFactures];
   final List<FrequenceModel> frequences = [...seedFrequences];
+
+  /// Candidatures clients (pré-inscriptions) — le store Firestore les
+  /// remplace par les vraies données de la collection `registrations`.
+  final List<RegistrationModel> registrations = [...seedRegistrations];
+
+  List<RegistrationModel> get pendingRegistrations =>
+      registrations.where((r) => r.status == 'pending').toList();
 
   // --- List filters (per entity) ---
   final Map<BoEntity, String> _filters = {};
@@ -178,6 +198,87 @@ class BackofficeStore extends ChangeNotifier {
 
   Future<void> deleteCollecteur(String id) async {
     collecteurs.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  // --- Candidatures (pré-inscriptions clients) ---
+
+  /// Approuve une candidature : crée le client (Active, plan Standard),
+  /// l'assigne au collecteur choisi et marque la candidature 'approved'.
+  /// Le store Firestore crée aussi son compte de connexion `users/{phone}`.
+  Future<void> approveRegistration(
+    RegistrationModel reg, {
+    required String collecteurId,
+  }) async {
+    final updated = reg.copyWith(
+      status: 'approved',
+      collecteurId: collecteurId,
+    );
+    final index = registrations.indexWhere((r) => r.id == reg.id);
+    if (index != -1) {
+      registrations[index] = updated;
+    } else {
+      registrations.add(updated);
+    }
+    clients.add(
+      ClientModel(
+        id: nextId(),
+        name: reg.fullName,
+        phone: reg.phone,
+        zone: reg.zone,
+        plan: 'Standard',
+        status: 'Active',
+        agenceId: reg.agenceId,
+        societeId: reg.societeId,
+        collecteurId: collecteurId,
+      ),
+    );
+    notifyListeners();
+  }
+
+  /// Rejette une candidature.
+  Future<void> rejectRegistration(RegistrationModel reg) async {
+    final updated = reg.copyWith(status: 'rejected');
+    final index = registrations.indexWhere((r) => r.id == reg.id);
+    if (index != -1) {
+      registrations[index] = updated;
+    } else {
+      registrations.add(updated);
+    }
+    notifyListeners();
+  }
+
+  /// Réassigne le collecteur d'un client : met à jour la fiche client et
+  /// bascule ses collectes à venir (Scheduled / Missed) portant l'ancien
+  /// collecteur vers le nouveau. Le store Firestore met aussi à jour le
+  /// compte de connexion `users/{téléphone}`.
+  Future<void> reassignCollecteur({
+    required String clientId,
+    required String collecteurId,
+  }) async {
+    final index = clients.indexWhere((c) => c.id == clientId);
+    if (index == -1) return;
+    final client = clients[index];
+    if (client.collecteurId == collecteurId) return;
+
+    final oldName = collecteurNameFor(collecteurs, client.collecteurId);
+    final newName = collecteurNameFor(collecteurs, collecteurId);
+    clients[index] = client.copyWith(collecteurId: collecteurId);
+
+    // Bascule les collectes à venir portant l'ancien collecteur (même
+    // comportement que le store Firestore : l'historique effectué et les
+    // collectes sans collecteur ne changent pas).
+    if (newName.isNotEmpty && oldName.isNotEmpty) {
+      for (var i = 0; i < collectes.length; i++) {
+        final col = collectes[i];
+        final isDone = col.status == 'Completed' || col.status == 'Effectué';
+        if (!isDone &&
+            col.client == client.name &&
+            col.collecteur == oldName) {
+          collectes[i] = col.copyWith(collecteur: newName);
+        }
+      }
+    }
     notifyListeners();
   }
 

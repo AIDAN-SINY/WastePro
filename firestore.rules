@@ -82,5 +82,12 @@ service cloud.firestore {
     match /utilisateurs/{id} {
       allow read, write: if true;
     }
+
+    // --- Candidatures clients (pré-inscription) ---
+    // Le client écrit sa candidature (status 'pending'), le chef d'agence
+    // la lit et l'approuve/rejette dans son backoffice.
+    match /registrations/{id} {
+      allow read, write: if true;
+    }
   }
 }

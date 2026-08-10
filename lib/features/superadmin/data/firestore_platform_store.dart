@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
+import '../../backoffice/models.dart';
 import 'platform_store.dart';
 import 'seed_data.dart';
 
@@ -30,6 +31,8 @@ class FirestorePlatformStore extends PlatformStore {
     societes.clear();
     agences.clear();
     utilisateurs.clear();
+    clients.clear();
+    collecteurs.clear();
     load();
   }
 
@@ -61,7 +64,7 @@ class FirestorePlatformStore extends PlatformStore {
     _cancelSubscriptions();
     setLoading(true);
     setErrorValue(null);
-    _pending = 3;
+    _pending = 5;
     _seededSocietes = false;
     _seededAgences = false;
     _seededUtilisateurs = false;
@@ -83,6 +86,21 @@ class FirestorePlatformStore extends PlatformStore {
     _subs.add(
       _db.collection('utilisateurs').snapshots().listen(
             _onUtilisateurs,
+            onError: handleStreamError,
+          ),
+    );
+    // Phase 3 : la console super admin voit TOUT (aucun filtre) — les
+    // clients/collecteurs alimentent la fiche détail d'une agence (stats,
+    // tables). Le seed de ces collections reste la propriété du backoffice.
+    _subs.add(
+      _db.collection('clients').snapshots().listen(
+            _onClients,
+            onError: handleStreamError,
+          ),
+    );
+    _subs.add(
+      _db.collection('collecteurs').snapshots().listen(
+            _onCollecteurs,
             onError: handleStreamError,
           ),
     );
@@ -128,6 +146,20 @@ class FirestorePlatformStore extends PlatformStore {
         seedUtilisateurs.map((u) => u.toMap()).toList(),
       );
     }
+    _markLoaded();
+  }
+
+  void _onClients(QuerySnapshot<Map<String, dynamic>> qs) {
+    clients
+      ..clear()
+      ..addAll(qs.docs.map((d) => ClientModel.fromMap(d.data())));
+    _markLoaded();
+  }
+
+  void _onCollecteurs(QuerySnapshot<Map<String, dynamic>> qs) {
+    collecteurs
+      ..clear()
+      ..addAll(qs.docs.map((d) => CollecteurModel.fromMap(d.data())));
     _markLoaded();
   }
 
@@ -615,7 +647,14 @@ class FirestorePlatformStore extends PlatformStore {
         case 'unavailable':
           return 'Service unavailable. Check your internet connection.';
         case 'permission-denied':
-          return 'Access denied. Check the project Firestore rules.';
+          // Les règles LOCALES (firestore.rules) sont ouvertes : si Firebase
+          // refuse quand même, c'est que les règles DÉPLOYÉES sur le projet
+          // sont périmées (ex. collection ajoutée après le dernier
+          // déploiement). Le correctif est `firebase deploy --only
+          // firestore:rules`.
+          return 'Access denied: the Firestore rules deployed on Firebase '
+              'are out of date. Deploy the latest rules with: firebase '
+              'deploy --only firestore:rules';
         default:
           return error.message ?? 'Firestore error.';
       }

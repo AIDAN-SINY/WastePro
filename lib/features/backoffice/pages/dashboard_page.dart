@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../data/backoffice_store.dart';
 import '../data/seed_data.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../widgets/bar_chart.dart';
 import '../widgets/kpi_card.dart';
+import '../widgets/sheets.dart';
 
 const List<double> _revenueValues = [3.2, 4.1, 3.8, 4.6, 5.2, 5.8];
 const List<String> _revenueLabels = ['Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'];
@@ -147,6 +149,15 @@ class BoDashboardPage extends StatelessWidget {
                 ),
               ],
 
+              _SectionTitle(title: 'Pending applications'),
+              if (store.pendingRegistrations.isEmpty)
+                _PendingEmpty()
+              else
+                _PendingCard(
+                  store: store,
+                  desktop: desktop,
+                ),
+
               _SectionTitle(title: 'Recent activity', trailing: 'Live'),
               Container(
                 padding: EdgeInsets.symmetric(
@@ -211,11 +222,190 @@ class BoDashboardPage extends StatelessWidget {
   Color _parseColor(String hex) => Color(int.parse(hex.replaceFirst('#', '0xFF')));
 }
 
+/// Section « Pending applications » : les candidatures clients en attente
+/// d'approbation, avec un accès direct à la feuille de revue.
+class _PendingCard extends StatelessWidget {
+  const _PendingCard({required this.store, required this.desktop});
+
+  final BackofficeStore store;
+  final bool desktop;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = store.pendingRegistrations.take(3).toList();
+    return Container(
+      padding: EdgeInsets.all(desktop ? 18 : 16),
+      decoration: BackofficeTheme.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.goldSoft,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.how_to_reg_rounded,
+                  size: 16,
+                  color: BackofficeTheme.goldDim,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pending applications',
+                  style: BackofficeTheme.sora(13.5, weight: FontWeight.w700),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.goldSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${store.pendingRegistrations.length} to review',
+                  style: BackofficeTheme.inter(
+                    10,
+                    weight: FontWeight.w700,
+                    color: BackofficeTheme.goldDim,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < pending.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: BackofficeTheme.border),
+            _PendingRow(
+              reg: pending[i],
+              onReview: () =>
+                  showBoReviewSheet(context, store: store, reg: pending[i]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingRow extends StatelessWidget {
+  const _PendingRow({required this.reg, required this.onReview});
+
+  final RegistrationModel reg;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: BackofficeTheme.greenSoft,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              boInitials(reg.fullName),
+              style: BackofficeTheme.inter(
+                11,
+                weight: FontWeight.w700,
+                color: BackofficeTheme.green,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reg.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.inter(
+                    12.5,
+                    weight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${reg.zone} · ${reg.agenceName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.inter(
+                    10.5,
+                    color: BackofficeTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: BackofficeTheme.green,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: onReview,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                child: Text(
+                  'Review',
+                  style: BackofficeTheme.inter(
+                    11,
+                    weight: FontWeight.w600,
+                    color: BackofficeTheme.cream,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingEmpty extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BackofficeTheme.card(),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.how_to_reg_rounded,
+            size: 17,
+            color: BackofficeTheme.muted,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No pending applications. New client requests will appear here.',
+              style: BackofficeTheme.inter(11.5, color: BackofficeTheme.muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.trailing});
+  const _SectionTitle({required this.title, this.trailing});
 
   final String title;
-  final String trailing;
+  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +415,14 @@ class _SectionTitle extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(title, style: BackofficeTheme.sora(14, weight: FontWeight.w700)),
-          Text(trailing, style: BackofficeTheme.inter(11, color: BackofficeTheme.muted)),
+          if (trailing != null)
+            Text(
+              trailing!,
+              style: BackofficeTheme.inter(
+                11,
+                color: BackofficeTheme.muted,
+              ),
+            ),
         ],
       ),
     );
