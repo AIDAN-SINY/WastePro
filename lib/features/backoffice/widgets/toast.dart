@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -43,9 +45,6 @@ class BoToastService {
       ),
     );
     overlay.insert(entry);
-    Future.delayed(const Duration(milliseconds: 2600), () {
-      if (entry.mounted) entry.remove();
-    });
   }
 }
 
@@ -69,6 +68,7 @@ class _BoToastWidgetState extends State<_BoToastWidget>
   late final AnimationController _controller;
   late final Animation<double> _opacity;
   late final Animation<Offset> _slide;
+  Timer? _dismissTimer;
 
   @override
   void initState() {
@@ -86,13 +86,17 @@ class _BoToastWidgetState extends State<_BoToastWidget>
         curve: Curves.easeOutCubic,
       ),
     );
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) widget.onDone();
+    // Un SEUL chemin de retrait : le widget possède son timer et l'annule au
+    // dispose — jamais de double `OverlayEntry.remove()` (crash « An
+    // OverlayEntry should be removed only once » en test).
+    _dismissTimer = Timer(const Duration(milliseconds: 2600), () {
+      if (mounted) widget.onDone();
     });
   }
 
   @override
   void dispose() {
+    _dismissTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }

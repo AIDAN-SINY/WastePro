@@ -286,6 +286,8 @@ class CollecteModel {
   final String date; // yyyy-MM-dd
   final double poids;
   final String status; // 'Completed' | 'Scheduled' | 'Missed'
+  final String commentaire; // note du collecteur (ex. « bac plein »)
+  final String motif; // motif du manqué (ex. « Client absent »)
 
   const CollecteModel({
     required this.id,
@@ -294,6 +296,8 @@ class CollecteModel {
     required this.date,
     required this.poids,
     required this.status,
+    this.commentaire = '',
+    this.motif = '',
   });
 
   CollecteModel copyWith({
@@ -302,6 +306,8 @@ class CollecteModel {
     String? date,
     double? poids,
     String? status,
+    String? commentaire,
+    String? motif,
   }) {
     return CollecteModel(
       id: id,
@@ -310,6 +316,8 @@ class CollecteModel {
       date: date ?? this.date,
       poids: poids ?? this.poids,
       status: status ?? this.status,
+      commentaire: commentaire ?? this.commentaire,
+      motif: motif ?? this.motif,
     );
   }
 
@@ -320,6 +328,8 @@ class CollecteModel {
         'date': date,
         'poids': poids,
         'status': status,
+        'commentaire': commentaire,
+        'motif': motif,
       };
 
   factory CollecteModel.fromMap(Map<String, dynamic> map) => CollecteModel(
@@ -329,6 +339,8 @@ class CollecteModel {
         date: map['date'] as String? ?? '',
         poids: (map['poids'] as num?)?.toDouble() ?? 0,
         status: map['status'] as String? ?? 'Scheduled',
+        commentaire: map['commentaire'] as String? ?? '',
+        motif: map['motif'] as String? ?? '',
       );
 }
 
