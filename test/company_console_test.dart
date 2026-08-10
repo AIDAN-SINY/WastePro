@@ -12,8 +12,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    // Sans store fourni, la console crée son propre store mock et le seed
+    // (chemin « preview démo ») — c'est ce que les tests de preview testent.
     await tester.pumpWidget(
-      MaterialApp(home: CompanyConsole(store: store ?? CompanyStore())),
+      MaterialApp(home: CompanyConsole(store: store)),
     );
     await tester.pump(const Duration(milliseconds: 600));
   }
@@ -37,32 +39,76 @@ void main() {
 
     await pumpConsole(tester, store: store);
 
+    // Sidebar brand
     expect(find.text('Company Console'), findsOneWidget);
+    // Nav items
     expect(find.text('Overview'), findsWidgets);
     expect(find.text('Agencies'), findsWidgets);
     expect(find.text('Managers'), findsWidgets);
+    // Agency dropdown present
+    expect(find.byKey(const Key('cc_agency_dropdown')), findsOneWidget);
     // Bandeau aperçu démo (store mock) présent.
     expect(find.textContaining('Demo preview'), findsOneWidget);
   });
 
-  testWidgets('navigates to the agencies page', (tester) async {
+  testWidgets('navigates to the agencies page (preview seeded data)', (
+    tester,
+  ) async {
     await pumpConsole(tester);
 
-    await tester.tap(find.text('Agencies').first);
+    // Preview store → agences sont seedées.
+    await tester.tap(find.byKey(const Key('cc_nav_agencies')));
     await tester.pumpAndSettle();
 
     expect(find.text('New agency'), findsOneWidget);
-    expect(find.text('No agencies yet'), findsOneWidget);
+    // Les 3 agences seedées sont visibles.
+    expect(find.text('Douala — Bonanjo'), findsOneWidget);
+    expect(find.text('Douala — Bassa'), findsOneWidget);
+    expect(find.text('Yaoundé'), findsOneWidget);
+    // Footer
+    expect(find.textContaining('3 agenc'), findsOneWidget);
   });
 
-  testWidgets('navigates to the managers page', (tester) async {
+  testWidgets('navigates to the managers page (preview seeded data)', (
+    tester,
+  ) async {
     await pumpConsole(tester);
 
-    await tester.tap(find.text('Managers').first);
+    await tester.tap(find.byKey(const Key('cc_nav_managers')));
     await tester.pumpAndSettle();
 
     expect(find.text('New manager'), findsOneWidget);
-    expect(find.text('No managers yet'), findsOneWidget);
+    // 3 managers seedés.
+    expect(find.text('Jean Dooh'), findsOneWidget);
+    expect(find.text('Aïcha Bello'), findsOneWidget);
+    expect(find.text('Marie Ekwalla'), findsOneWidget);
+    expect(find.textContaining('3 manager'), findsOneWidget);
+  });
+
+  testWidgets('agency dropdown changes the overview scope', (tester) async {
+    await pumpConsole(tester);
+
+    // Le dropdown est dans la topbar.
+    await tester.tap(find.byKey(const Key('cc_agency_dropdown')));
+    await tester.pumpAndSettle();
+
+    // Choisir la première agence : Douala — Bonanjo.
+    await tester.tap(find.byKey(const Key('cc_dd_preview-ag1')));
+    await tester.pumpAndSettle();
+
+    // Le titre du dropdown a changé pour l'agence sélectionnée.
+    expect(find.text('Douala — Bonanjo'), findsWidgets);
+    // L'Overview affiche le scope : 'Viewing Douala — Bonanjo'
+    expect(find.textContaining('Viewing Douala'), findsOneWidget);
+
+    // Revenir à « All agencies ».
+    await tester.tap(find.byKey(const Key('cc_agency_dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cc_dd_all')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('All agencies'), findsWidgets);
+    expect(find.textContaining('Viewing all'), findsOneWidget);
   });
 
   testWidgets('créer un chef d agence SANS agence est bloqué', (tester) async {
@@ -83,7 +129,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Managers').first);
+    await tester.tap(find.byKey(const Key('cc_nav_managers')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New manager'));
     await tester.pumpAndSettle();

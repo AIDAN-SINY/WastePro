@@ -16,11 +16,15 @@ class BoListPage extends StatelessWidget {
     required this.store,
     required this.type,
     required this.search,
+    this.desktop = false,
   });
 
   final BackofficeStore store;
   final BoEntity type;
   final String search;
+
+  /// Layout desktop (web-first) : padding adapté (pas de tab bar ni FAB).
+  final bool desktop;
 
   String get _entityName => switch (type) {
         BoEntity.client => 'client',
@@ -100,7 +104,12 @@ class BoListPage extends StatelessWidget {
               child: items.isEmpty
                   ? _EmptyState(text: _emptyText)
                   : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                      padding: EdgeInsets.fromLTRB(
+                        desktop ? 2 : 16,
+                        0,
+                        desktop ? 2 : 16,
+                        desktop ? 24 : 110,
+                      ),
                       itemCount: items.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 9),
                       itemBuilder: (context, i) => _card(context, items[i]),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
@@ -22,6 +23,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Redirect to login if user is null (after logout)
     if (user == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // App web : AuthWrapper (route '/') bascule déjà vers l'écran
+        // d'accueil. On pop simplement ce sous-écran (et les autres poussés
+        // au-dessus) pour révéler l'accueil du routeur — jamais de push
+        // impérative par-dessus le routeur (elle forcerait à recharger la
+        // page pour se reconnecter).
+        if (GoRouter.maybeOf(context) != null) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        }
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const WelcomeScreen()),
           (route) => false,

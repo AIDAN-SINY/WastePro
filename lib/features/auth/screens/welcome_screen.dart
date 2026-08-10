@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart'; // kDebugMode
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../superadmin/super_admin_console.dart';
 import 'login_screen.dart';
+import 'registration_sreen.dart';
 
 /// Écran d'accueil — responsive.
 ///
@@ -12,6 +14,23 @@ import 'login_screen.dart';
 /// partagée avec l'écran de connexion pour une identité cohérente.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
+
+  /// Navigue vers un écran d'auth via le routeur quand il est présent
+  /// (app web : /login, /register) — sinon repli sur une push impérative
+  /// (tests / contextes sans routeur).
+  ///
+  /// ⚠️ La push impérative est le piège qui force à actualiser la page : un
+  /// écran poussé avec Navigator.push reste empilé AU-DESSUS du routeur, et
+  /// router.go('/') après le login ne le retire pas. Le routeur, lui,
+  /// remplace proprement la pile (/login → /).
+  void _goToAuth(BuildContext context, String path, Widget fallback) {
+    final router = GoRouter.maybeOf(context);
+    if (router != null) {
+      router.go(path);
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => fallback));
+    }
+  }
 
   // Palette de marque (cohérente avec LoginScreen).
   static const Color bgDarker = Color(0xFF0A2A20);
@@ -187,10 +206,8 @@ class WelcomeScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-              ),
+              onPressed: () =>
+                  _goToAuth(context, '/login', const LoginScreen()),
               child: Text(
                 'Log In',
                 style: GoogleFonts.sora(
@@ -202,10 +219,8 @@ class WelcomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           TextButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const LoginScreen()),
-            ),
+            onPressed: () =>
+                _goToAuth(context, '/register', const RegistrationScreen()),
             child: Text(
               'Create an account',
               style: GoogleFonts.sora(

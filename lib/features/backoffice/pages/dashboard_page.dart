@@ -12,83 +12,147 @@ const List<double> _weekValues = [3, 4, 5, 2, 6, 4, 5];
 const List<String> _weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /// Dashboard page: KPI carousel, charts and the activity feed.
+///
+/// Web-first : sur desktop les KPIs s'affichent en ligne et les graphiques
+/// côte à côte (au lieu du carrousel horizontal / empilement du mobile).
 class BoDashboardPage extends StatelessWidget {
-  const BoDashboardPage({super.key, required this.store});
+  const BoDashboardPage({super.key, required this.store, this.desktop = false});
 
   final BackofficeStore store;
+
+  /// Layout desktop (web-first) : KPIs en ligne + graphiques côte à côte.
+  final bool desktop;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 6, bottom: 110),
+      padding: EdgeInsets.only(top: 6, bottom: desktop ? 24 : 110),
       child: ListenableBuilder(
         listenable: store,
         builder: (context, _) {
           final revenus = store.revenusMilliers.round();
+          final kpis = [
+            BoKpiCard(
+              icon: Icons.group_outlined,
+              iconColor: BackofficeTheme.green,
+              iconBg: BackofficeTheme.greenSoft,
+              trend: '↑4.2%',
+              trendUp: true,
+              value: '${store.clientsActifs}',
+              label: 'Active clients',
+              width: desktop ? null : 150,
+            ),
+            BoKpiCard(
+              icon: Icons.event_available_outlined,
+              iconColor: BackofficeTheme.goldDim,
+              iconBg: BackofficeTheme.goldSoft,
+              trend: '↑12',
+              trendUp: true,
+              value: '${store.collectesAujourdhui}',
+              label: "Today's collections",
+              width: desktop ? null : 150,
+            ),
+            BoKpiCard(
+              icon: Icons.payments_outlined,
+              iconColor: BackofficeTheme.blue,
+              iconBg: BackofficeTheme.blueSoft,
+              trend: '↑8.7%',
+              trendUp: true,
+              value: '₣$revenus',
+              label: 'Revenue (thousands)',
+              width: desktop ? null : 150,
+            ),
+            BoKpiCard(
+              icon: Icons.trending_up_rounded,
+              iconColor: BackofficeTheme.red,
+              iconBg: BackofficeTheme.redSoft,
+              trend: '↓1.1%',
+              trendUp: false,
+              value: '${store.tauxReussite.round()}%',
+              label: 'Success rate',
+              width: desktop ? null : 150,
+            ),
+          ];
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- KPI carousel (height adapts to the tallest card) ---
-              IntrinsicHeight(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      BoKpiCard(
-                        icon: Icons.group_outlined,
-                        iconColor: BackofficeTheme.green,
-                        iconBg: BackofficeTheme.greenSoft,
-                        trend: '↑4.2%',
-                        trendUp: true,
-                        value: '${store.clientsActifs}',
-                        label: 'Active clients',
-                      ),
-                      const SizedBox(width: 10),
-                      BoKpiCard(
-                        icon: Icons.event_available_outlined,
-                        iconColor: BackofficeTheme.goldDim,
-                        iconBg: BackofficeTheme.goldSoft,
-                        trend: '↑12',
-                        trendUp: true,
-                        value: '${store.collectesAujourdhui}',
-                        label: "Today's collections",
-                      ),
-                      const SizedBox(width: 10),
-                      BoKpiCard(
-                        icon: Icons.payments_outlined,
-                        iconColor: BackofficeTheme.blue,
-                        iconBg: BackofficeTheme.blueSoft,
-                        trend: '↑8.7%',
-                        trendUp: true,
-                        value: '₣$revenus',
-                        label: 'Revenue (thousands)',
-                      ),
-                      const SizedBox(width: 10),
-                      BoKpiCard(
-                        icon: Icons.trending_up_rounded,
-                        iconColor: BackofficeTheme.red,
-                        iconBg: BackofficeTheme.redSoft,
-                        trend: '↓1.1%',
-                        trendUp: false,
-                        value: '${store.tauxReussite.round()}%',
-                        label: 'Success rate',
-                      ),
-                    ],
+              // --- KPI row / carousel ---
+              if (desktop)
+                IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < kpis.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 14),
+                          Expanded(child: kpis[i]),
+                        ],
+                      ],
+                    ),
+                  ),
+                )
+              else
+                IntrinsicHeight(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < kpis.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 10),
+                          kpis[i],
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 6),
-              _chartCard('Revenue (6 months)', 'XAF, thousands',
-                  BoBarChart(values: _revenueValues, labels: _revenueLabels)),
-              _chartCard('Collections — last 7 days', null,
-                  BoBarChart(values: _weekValues, labels: _weekLabels)),
+              if (desktop)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _chartCard(
+                        'Revenue (6 months)',
+                        'XAF, thousands',
+                        BoBarChart(
+                          values: _revenueValues,
+                          labels: _revenueLabels,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: _chartCard(
+                        'Collections — last 7 days',
+                        null,
+                        BoBarChart(values: _weekValues, labels: _weekLabels),
+                      ),
+                    ),
+                  ],
+                )
+              else ...[
+                _chartCard(
+                  'Revenue (6 months)',
+                  'XAF, thousands',
+                  BoBarChart(values: _revenueValues, labels: _revenueLabels),
+                ),
+                _chartCard(
+                  'Collections — last 7 days',
+                  null,
+                  BoBarChart(values: _weekValues, labels: _weekLabels),
+                ),
+              ],
 
               _SectionTitle(title: 'Recent activity', trailing: 'Live'),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: desktop ? 18 : 16,
+                  vertical: 4,
+                ),
                 decoration: BackofficeTheme.card(),
                 child: Column(
                   children: [

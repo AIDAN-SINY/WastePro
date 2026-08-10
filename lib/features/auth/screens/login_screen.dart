@@ -347,12 +347,23 @@ class _LoginScreenState extends State<LoginScreen>
         ),
         Center(
           child: TextButton(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const RegistrationScreen(),
-              ),
-            ),
+            onPressed: () {
+              // Route via le routeur quand il est présent (/register) : une
+              // push impérative resterait empilée au-dessus du routeur et
+              // bloquerait la navigation après le login (obligation de
+              // recharger la page pour voir le dashboard).
+              final router = GoRouter.maybeOf(context);
+              if (router != null) {
+                router.go('/register');
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RegistrationScreen(),
+                  ),
+                );
+              }
+            },
             child: Text(
               'Create an account',
               style: GoogleFonts.sora(

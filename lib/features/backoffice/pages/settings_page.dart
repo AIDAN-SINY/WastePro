@@ -9,9 +9,12 @@ import '../widgets/toast.dart';
 
 /// Paramètres: ramassage frequencies (editable) + company info (display).
 class BoSettingsPage extends StatelessWidget {
-  const BoSettingsPage({super.key, required this.store});
+  const BoSettingsPage({super.key, required this.store, this.desktop = false});
 
   final BackofficeStore store;
+
+  /// Layout desktop (web-first) : padding adapté (pas de tab bar ni FAB).
+  final bool desktop;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +22,12 @@ class BoSettingsPage extends StatelessWidget {
       listenable: store,
       builder: (context, _) {
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 110),
+          padding: EdgeInsets.fromLTRB(
+            desktop ? 2 : 16,
+            6,
+            desktop ? 2 : 16,
+            desktop ? 24 : 110,
+          ),
           children: [
             _title('Pickup frequencies'),
             Container(

@@ -229,6 +229,32 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
+  testWidgets('clicking an agency row opens the full detail view', (
+    tester,
+  ) async {
+    await pumpConsole(tester);
+
+    // Navigate to Agencies (sidebar nav item).
+    await tester.tap(find.text('Agencies').first);
+    await tester.pumpAndSettle();
+    expect(find.text('New agency'), findsOneWidget);
+
+    // Click the first agency row: "Douala — Bonanjo" (seed data).
+    await tester.tap(find.text('Douala — Bonanjo').first);
+    await tester.pumpAndSettle();
+
+    // The detail drawer is open: sections unique to the detail view.
+    expect(find.text('MANAGERS — 1'), findsOneWidget);
+    // Linked company (seed: WastePro Douala Ltd for so1) + manager.
+    expect(find.text('WastePro Douala Ltd'), findsWidgets);
+    expect(find.text('Jean Dooh'), findsWidgets);
+    // Edit / Delete actions are available from the detail view.
+    expect(find.text('Edit'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('command palette opens and closes with Escape', (tester) async {
     await pumpConsole(tester);
 

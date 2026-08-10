@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// KPI card of the design's carousel (150px wide, snap aligned).
+/// KPI card of the design's carousel (150px wide, snap aligned). On desktop
+/// (web-first), [width] can be null so the card stretches inside an Expanded.
 class BoKpiCard extends StatelessWidget {
   const BoKpiCard({
     super.key,
@@ -13,6 +14,7 @@ class BoKpiCard extends StatelessWidget {
     required this.trendUp,
     required this.value,
     required this.label,
+    this.width = 150,
   });
 
   final IconData icon;
@@ -23,10 +25,13 @@ class BoKpiCard extends StatelessWidget {
   final String value;
   final String label;
 
+  /// Largeur fixe sur mobile (carrousel) ; null sur desktop (flexible).
+  final double? width;
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 150,
+      width: width,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       decoration: BoxDecoration(
         color: BackofficeTheme.surface,

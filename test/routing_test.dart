@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:waste_pro/main.dart';
 import 'package:waste_pro/models/user_model.dart';
 import 'package:waste_pro/providers/user_provider.dart';
+import 'package:waste_pro/features/auth/screens/login_screen.dart';
 import 'package:waste_pro/features/backoffice/backoffice_screen.dart';
 import 'package:waste_pro/features/backoffice/data/backoffice_store.dart';
 import 'package:waste_pro/features/backoffice/widgets/toast.dart';
@@ -322,6 +324,45 @@ void main() {
       // overview.
       expect(find.text('New company'), findsOneWidget);
       expect(find.text('WastePro Douala Ltd'), findsWidgets);
+    });
+
+    testWidgets('Log In depuis l accueil navigue via le routeur (/login)', (
+      tester,
+    ) async {
+      // Desktop viewport (le bouton Log In de l'accueil est le point
+      // d'entrée des comptes).
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<UserProvider>.value(
+          value: FakeUserProvider(fakeUser: null),
+          child: WasteProApp(consoleStore: PlatformStore()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Log In'), findsOneWidget);
+      await tester.tap(find.text('Log In'));
+      // Pas de pumpAndSettle : le logo du LoginScreen a une animation
+      // infinie qui empêcherait la stabilisation. Pumps à durée fixe.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      // L'écran de connexion est monté et l'URL du routeur est /login :
+      // c'est une vraie route, pas une push impérative. Après login,
+      // router.go('/') remplacera proprement l'écran — pas besoin de
+      // recharger la page pour voir le dashboard.
+      expect(find.byType(LoginScreen), findsOneWidget);
+      final router = GoRouter.of(
+        tester.element(find.byType(LoginScreen)),
+      );
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        '/login',
+      );
     });
 
     testWidgets('logout depuis la console revient à l écran d accueil', (

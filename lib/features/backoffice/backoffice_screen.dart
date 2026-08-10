@@ -28,10 +28,12 @@ const Set<String> _searchablePages = {
   'facturation',
 };
 
-/// Mobile backoffice for the enterprise manager — faithful port of
-/// `backoffice-mobile.html`. Uses the [BackofficeStore]; by default the
-/// Firestore-backed store (real data + login accounts for clients and
-/// collecteurs), the mock store is used by tests.
+/// Backoffice de l'agence (Agency Manager) — web-first.
+///
+/// Sur desktop (≥ 900px) : sidebar fixe + topbar + zone de contenu, comme la
+/// console entreprise — l'interface de gestion se travaille au bureau. Sur
+/// mobile, le layout d'origine (`backoffice-mobile.html`) est conservé :
+/// topbar, FAB, tab bar en bas et menu latéral en drawer.
 class BackofficeScreen extends StatefulWidget {
   const BackofficeScreen({super.key, this.store, this.agenceId = '', this.societeId = ''});
 
@@ -71,6 +73,17 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     'facturation': 'Billing',
     'parametres': 'Settings',
   };
+
+  /// Entrées de la sidebar desktop : (page, icône, label).
+  static const List<(String, IconData, String)> _desktopNav = [
+    ('dashboard', Icons.home_rounded, 'Overview'),
+    ('clients', Icons.people_outline_rounded, 'Clients'),
+    ('collecteurs', Icons.person_search_rounded, 'Collectors'),
+    ('contrats', Icons.description_outlined, 'Contracts'),
+    ('collectes', Icons.event_note_rounded, 'Collections'),
+    ('facturation', Icons.payments_outlined, 'Billing'),
+    ('parametres', Icons.settings_outlined, 'Settings'),
+  ];
 
   @override
   void initState() {
@@ -141,6 +154,15 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     _ => null,
   };
 
+  String get _newLabel => switch (_fabEntity) {
+    BoEntity.client => 'New client',
+    BoEntity.collecteur => 'New collector',
+    BoEntity.contrat => 'New contract',
+    BoEntity.collecte => 'New collection',
+    BoEntity.facture => 'New invoice',
+    _ => 'New',
+  };
+
   void _openCreate() {
     final type = _fabEntity;
     if (type == null) return;
@@ -153,73 +175,454 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: BackofficeTheme.bg,
-      body: Stack(
-        children: [
-          Column(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final desktop = constraints.maxWidth >= 900;
+          return desktop ? _buildDesktop() : _buildMobile();
+        },
+      ),
+    );
+  }
+
+  /// Layout mobile (porté 1:1 de `backoffice-mobile.html`) : topbar, FAB,
+  /// tab bar en bas et menu latéral en drawer.
+  Widget _buildMobile() {
+    return Stack(
+      children: [
+        Column(
+          children: [
+            _topbar(),
+            _searchRow(),
+            _statusBar(),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: KeyedSubtree(
+                  key: ValueKey(_page),
+                  child: _pageContent(desktop: false),
+                ),
+              ),
+            ),
+          ],
+        ),
+        // FAB
+        if (_fabEntity != null)
+          Positioned(right: 18, bottom: 100, child: _fab()),
+        // Tab bar
+        Positioned(left: 0, right: 0, bottom: 0, child: _tabbar()),
+        // Side menu overlay + panel
+        _menuOverlay(),
+        _sideMenu(),
+      ],
+    );
+  }
+
+  // --- Layout desktop (web-first) ---
+
+  Widget _buildDesktop() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildDesktopSidebar(),
+        Expanded(child: _buildDesktopMain()),
+      ],
+    );
+  }
+
+  Widget _buildDesktopSidebar() {
+    return Material(
+      color: BackofficeTheme.green,
+      child: SizedBox(
+        width: 240,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Brand
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: BackofficeTheme.gold.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.recycling_rounded,
+                      size: 16,
+                      color: BackofficeTheme.gold,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        text: 'Waste',
+                        style: BackofficeTheme.sora(
+                          15,
+                          weight: FontWeight.w700,
+                          color: BackofficeTheme.cream,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'Pro',
+                            style: BackofficeTheme.sora(
+                              15,
+                              weight: FontWeight.w700,
+                              color: BackofficeTheme.gold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Tag plateforme
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: BackofficeTheme.gold.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.storefront_outlined,
+                        size: 10,
+                        color: BackofficeTheme.gold,
+                      ),
+                      SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          'AGENCY BACKOFFICE',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: BackofficeTheme.gold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Navigation
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final entry in _desktopNav)
+                      _desktopNavItem(entry.$1, entry.$2, entry.$3),
+                  ],
+                ),
+              ),
+            ),
+            // Footer
+            _desktopSidebarFooter(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _desktopNavItem(String page, IconData icon, String label) {
+    final active = _page == page;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: InkWell(
+        onTap: () => _goTo(page),
+        borderRadius: BorderRadius.circular(9),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: active
+                ? BackofficeTheme.gold.withValues(alpha: 0.13)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            border: active
+                ? Border.all(
+                    color: BackofficeTheme.gold.withValues(alpha: 0.32),
+                  )
+                : null,
+          ),
+          child: Row(
             children: [
-              _topbar(),
-              _searchRow(),
-              _statusBar(),
+              Icon(
+                icon,
+                size: 15,
+                color: active
+                    ? BackofficeTheme.gold
+                    : const Color(0xBFE9F2ED),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: KeyedSubtree(
-                    key: ValueKey(_page),
-                    child: _pageContent(),
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.inter(
+                    13,
+                    weight: active ? FontWeight.w600 : FontWeight.w500,
+                    color: active
+                        ? BackofficeTheme.gold
+                        : const Color(0xBFE9F2ED),
                   ),
                 ),
               ),
             ],
           ),
-          // FAB
-          if (_fabEntity != null)
-            Positioned(right: 18, bottom: 100, child: _fab()),
-          // Tab bar
-          Positioned(left: 0, right: 0, bottom: 0, child: _tabbar()),
-          // Side menu overlay + panel
-          _menuOverlay(),
-          _sideMenu(),
+        ),
+      ),
+    );
+  }
+
+  Widget _desktopSidebarFooter() {
+    // UserProvider lives above the backoffice in main.dart; in standalone
+    // widget tests it may be absent, so we read it defensively.
+    UserProvider? userProvider;
+    try {
+      userProvider = Provider.of<UserProvider>(context, listen: false);
+    } catch (_) {
+      userProvider = null;
+    }
+    final user = userProvider?.user;
+    final label = user != null ? user.fullName : 'Agency Manager';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 18),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0x1FE9F2ED))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.inter(
+                    12,
+                    weight: FontWeight.w600,
+                    color: BackofficeTheme.cream,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Agency Manager',
+                  style: BackofficeTheme.inter(
+                    10.5,
+                    color: const Color(0x80E9F2ED),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (user != null)
+            IconButton(
+              key: const Key('bo_bo_logout'),
+              tooltip: 'Log out',
+              onPressed: () =>
+                  Provider.of<UserProvider>(context, listen: false).logout(),
+              icon: const Icon(
+                Icons.logout_rounded,
+                size: 18,
+                color: Color(0x80E9F2ED),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _pageContent() {
+  Widget _buildDesktopMain() {
+    return Column(
+      children: [
+        _buildDesktopTopbar(),
+        _searchRow(),
+        _statusBar(),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 16, 28, 24),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey(_page),
+                child: _pageContent(desktop: true),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopTopbar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+      decoration: const BoxDecoration(
+        color: BackofficeTheme.surface,
+        border: Border(bottom: BorderSide(color: BackofficeTheme.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _titles[_page]!,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.sora(19, weight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _subtitle,
+                  overflow: TextOverflow.ellipsis,
+                  style: BackofficeTheme.inter(
+                    12,
+                    color: BackofficeTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_fabEntity != null) ...[
+            // Action de création web-first (remplace le FAB du mobile).
+            Material(
+              color: BackofficeTheme.green,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: _openCreate,
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.add_rounded,
+                        size: 16,
+                        color: BackofficeTheme.cream,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _newLabel,
+                        style: BackofficeTheme.inter(
+                          12.5,
+                          weight: FontWeight.w600,
+                          color: BackofficeTheme.cream,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          if (_searchablePages.contains(_page)) ...[
+            _desktopIconButton(
+              key: const Key('bo_bo_search_toggle'),
+              icon: Icons.search_rounded,
+              onTap: () => setState(() => _searchOpen = !_searchOpen),
+            ),
+            const SizedBox(width: 10),
+          ],
+          _desktopIconButton(
+            key: const Key('bo_bo_bell'),
+            icon: Icons.notifications_none_rounded,
+            dot: true,
+            onTap: () => BoToastService.show('No new notifications'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bouton icône de la topbar desktop (variante du bouton mobile, taille
+  /// légèrement plus grande pour le web).
+  Widget _desktopIconButton({
+    required Key key,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool dot = false,
+  }) {
+    return _iconButton(
+      key: key,
+      icon: icon,
+      onTap: onTap,
+      dot: dot,
+      size: 38,
+    );
+  }
+
+  // --- contenu (partagé desktop / mobile) ---
+
+  Widget _pageContent({bool desktop = false}) {
     switch (_page) {
       case 'clients':
         return BoListPage(
           store: _store,
           type: BoEntity.client,
           search: _search,
+          desktop: desktop,
         );
       case 'collecteurs':
         return BoListPage(
           store: _store,
           type: BoEntity.collecteur,
           search: _search,
+          desktop: desktop,
         );
       case 'contrats':
         return BoListPage(
           store: _store,
           type: BoEntity.contrat,
           search: _search,
+          desktop: desktop,
         );
       case 'collectes':
         return BoListPage(
           store: _store,
           type: BoEntity.collecte,
           search: _search,
+          desktop: desktop,
         );
       case 'facturation':
         return BoListPage(
           store: _store,
           type: BoEntity.facture,
           search: _search,
+          desktop: desktop,
         );
       case 'parametres':
-        return BoSettingsPage(store: _store);
+        return BoSettingsPage(store: _store, desktop: desktop);
       default:
-        return BoDashboardPage(store: _store);
+        return BoDashboardPage(store: _store, desktop: desktop);
     }
   }
 
@@ -283,14 +686,15 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     required IconData icon,
     required VoidCallback onTap,
     bool dot = false,
+    double size = 36,
   }) {
     return InkWell(
       key: key,
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: BackofficeTheme.surface,
           border: Border.all(color: BackofficeTheme.border),
@@ -299,11 +703,11 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Icon(icon, size: 17, color: BackofficeTheme.green),
+            Icon(icon, size: size * 0.47, color: BackofficeTheme.green),
             if (dot)
               Positioned(
-                top: 7,
-                right: 8,
+                top: size * 0.19,
+                right: size * 0.22,
                 child: Container(
                   width: 5,
                   height: 5,

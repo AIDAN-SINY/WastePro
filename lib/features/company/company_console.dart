@@ -16,12 +16,18 @@ import '../superadmin/widgets/primary_button.dart';
 import '../superadmin/widgets/status_badge.dart';
 import 'data/company_store.dart';
 import 'data/firestore_company_store.dart';
+import 'widgets/company_charts.dart';
 
 /// Console entreprise — General Administrator.
 ///
 /// Phase 2 : gestion des agences et des chefs d'agence de l'entreprise.
 /// Les données sont scopées par [societeId] (l'id de l'entreprise
 /// de l'administrateur, stocké dans `users/{phone}/societeId`).
+///
+/// Le General Administrator pilote toute son entreprise depuis ici :
+/// un header avec un dropdown d'agences (zoom sur une agence → les stats
+/// de l'Overview se filtrent), une Overview riche (KPIs + graphiques +
+/// cartes d'agences) et la gestion des agences / chefs d'agence.
 class CompanyConsole extends StatefulWidget {
   const CompanyConsole({super.key, this.societeId, this.store});
 
@@ -39,7 +45,6 @@ class _CompanyConsoleState extends State<CompanyConsole> {
   late CompanyStore _store;
   late bool _ownsStore;
   int _page = 0;
-  bool _narrow = false;
 
   static const _navItems = [
     (icon: Icons.speed_rounded, label: 'Overview'),
@@ -56,6 +61,12 @@ class _CompanyConsoleState extends State<CompanyConsole> {
   void initState() {
     super.initState();
     _bindStore();
+    // Preview démo : un store mock créé ICI (jamais un store injecté par
+    // les tests) est seedé pour que l'interface soit riche dès l'ouverture
+    // (comme le backoffice et la console super admin).
+    if (_ownsStore && _store is! FirestoreCompanyStore) {
+      _store.seedPreviewData();
+    }
     _store.load();
   }
 
@@ -66,14 +77,6 @@ class _CompanyConsoleState extends State<CompanyConsole> {
         (sid.isNotEmpty
             ? FirestoreCompanyStore(societeId: sid)
             : CompanyStore());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_narrow) {
-      if (MediaQuery.sizeOf(context).width < 900) _narrow = true;
-    }
   }
 
   @override
@@ -98,6 +101,13 @@ class _CompanyConsoleState extends State<CompanyConsole> {
 
   // --- Demo detection ---
   bool get _isDemo => _store is! FirestoreCompanyStore;
+
+  /// Sélectionne une agence depuis le dropdown du header et bascule sur
+  /// l'Overview pour montrer ses stats.
+  void _selectAgence(String id) {
+    _store.selectAgence(id);
+    setState(() => _page = 0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,25 +139,25 @@ class _CompanyConsoleState extends State<CompanyConsole> {
     return Material(
       color: SuperAdminTheme.ink,
       child: SizedBox(
-        width: 240,
+        width: 248,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Brand
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 4),
               child: Row(
                 children: [
                   Container(
-                    width: 26,
-                    height: 26,
+                    width: 30,
+                    height: 30,
                     decoration: BoxDecoration(
                       color: SuperAdminTheme.gold.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(9),
                     ),
                     child: const Icon(
                       Icons.business_rounded,
-                      size: 16,
+                      size: 17,
                       color: SuperAdminTheme.gold,
                     ),
                   ),
@@ -178,7 +188,85 @@ class _CompanyConsoleState extends State<CompanyConsole> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            // Company card
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: Consumer<CompanyStore>(
+                builder: (context, store, _) {
+                  final nom = store.societeNom.isNotEmpty
+                      ? store.societeNom
+                      : 'My Company';
+                  final initials = saInitials(nom);
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: SuperAdminTheme.inkSoft,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: SuperAdminTheme.inkLine),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: SuperAdminTheme.gold.withValues(
+                                  alpha: 0.18,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  initials,
+                                  style: SuperAdminTheme.inter(
+                                    11,
+                                    weight: FontWeight.w700,
+                                    color: SuperAdminTheme.gold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                nom,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: SuperAdminTheme.inter(
+                                  12.5,
+                                  weight: FontWeight.w700,
+                                  color: SuperAdminTheme.cream,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _sidebarStat(
+                              icon: Icons.storefront_rounded,
+                              value: '${store.agences.length}',
+                              label: 'Agencies',
+                            ),
+                            const SizedBox(width: 8),
+                            _sidebarStat(
+                              icon: Icons.people_rounded,
+                              value: '${store.utilisateurs.length}',
+                              label: 'Managers',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
             // Navigation
             Expanded(
               child: SingleChildScrollView(
@@ -226,33 +314,28 @@ class _CompanyConsoleState extends State<CompanyConsole> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Consumer<CompanyStore>(
-                      builder: (context, store, _) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            store.societeNom.isNotEmpty
-                                ? store.societeNom
-                                : 'My Company',
-                            overflow: TextOverflow.ellipsis,
-                            style: SuperAdminTheme.inter(
-                              12,
-                              weight: FontWeight.w600,
-                              color: SuperAdminTheme.cream,
-                            ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'General Administrator',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: SuperAdminTheme.inter(
+                            11.5,
+                            weight: FontWeight.w600,
+                            color: SuperAdminTheme.cream,
                           ),
-                          Text(
-                            'General Administrator',
-                            overflow: TextOverflow.ellipsis,
-                            style: SuperAdminTheme.inter(
-                              10,
-                              color: SuperAdminTheme.cream.withValues(
-                                alpha: 0.45,
-                              ),
-                            ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Company owner',
+                          style: SuperAdminTheme.inter(
+                            10,
+                            color: const Color(0x80F5F1E8),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                   InkWell(
@@ -263,8 +346,54 @@ class _CompanyConsoleState extends State<CompanyConsole> {
                       child: Icon(
                         Icons.logout_rounded,
                         size: 16,
-                        color: SuperAdminTheme.cream.withValues(alpha: 0.5),
+                        color: const Color(0x80F5F1E8),
                       ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sidebarStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: SuperAdminTheme.ink,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 12, color: SuperAdminTheme.gold),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: SuperAdminTheme.inter(
+                      12,
+                      weight: FontWeight.w700,
+                      color: SuperAdminTheme.cream,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SuperAdminTheme.inter(
+                      9,
+                      color: const Color(0x80F5F1E8),
                     ),
                   ),
                 ],
@@ -281,6 +410,7 @@ class _CompanyConsoleState extends State<CompanyConsole> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: InkWell(
+        key: Key('cc_nav_${label.toLowerCase()}'),
         onTap: () => setState(() => _page = index),
         borderRadius: BorderRadius.circular(9),
         child: AnimatedContainer(
@@ -359,7 +489,7 @@ class _CompanyConsoleState extends State<CompanyConsole> {
             child: IndexedStack(
               index: _page,
               children: const [
-                _OverviewPage(),
+                OverviewPage(),
                 _AgenciesPage(),
                 _ManagersPage(),
               ],
@@ -372,7 +502,7 @@ class _CompanyConsoleState extends State<CompanyConsole> {
 
   Widget _buildTopbar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
       decoration: const BoxDecoration(
         color: SuperAdminTheme.bg,
         border: Border(bottom: BorderSide(color: SuperAdminTheme.border)),
@@ -398,8 +528,129 @@ class _CompanyConsoleState extends State<CompanyConsole> {
               ],
             ),
           ),
+          // Dropdown d'agences : zoom sur une agence = les stats de
+          // l'Overview se filtrent à cette agence.
+          _buildAgencyDropdown(),
+          const SizedBox(width: 12),
+          _TopbarIconButton(
+            icon: Icons.notifications_none_rounded,
+            dot: true,
+            onTap: () => ToastService.show('No new notifications'),
+          ),
         ],
       ),
+    );
+  }
+
+  /// Dropdown du header : « All agencies » + une entrée par agence.
+  Widget _buildAgencyDropdown() {
+    return Consumer<CompanyStore>(
+      builder: (context, store, _) {
+        final selected = store.selectedAgence;
+        final label = selected?.ville ?? 'All agencies';
+        return PopupMenuButton<String>(
+          key: const Key('cc_agency_dropdown'),
+          initialValue: store.selectedAgenceId,
+          onOpened: () {},
+          onSelected: _selectAgence,
+          color: SuperAdminTheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              key: const Key('cc_dd_all'),
+              value: '',
+              child: _dropdownItem(
+                icon: Icons.apartment_rounded,
+                label: 'All agencies',
+                selected: store.selectedAgenceId.isEmpty,
+              ),
+            ),
+            for (final a in store.agences)
+              PopupMenuItem(
+                key: Key('cc_dd_${a.id}'),
+                value: a.id,
+                child: _dropdownItem(
+                  icon: Icons.storefront_rounded,
+                  label: a.ville,
+                  selected: store.selectedAgenceId == a.id,
+                ),
+              ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            decoration: BoxDecoration(
+              color: SuperAdminTheme.surface,
+              border: Border.all(color: SuperAdminTheme.border),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.storefront_outlined,
+                  size: 16,
+                  color: SuperAdminTheme.goldDim,
+                ),
+                const SizedBox(width: 9),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SuperAdminTheme.inter(
+                      12.5,
+                      weight: FontWeight.w600,
+                      color: SuperAdminTheme.text,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: SuperAdminTheme.muted,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _dropdownItem({
+    required IconData icon,
+    required String label,
+    required bool selected,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: SuperAdminTheme.muted),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: SuperAdminTheme.inter(
+              12.5,
+              weight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? SuperAdminTheme.text : SuperAdminTheme.muted,
+            ),
+          ),
+        ),
+        if (selected) ...[
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.check_rounded,
+            size: 16,
+            color: SuperAdminTheme.gold,
+          ),
+        ],
+      ],
     );
   }
 }
@@ -478,56 +729,545 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
+// --- Bouton icône topbar ---
+
+class _TopbarIconButton extends StatelessWidget {
+  const _TopbarIconButton({
+    required this.icon,
+    required this.onTap,
+    this.dot = false,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool dot;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: SuperAdminTheme.bg,
+          border: Border.all(color: SuperAdminTheme.border),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(icon, size: 18, color: SuperAdminTheme.muted),
+            if (dot)
+              Positioned(
+                top: 9,
+                right: 10,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: SuperAdminTheme.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ====================================================================
 // Pages
 // ====================================================================
 
 // --- Overview ---
 
-class _OverviewPage extends StatelessWidget {
-  const _OverviewPage();
+class OverviewPage extends StatelessWidget {
+  const OverviewPage({super.key});
+
+  static const _statusColors = [
+    SuperAdminTheme.green,
+    SuperAdminTheme.red,
+  ];
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<CompanyStore>();
+    final sel = store.selectedAgence;
     final nom = store.societeNom.isNotEmpty ? store.societeNom : 'Your Company';
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 40),
-      children: [
-        // KPI row
-        Row(
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth > 880;
+        final padding = constraints.maxWidth - 56;
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 40),
           children: [
-            Expanded(child: _KpiCard('Agencies', '${store.agences.length}')),
-            const SizedBox(width: 16),
+            // Bandeau contexte
+            _ScopeHeader(store: store, nom: nom),
+            const SizedBox(height: 16),
+            // KPIs
+            _buildKpis(store, wide, padding),
+            const SizedBox(height: 16),
+            // Charts
+            _buildCharts(store, wide),
+            const SizedBox(height: 16),
+            // Agences (ou agence sélectionnée) + managers
+            if (sel == null)
+              _AgenciesOverview(store: store)
+            else
+              _AgencyDetail(store: store, agence: sel),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildKpis(CompanyStore store, bool wide, double paddingWidth) {
+    final sel = store.selectedAgence;
+    final kpis = <Widget>[
+      _KpiCard(
+        icon: Icons.storefront_rounded,
+        iconBg: SuperAdminTheme.goldSoft,
+        iconColor: SuperAdminTheme.goldDim,
+        value: '${store.scopedAgences.length}',
+        label: sel == null ? 'Total agencies' : 'Agency',
+      ),
+      _KpiCard(
+        icon: Icons.people_rounded,
+        iconBg: SuperAdminTheme.greenSoft,
+        iconColor: SuperAdminTheme.green,
+        value: '${store.scopedManagersCount}',
+        label: 'Managers',
+      ),
+      _KpiCard(
+        icon: Icons.check_circle_rounded,
+        iconBg: SuperAdminTheme.blueSoft,
+        iconColor: SuperAdminTheme.blue,
+        value: '${store.activeAgencies}',
+        label: 'Active agencies',
+      ),
+      _KpiCard(
+        icon: Icons.leaderboard_rounded,
+        iconBg: SuperAdminTheme.redSoft,
+        iconColor: SuperAdminTheme.red,
+        value: sel != null
+            ? '${store.managersForAgence(sel.id)}'
+            : '${store.agences.isEmpty ? 0 : (store.utilisateurs.length / store.agences.length).toStringAsFixed(1)}',
+        label: sel != null ? 'Managers / agency' : 'Managers per agency',
+      ),
+    ];
+
+    if (wide) {
+      return Row(
+        children: [
+          for (var i = 0; i < kpis.length; i++)
             Expanded(
-              child: _KpiCard(
-                'Managers',
-                '${store.utilisateurs.length}',
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: i == kpis.length - 1 ? 0 : 16,
+                ),
+                child: kpis[i],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        // Company info card
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: SuperAdminTheme.card(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                nom,
-                style: SuperAdminTheme.sora(18, weight: FontWeight.w700),
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: [
+        for (final kpi in kpis)
+          SizedBox(
+            width: (paddingWidth - 16) / 2,
+            child: kpi,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCharts(CompanyStore store, bool wide) {
+    final sel = store.selectedAgence;
+    // Bar chart : managers par agence (ou par manager pour une agence).
+    final barValues = sel == null
+        ? store.agences
+              .map((a) => store.managersForAgence(a.id).toDouble())
+              .toList()
+        : store.scopedUtilisateurs
+              .map((_) => 1.0)
+              .toList();
+    final barLabels = sel == null
+        ? store.agences.map((a) => a.ville).toList()
+        : store.scopedUtilisateurs.map((u) => u.nom).toList();
+
+    // Donut : statut des agences (ou des managers).
+    final donutValues = sel == null
+        ? [
+            store.activeAgencies.toDouble(),
+            (store.scopedAgences.length - store.activeAgencies).toDouble(),
+          ]
+        : _statusCounts(store.scopedUtilisateurs);
+    final donutLabels = sel == null
+        ? ['Active', 'Suspended']
+        : _statusLabels();
+    final donutColors = sel == null
+        ? [SuperAdminTheme.green, SuperAdminTheme.red]
+        : _statusColors;
+
+    final barChart = _chartCard(
+      title: sel == null ? 'Managers per agency' : 'Managers',
+      tag: sel?.ville ?? 'All agencies',
+      child: CcBarChart(values: barValues, labels: barLabels),
+    );
+    final donutChart = _chartCard(
+      title: sel == null ? 'Agency status' : 'Manager status',
+      tag: sel?.status ?? '',
+      child: CcDonutChart(
+        values: donutValues,
+        labels: donutLabels,
+        colors: donutColors,
+        centerValue:
+            '${donutValues.fold<double>(0, (a, b) => a + b).round()}',
+        centerLabel: sel == null ? 'agencies' : 'managers',
+      ),
+    );
+
+    if (wide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 7, child: barChart),
+          const SizedBox(width: 16),
+          Expanded(flex: 5, child: donutChart),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        barChart,
+        const SizedBox(height: 16),
+        donutChart,
+      ],
+    );
+  }
+
+  List<double> _statusCounts(List<PlatformUserModel> users) {
+    var activeCount = 0;
+    for (final u in users) {
+      if (u.status == 'Active' || u.status == 'Actif') activeCount++;
+    }
+    return [activeCount.toDouble(), (users.length - activeCount).toDouble()];
+  }
+
+  List<String> _statusLabels() {
+    return ['Active', 'Suspended'];
+  }
+}
+
+Widget _chartCard({
+  required String title,
+  required String tag,
+  required Widget child,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(20),
+    decoration: SuperAdminTheme.card(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+                style: SuperAdminTheme.sora(14.5, weight: FontWeight.w600),
               ),
-              const SizedBox(height: 4),
+            ),
+            if (tag.isNotEmpty) ...[
+              const SizedBox(width: 8),
               Text(
-                'General Administrator',
-                style: SuperAdminTheme.inter(
-                  12,
-                  color: SuperAdminTheme.muted,
-                ),
+                tag,
+                overflow: TextOverflow.ellipsis,
+                style: SuperAdminTheme.inter(11.5, color: SuperAdminTheme.muted),
               ),
             ],
+          ],
+        ),
+        const SizedBox(height: 14),
+        child,
+      ],
+    ),
+  );
+}
+
+/// Bandeau d'en-tête de l'Overview : nom de l'entreprise + agence filtrée.
+class _ScopeHeader extends StatelessWidget {
+  const _ScopeHeader({required this.store, required this.nom});
+
+  final CompanyStore store;
+  final String nom;
+
+  @override
+  Widget build(BuildContext context) {
+    final sel = store.selectedAgence;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: SuperAdminTheme.card(),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: SuperAdminTheme.goldSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.apartment_rounded,
+              size: 22,
+              color: SuperAdminTheme.goldDim,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nom,
+                  style: SuperAdminTheme.sora(17, weight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  sel != null
+                      ? 'Viewing ${sel.ville} — ${sel.responsable}'
+                      : 'Viewing all your agencies',
+                  style: SuperAdminTheme.inter(
+                    12,
+                    color: SuperAdminTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (store.societes.isNotEmpty)
+            StatusBadge(status: store.societes.first.status),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiCard extends StatelessWidget {
+  const _KpiCard({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: SuperAdminTheme.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 15, color: iconColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: SuperAdminTheme.sora(26, weight: FontWeight.w700),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: SuperAdminTheme.inter(12, color: SuperAdminTheme.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- Grille d'agences (vue « toutes ») ---
+
+class _AgenciesOverview extends StatelessWidget {
+  const _AgenciesOverview({required this.store});
+
+  final CompanyStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            'Your agencies',
+            style: SuperAdminTheme.sora(15, weight: FontWeight.w700),
+          ),
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = (constraints.maxWidth - 16) / 2;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                for (final a in store.agences)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _AgencyCard(
+                      agence: a,
+                      managerCount: store.managersForAgence(a.id),
+                      onView: () => store.selectAgence(a.id),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+        if (store.agences.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: SuperAdminTheme.card(),
+            child: Center(
+              child: Text(
+                'No agencies yet. Create your first agency to get started.',
+                textAlign: TextAlign.center,
+                style: SuperAdminTheme.inter(12.5, color: SuperAdminTheme.muted),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AgencyCard extends StatelessWidget {
+  const _AgencyCard({
+    required this.agence,
+    required this.managerCount,
+    required this.onView,
+  });
+
+  final AgenceModel agence;
+  final int managerCount;
+  final VoidCallback onView;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: SuperAdminTheme.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: SuperAdminTheme.goldSoft,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.storefront_rounded,
+                  size: 16,
+                  color: SuperAdminTheme.goldDim,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  agence.ville,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SuperAdminTheme.inter(
+                    13,
+                    weight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              StatusBadge(status: agence.status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _cardMeta(icon: Icons.person_rounded, text: agence.responsable),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              _cardMeta(icon: Icons.groups_rounded, text: '$managerCount managers'),
+              const SizedBox(width: 14),
+              _cardMeta(icon: Icons.phone_rounded, text: agence.telephone),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onView,
+              style: TextButton.styleFrom(
+                foregroundColor: SuperAdminTheme.goldDim,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                textStyle: SuperAdminTheme.inter(
+                  12,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              icon: const Icon(Icons.visibility_rounded, size: 15),
+              label: const Text('View stats'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardMeta({required IconData icon, required String text}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: SuperAdminTheme.muted),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: SuperAdminTheme.inter(11.5, color: SuperAdminTheme.muted),
           ),
         ),
       ],
@@ -535,38 +1275,72 @@ class _OverviewPage extends StatelessWidget {
   }
 }
 
-class _KpiCard extends StatelessWidget {
-  const _KpiCard(this.label, this.value);
+// --- Détail d'une agence (vue « zoom ») ---
 
-  final String label;
-  final String value;
+class _AgencyDetail extends StatelessWidget {
+  const _AgencyDetail({required this.store, required this.agence});
+
+  final CompanyStore store;
+  final AgenceModel agence;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: SuperAdminTheme.card(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: SuperAdminTheme.inter(
-              12,
-              color: SuperAdminTheme.muted,
-              weight: FontWeight.w600,
+    final managers =
+        store.utilisateurs
+            .where((u) => u.agenceId == agence.id || u.agence == agence.ville)
+            .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Managers — ${agence.ville}',
+                style: SuperAdminTheme.sora(15, weight: FontWeight.w700),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: SuperAdminTheme.sora(
-              32,
-              weight: FontWeight.w700,
+            TextButton.icon(
+              onPressed: () => store.selectAgence(''),
+              style: TextButton.styleFrom(
+                foregroundColor: SuperAdminTheme.goldDim,
+                textStyle: SuperAdminTheme.inter(
+                  12,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              icon: const Icon(Icons.arrow_back_rounded, size: 15),
+              label: const Text('All agencies'),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        AppTable<PlatformUserModel>(
+          rows: managers,
+          emptyText: 'No managers in this agency',
+          footer: '${managers.length} manager${managers.length > 1 ? 's' : ''}',
+          columns: [
+            TableColumnSpec(
+              label: 'Name',
+              sortValue: (u) => u.nom,
+              flex: 3,
+              cell: (u) => saNameCell(u.nom),
+            ),
+            TableColumnSpec(
+              label: 'Phone',
+              sortValue: (u) => u.telephone,
+              flex: 2,
+              cell: (u) => saTextCell(u.telephone),
+            ),
+            TableColumnSpec(
+              label: 'Status',
+              sortValue: (u) => u.status,
+              flex: 1,
+              cell: (u) => StatusBadge(status: u.status),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

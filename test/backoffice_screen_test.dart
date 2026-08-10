@@ -193,6 +193,63 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('desktop : sidebar web-first + navigation sans drawer', (
+    tester,
+  ) async {
+    // Large écran → layout desktop (web-first) : sidebar fixe à gauche,
+    // pas de tab bar mobile ni de menu hamburger.
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: BackofficeScreen(store: BackofficeStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Sidebar desktop (brand + entrées) visible ; pas de tab bar mobile.
+    expect(find.text('AGENCY BACKOFFICE'), findsOneWidget);
+    expect(find.byKey(const Key('bo_tab_dashboard')), findsNothing);
+    expect(find.byKey(const Key('bo_menu')), findsNothing);
+
+    // Navigation via la sidebar : cliquer Clients affiche la liste.
+    await tester.tap(find.text('Clients').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Jean Dooh'), findsOneWidget);
+    expect(find.text('Bonanjo · Standard'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // Bouton d'action web-first visible (remplace le FAB mobile) et toggle
+    // de recherche desktop présent (page listable).
+    expect(find.text('New client'), findsOneWidget);
+    expect(find.byKey(const Key('bo_fab')), findsNothing);
+    expect(find.byKey(const Key('bo_bo_search_toggle')), findsOneWidget);
+  });
+
+  testWidgets('desktop : le dashboard affiche les KPIs en ligne', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: BackofficeScreen(store: BackofficeStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // KPIs du dashboard présents (page d'accueil par défaut).
+    expect(find.text('Active clients'), findsOneWidget);
+    expect(find.text("Today's collections"), findsOneWidget);
+    expect(find.text('Revenue (thousands)'), findsOneWidget);
+    expect(find.text('Success rate'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filter chips narrow the client list', (tester) async {
     await pumpBackoffice(tester, BackofficeStore());
 

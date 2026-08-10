@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/agence_model.dart';
+import '../../../models/platform_user_model.dart';
+import '../../../models/societe_model.dart';
 import '../data/platform_store.dart';
+import '../theme.dart';
 import '../widgets/app_table.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/cells.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/crud_drawer.dart';
+import '../widgets/detail_drawer.dart';
 import '../widgets/filter_pills.dart';
 import '../widgets/form_fields.dart';
 import '../widgets/form_validation.dart';
@@ -109,6 +113,252 @@ class AgencesPageState extends State<AgencesPage> {
           rethrow;
         }
       },
+    );
+  }
+
+  /// Ouvre la vue détail d'une agence : toutes les informations (agence,
+  /// société liée, managers affectés) + actions Éditer / Supprimer.
+  /// C'est le super admin : il voit TOUT sur l'agence.
+  void openDetail(AgenceModel agence) {
+    showDetailDrawer(
+      context,
+      title: agence.ville,
+      body: _buildDetailBody(agence),
+      footer: _buildDetailFooter(agence),
+    );
+  }
+
+  /// Corps de la vue détail : infos agence, société liée, managers.
+  Widget _buildDetailBody(AgenceModel agence) {
+    final store = context.read<PlatformStore>();
+    // Société liée (par id si renseigné, sinon par nom).
+    SocieteModel? societe;
+    for (final s in store.societes) {
+      if ((agence.societeId.isNotEmpty && s.id == agence.societeId) ||
+          (agence.societeId.isEmpty && s.raisonSociale == agence.societe)) {
+        societe = s;
+        break;
+      }
+    }
+    // Managers affectés à l'agence (par agenceId, sinon par nom).
+    final managers = store.utilisateurs
+        .where((u) =>
+            u.agenceId == agence.id ||
+            (u.agenceId.isEmpty && u.agence == agence.ville))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // En-tête visuel de l'agence.
+        Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: SuperAdminTheme.goldSoft,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.storefront_rounded,
+                size: 22,
+                color: SuperAdminTheme.goldDim,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    agence.ville,
+                    style: SuperAdminTheme.sora(15, weight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    societe?.raisonSociale ?? agence.societe,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SuperAdminTheme.inter(
+                      11.5,
+                      color: SuperAdminTheme.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            StatusBadge(status: agence.status),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Divider(height: 1, color: SuperAdminTheme.border),
+        const SizedBox(height: 18),
+        // Infos de l'agence.
+        Text(
+          'AGENCY',
+          style: SuperAdminTheme.inter(
+            10.5,
+            weight: FontWeight.w700,
+            color: SuperAdminTheme.goldDim,
+          ),
+        ),
+        const SizedBox(height: 12),
+        DetailRow(label: 'City', value: agence.ville),
+        DetailRow(label: 'Manager', value: agence.responsable),
+        DetailRow(label: 'Phone', value: agence.telephone),
+        const SizedBox(height: 6),
+        // Société liée.
+        Text(
+          'COMPANY',
+          style: SuperAdminTheme.inter(
+            10.5,
+            weight: FontWeight.w700,
+            color: SuperAdminTheme.goldDim,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (societe != null) ...[
+          DetailRow(label: 'Company', value: societe.raisonSociale),
+          DetailRow(label: 'Address', value: societe.adresse),
+          DetailRow(label: 'Email', value: societe.email),
+          DetailRow(label: 'Phone', value: societe.telephone),
+        ] else
+          DetailRow(label: 'Company', value: agence.societe),
+        const SizedBox(height: 6),
+        // Managers affectés.
+        Text(
+          'MANAGERS — ${managers.length}',
+          style: SuperAdminTheme.inter(
+            10.5,
+            weight: FontWeight.w700,
+            color: SuperAdminTheme.goldDim,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (managers.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No managers assigned to this agency yet.',
+              style: SuperAdminTheme.inter(12, color: SuperAdminTheme.muted),
+            ),
+          )
+        else
+          for (final m in managers)
+            _managerTile(m),
+      ],
+    );
+  }
+
+  /// Ligne manager dans la vue détail (avatar + nom + rôle + statut).
+  Widget _managerTile(PlatformUserModel manager) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: SuperAdminTheme.rowHover,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: SuperAdminTheme.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: SuperAdminTheme.goldSoft,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Center(
+              child: Text(
+                saInitials(manager.nom),
+                style: SuperAdminTheme.inter(
+                  10.5,
+                  weight: FontWeight.w700,
+                  color: SuperAdminTheme.goldDim,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  manager.nom,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SuperAdminTheme.inter(12.5, weight: FontWeight.w600),
+                ),
+                Text(
+                  manager.role,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SuperAdminTheme.inter(10.5, color: SuperAdminTheme.muted),
+                ),
+              ],
+            ),
+          ),
+          StatusBadge(status: manager.status),
+        ],
+      ),
+    );
+  }
+
+  /// Pied de la vue détail : Éditer + Supprimer.
+  Widget _buildDetailFooter(AgenceModel agence) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: SuperAdminTheme.border),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(context).pop(); // ferme la vue détail
+              openEdit(agence);
+            },
+            child: Text(
+              'Edit',
+              style: SuperAdminTheme.inter(
+                12.5,
+                weight: FontWeight.w600,
+                color: SuperAdminTheme.muted,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              backgroundColor: SuperAdminTheme.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(context).pop(); // ferme la vue détail
+              confirmDelete(agence);
+            },
+            child: Text(
+              'Delete',
+              style: SuperAdminTheme.inter(
+                12.5,
+                weight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -255,7 +505,8 @@ class AgencesPageState extends State<AgencesPage> {
               ),
             ],
           ),
-          onRowTap: openEdit,
+          // Clic sur une ligne → vue détail complète de l'agence.
+          onRowTap: openDetail,
         ),
       ],
     );

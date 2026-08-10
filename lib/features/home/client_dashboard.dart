@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -73,6 +74,16 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     // Redirect to login if user is null (after logout)
     if (user == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // App web : AuthWrapper (route '/') bascule déjà vers l'écran
+        // d'accueil dès que le provider notifie. On pop simplement les
+        // sous-écrans poussés au-dessus (ex. ProfileScreen) pour révéler
+        // l'accueil du routeur — jamais de push impérative par-dessus le
+        // routeur (elle forcerait à recharger la page pour se reconnecter).
+        if (GoRouter.maybeOf(context) != null) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          return;
+        }
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const WelcomeScreen()),
           (route) => false,
