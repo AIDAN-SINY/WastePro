@@ -77,7 +77,13 @@ void main() {
     await tester.tap(find.byKey(const Key('cc_nav_managers')));
     await tester.pumpAndSettle();
 
-    expect(find.text('New manager'), findsOneWidget);
+    // Le bouton « New manager » a disparu : les managers sont créés avec
+    // leur agence via le modal agence.
+    expect(find.text('New manager'), findsNothing);
+    expect(
+      find.text('Managers are created with their agency.'),
+      findsOneWidget,
+    );
     // 3 managers seedés.
     expect(find.text('Jean Dooh'), findsOneWidget);
     expect(find.text('Aïcha Bello'), findsOneWidget);
@@ -111,12 +117,18 @@ void main() {
     expect(find.textContaining('Viewing all'), findsOneWidget);
   });
 
-  testWidgets('créer un chef d agence SANS agence est bloqué', (tester) async {
-    // Flow validé : chaque chef d'agence doit être assigné à une agence.
-    // Sans agence, son backoffice n'aurait aucun périmètre. On passe par
-    // un vrai store Firestore (le store mock bloque « New manager » en
-    // mode aperçu démo).
+  testWidgets('créer une agence via le modal (badge entreprise + champs)', (
+    tester,
+  ) async {
     final db = FakeFirebaseFirestore();
+    await db.collection('societes').doc('so1').set({
+      'id': 'so1',
+      'raisonSociale': 'WastePro Douala Ltd',
+      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'telephone': '+237 233 42 10 55',
+      'email': 'contact@wastepro.cm',
+      'status': 'Active',
+    });
     final store = FirestoreCompanyStore(db: db, societeId: 'so1');
     await store.initialLoad;
 
@@ -129,32 +141,223 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const Key('cc_nav_managers')));
+    await tester.tap(find.byKey(const Key('cc_nav_agencies')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('New manager'));
+    await tester.tap(find.text('New agency'));
     await tester.pumpAndSettle();
 
-    // Nom + téléphone + mot de passe, mais agence laissée sur « — ».
-    await tester.enterText(find.byType(TextFormField).at(0), 'Jean Dooh');
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      '+237 677 12 34 56',
-    );
-    await tester.enterText(find.byType(TextFormField).at(2), 'secret123');
+    // Badge non-éditable avec l'entreprise du connecté en haut du modal.
+    expect(find.textContaining('Creating agency for:'), findsOneWidget);
+    expect(find.textContaining('WastePro Douala Ltd'), findsWidgets);
+
+    // Les 6 champs demandés sont présents.
+    expect(find.text('Agency name'), findsOneWidget);
+    expect(find.text('Location'), findsOneWidget);
+    expect(find.text('Manager'), findsOneWidget);
+    expect(find.text('Manager phone'), findsOneWidget);
+    expect(find.text('City'), findsOneWidget);
+    expect(find.text('Phone'), findsOneWidget);
+
+    // Remplir le formulaire (nom, localisation, manager, tél. manager,
+    // ville, téléphone de l'agence).
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Bonanjo');
+    await tester.enterText(fields.at(1), 'Rue de la Paix');
+    await tester.enterText(fields.at(2), 'Jean Dooh');
+    await tester.enterText(fields.at(3), '+237 699 88 77 66');
+    await tester.enterText(fields.at(4), 'Douala');
+    await tester.enterText(fields.at(5), '+237 677 12 34 56');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    // Toast d'erreur + le drawer reste ouvert pour corriger.
+    // L'agence est créée : ville fusionnée « Douala — Bonanjo » + location.
+    expect(store.agences, hasLength(1));
+    final agence = store.agences.first;
+    expect(agence.ville, 'Douala — Bonanjo');
+    expect(agence.location, 'Rue de la Paix');
+    expect(agence.responsable, 'Jean Dooh');
+    expect(agence.telephone, '+237 677 12 34 56');
+    expect(agence.societe, 'WastePro Douala Ltd');
+    expect(agence.status, 'Active');
+
+    // Le manager saisi est synchronisé avec l'agence : il apparaît dans la
+    // liste des managers sans être recréé via la page Managers, avec un
+    // mot de passe numérique généré.
+    expect(store.utilisateurs, hasLength(1));
+    final manager = store.utilisateurs.first;
+    expect(manager.nom, 'Jean Dooh');
+    expect(manager.telephone, '+237 699 88 77 66');
+    expect(manager.role, 'Agency Manager');
+    expect(manager.agence, 'Douala — Bonanjo');
+    expect(manager.agenceId, agence.id);
+    expect(manager.password, matches(RegExp(r'^\d{6}$')));
+
+    // Le compte de connexion users/{phone} a bien été créé.
+    final userDoc =
+        await db.collection('users').doc('+237699887766').get();
+    expect(userDoc.exists, isTrue);
+    expect(userDoc.data()!['role'], 'agency_manager');
+    expect(userDoc.data()!['fullName'], 'Jean Dooh');
+    expect(userDoc.data()!['password'], manager.password);
+    expect(userDoc.data()!['consoleCreated'], isTrue);
+
+    // Le dialogue affiche les identifiants générés une seule fois.
+    expect(find.text('Manager account created'), findsOneWidget);
+    expect(find.text('+237 699 88 77 66'), findsOneWidget);
+    expect(find.text(manager.password), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // Flush le timer du toast (3 s) pour que le test se termine proprement.
+    await tester.pump(const Duration(seconds: 4));
+    store.dispose();
+  });
+
+  testWidgets(
+    'créer une agence avec un manager SANS téléphone est bloqué',
+    (tester) async {
+      final db = FakeFirebaseFirestore();
+      await db.collection('societes').doc('so1').set({
+        'id': 'so1',
+        'raisonSociale': 'WastePro Douala Ltd',
+        'adresse': '127 Rue du Commerce, Akwa, Douala',
+        'telephone': '+237 233 42 10 55',
+        'email': 'contact@wastepro.cm',
+        'status': 'Active',
+      });
+      final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+      await store.initialLoad;
+
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(home: CompanyConsole(societeId: 'so1', store: store)),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('cc_nav_agencies')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New agency'));
+      await tester.pumpAndSettle();
+
+      // Nom d'agence + nom du manager, mais pas de téléphone manager.
+      final fields = find.byType(TextFormField);
+      await tester.enterText(fields.at(0), 'Bonanjo');
+      await tester.enterText(fields.at(2), 'Jean Dooh');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      // Toast d'erreur + le modal reste ouvert pour corriger.
+      expect(
+        find.text('Please enter the manager phone number.'),
+        findsOneWidget,
+      );
+      expect(find.text('Agency name'), findsOneWidget);
+
+      // Rien n'a été créé : ni agence, ni manager.
+      expect(store.agences, isEmpty);
+      expect(store.utilisateurs, isEmpty);
+
+      // Flush le timer du toast (3 s) pour que le test se termine
+      // proprement.
+      await tester.pump(const Duration(seconds: 4));
+      store.dispose();
+    },
+  );
+
+  testWidgets('créer une agence SANS nom ni ville est bloqué par le modal', (
+    tester,
+  ) async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('societes').doc('so1').set({
+      'id': 'so1',
+      'raisonSociale': 'WastePro Douala Ltd',
+      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'telephone': '+237 233 42 10 55',
+      'email': 'contact@wastepro.cm',
+      'status': 'Active',
+    });
+    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    await store.initialLoad;
+
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(home: CompanyConsole(societeId: 'so1', store: store)),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('cc_nav_agencies')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New agency'));
+    await tester.pumpAndSettle();
+
+    // Ne remplir que le manager : nom d'agence et ville restent vides.
+    await tester.enterText(find.byType(TextFormField).at(2), 'Jean Dooh');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Toast d'erreur + le modal reste ouvert pour corriger.
     expect(
-      find.text('Please assign this manager to an agency.'),
+      find.text('Please enter an agency name or a city.'),
       findsOneWidget,
     );
-    expect(find.text('Full name'), findsOneWidget);
+    expect(find.text('Agency name'), findsOneWidget);
 
-    // Rien n'a été écrit : ni l'utilisateur, ni un compte de connexion.
+    // Rien n'a été créé.
+    expect(store.agences, isEmpty);
+
+    // Flush le timer du toast (3 s) pour que le test se termine proprement.
+    await tester.pump(const Duration(seconds: 4));
+    store.dispose();
+  });
+
+  testWidgets('créer une agence SANS manager (aucun compte créé)', (
+    tester,
+  ) async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('societes').doc('so1').set({
+      'id': 'so1',
+      'raisonSociale': 'WastePro Douala Ltd',
+      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'telephone': '+237 233 42 10 55',
+      'email': 'contact@wastepro.cm',
+      'status': 'Active',
+    });
+    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    await store.initialLoad;
+
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(home: CompanyConsole(societeId: 'so1', store: store)),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const Key('cc_nav_agencies')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New agency'));
+    await tester.pumpAndSettle();
+
+    // Remplir l'agence mais laisser le manager (et son téléphone) vides.
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Bonanjo');
+    await tester.enterText(fields.at(4), 'Douala');
+    await tester.enterText(fields.at(5), '+237 677 12 34 56');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Agence créée sans manager : aucun dialogue d'identifiants, aucun
+    // compte manager.
+    expect(store.agences, hasLength(1));
     expect(store.utilisateurs, isEmpty);
-    final utilisateurs = await db.collection('utilisateurs').get();
-    expect(utilisateurs.docs, isEmpty);
+    expect(find.text('Manager account created'), findsNothing);
     final users = await db.collection('users').get();
     expect(users.docs, isEmpty);
 

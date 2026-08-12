@@ -55,8 +55,25 @@ class FirestoreBackofficeStore extends BackofficeStore {
   /// Vrai quand le backoffice est limité à une agence (Phase 3).
   bool _isScoped = false;
 
+  /// Ville (nom) de l'agence du chef — clé de secours pour retrouver les
+  /// candidatures écrites avec le NOM de l'agence (`agenceName`) plutôt
+  /// qu'avec son id (ex. doublons d'agences homonymes, candidatures dont
+  /// l'`agenceId` pointe vers un autre doc que celui du chef).
+  ///
+  /// Compromis assumé : les chefs d'agences homonymes voient les mêmes
+  /// candidatures (partage par nom) ; à l'approbation, le client est créé
+  /// sous l'agence CHOISIE par le client (`reg.agenceId`), jamais sous
+  /// celle du chef qui approuve — aucune donnée n'est corrompue.
+  String _agencyVille = '';
+
+  /// Candidatures vues par le query `agenceId == X` (clé = id du doc).
+  final Map<String, RegistrationModel> _regsById = {};
+
+  /// Candidatures vues par le query de secours `agenceName == ville`.
+  final Map<String, RegistrationModel> _regsByName = {};
+
   /// Vrai après [dispose] : aucune notification ne doit plus être émise
-  /// (garde pour les lectures one-shot comme [_loadAgenceName], qui ne
+  /// (garde pour les lectures one-shot comme [_loadAgenceVille], qui ne
   /// passent pas par un abonnement annulable).
   bool _disposed = false;
 
@@ -84,6 +101,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
     _pending = 3;
     _seededClients = false;
     _seededCollecteurs = false;
+    _regsById.clear();
+    _regsByName.clear();
     _loadCompleter = Completer<void>();
     notifyListeners();
 
@@ -103,6 +122,16 @@ class FirestoreBackofficeStore extends BackofficeStore {
               .where('agenceId', isEqualTo: agenceId)
         : _db.collection('registrations');
 
+    // Phase 3 : charge la ville de l'agence AVANT de monter les listeners
+    // de candidatures — c'est la clé de secours par NOM (voir
+    // [_agencyVille]). Silencieux : un échec ne doit pas bloquer le
+    // backoffice (la recherche par id reste active).
+    if (_isScoped && agenceId.isNotEmpty) {
+      _agencyVille = await _loadAgenceVille();
+    } else {
+      _agencyVille = '';
+    }
+
     _subs.add(
       clientsQuery.snapshots().listen(_onClients, onError: handleStreamError),
     );
@@ -111,32 +140,47 @@ class FirestoreBackofficeStore extends BackofficeStore {
           .snapshots()
           .listen(_onCollecteurs, onError: handleStreamError),
     );
+    // Fallback par NOM d'agence : un where supplémentaire sur un SEUL champ
+    // (pas d'index composé requis). Fusionné en mémoire avec le listener par
+    // id dans [registrations].
+    if (_isScoped && _agencyVille.isNotEmpty) {
+      _subs.add(
+        _db
+            .collection('registrations')
+            .where('agenceName', isEqualTo: _agencyVille)
+            .snapshots()
+            .listen(
+              _onRegistrationsByName,
+              // Le fallback par nom est best-effort : un échec de CE query
+              // ne doit pas afficher de bannière alors que le query par id
+              // fonctionne (mêmes règles, mais défense en profondeur).
+              onError: _ignoreFallbackError,
+            ),
+      );
+    }
     _subs.add(
       registrationsQuery
           .snapshots()
           .listen(_onRegistrations, onError: handleStreamError),
     );
 
-    // Phase 3 : charge le nom de l'agence (affiché dans la sidebar) depuis
-    // `agences/{agenceId}`. Silencieux : le nom est décoratif, un échec ne
-    // doit pas bloquer le backoffice.
-    if (_isScoped && agenceId.isNotEmpty) {
-      _loadAgenceName();
-    }
-
     await _loadCompleter!.future;
   }
 
-  /// Lit `agences/{agenceId}` et expose son `ville` comme nom d'agence.
-  Future<void> _loadAgenceName() async {
+  /// Lit `agences/{agenceId}`, expose son `ville` comme nom d'agence
+  /// (sidebar) et le renvoie pour le fallback par nom des candidatures
+  /// ('' si indisponible).
+  Future<String> _loadAgenceVille() async {
     try {
       final doc = await _db.collection('agences').doc(agenceId).get();
-      if (_disposed) return;
-      if (!doc.exists) return;
-      final name = doc.data()?['ville'] as String? ?? '';
-      if (name.isNotEmpty) setAgenceName(name);
+      if (_disposed) return '';
+      if (!doc.exists) return '';
+      final ville = doc.data()?['ville'] as String? ?? '';
+      if (ville.isNotEmpty) setAgenceName(ville);
+      return ville;
     } catch (_) {
       // Silencieux (voir [load]).
+      return '';
     }
   }
 
@@ -169,10 +213,41 @@ class FirestoreBackofficeStore extends BackofficeStore {
   }
 
   void _onRegistrations(QuerySnapshot<Map<String, dynamic>> qs) {
+    _regsById
+      ..clear()
+      ..addEntries(
+        qs.docs.map(
+          (d) => MapEntry(d.id, RegistrationModel.fromMap(d.data())),
+        ),
+      );
+    _rebuildRegistrations();
+    _markLoaded();
+  }
+
+  /// Erreur du fallback par nom : ignorée (best-effort, voir [load]).
+  void _ignoreFallbackError(Object error) {}
+
+  /// Snapshots du fallback par `agenceName` (uniquement quand le backoffice
+  /// est scopé). Ne marque pas le chargement initial (le listener par id
+  /// s'en charge).
+  void _onRegistrationsByName(QuerySnapshot<Map<String, dynamic>> qs) {
+    _regsByName
+      ..clear()
+      ..addEntries(
+        qs.docs.map(
+          (d) => MapEntry(d.id, RegistrationModel.fromMap(d.data())),
+        ),
+      );
+    _rebuildRegistrations();
+  }
+
+  /// Fusionne les candidatures vues par id et par nom (dédoublonnées par id)
+  /// dans [registrations].
+  void _rebuildRegistrations() {
+    final merged = <String, RegistrationModel>{..._regsById, ..._regsByName};
     registrations
       ..clear()
-      ..addAll(qs.docs.map((d) => RegistrationModel.fromMap(d.data())));
-    _markLoaded();
+      ..addAll(merged.values);
   }
 
   void _markLoaded() {
@@ -316,6 +391,21 @@ class FirestoreBackofficeStore extends BackofficeStore {
         'status': 'approved',
         'collecteurId': collecteurId,
       });
+      // 4. Le client est notifié dans l'app (cloche du dashboard) : la
+      //    décision est visible dès sa prochaine ouverture de l'app.
+      if (canonical.isNotEmpty) {
+        batch.set(
+          _db.collection('notifications').doc('notif${reg.id}'),
+          _notificationMap(
+            regId: reg.id,
+            phone: canonical,
+            type: 'approved',
+            title: 'Application approved',
+            message: 'Your application was approved. You can now log in '
+                'and start scheduling your pickups.',
+          ),
+        );
+      }
       await batch.commit();
     } catch (error) {
       throw _SyncError(_friendlyError(error));
@@ -334,10 +424,27 @@ class FirestoreBackofficeStore extends BackofficeStore {
 
   @override
   Future<void> rejectRegistration(RegistrationModel reg) async {
+    final canonical = _canonicalPhone(reg.phone);
     try {
-      await _db.collection('registrations').doc(reg.id).update({
+      final batch = _db.batch();
+      batch.update(_db.collection('registrations').doc(reg.id), {
         'status': 'rejected',
       });
+      // Notifie le client dans l'app (cloche du dashboard).
+      if (canonical.isNotEmpty) {
+        batch.set(
+          _db.collection('notifications').doc('notif${reg.id}'),
+          _notificationMap(
+            regId: reg.id,
+            phone: canonical,
+            type: 'rejected',
+            title: 'Application rejected',
+            message: 'Your application was rejected. You can submit a new '
+                'application from the app.',
+          ),
+        );
+      }
+      await batch.commit();
     } catch (error) {
       throw _SyncError(_friendlyError(error));
     }
@@ -349,6 +456,31 @@ class FirestoreBackofficeStore extends BackofficeStore {
       registrations.add(updated);
     }
     notifyListeners();
+  }
+
+  /// Doc de notification pour une décision de candidature. Id déterministe
+  /// (`notif{regId}`) : une décision = une notification, jamais de doublon.
+  Map<String, dynamic> _notificationMap({
+    required String regId,
+    required String phone,
+    required String type,
+    required String title,
+    required String message,
+  }) {
+    final now = DateTime.now();
+    final iso =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    return {
+      'id': 'notif$regId',
+      'phone': phone,
+      'type': type,
+      'title': title,
+      'message': message,
+      'read': false,
+      'createdAt': iso,
+    };
   }
 
   /// Réassigne le collecteur d'un client — atomiquement :

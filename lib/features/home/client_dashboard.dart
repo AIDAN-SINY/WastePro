@@ -11,9 +11,13 @@ import '../subscription/screens/subscription_screen.dart';
 import '../subscription/screens/history_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../auth/screens/welcome_screen.dart';
+import 'notifications_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
-  const ClientDashboard({super.key});
+  const ClientDashboard({super.key, FirebaseFirestore? db}) : _db = db;
+
+  /// Base injectée par les tests ; sinon l'instance par défaut.
+  final FirebaseFirestore? _db;
 
   @override
   State<ClientDashboard> createState() => _ClientDashboardState();
@@ -42,6 +46,8 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
   final Color dGoldSoft = const Color(0xFFFBEDD6);
   final Color dRed = const Color(0xFFC1443D);
   final Color dRedSoft = const Color(0xFFF8E4E2);
+
+  FirebaseFirestore get _db => widget._db ?? FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -255,39 +261,85 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
           ),
         ),
         const SizedBox(width: 10),
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: dSurface,
-            shape: BoxShape.circle,
-            border: Border.all(color: dBorder),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                Icons.notifications_none_outlined,
-                color: dGreen,
-                size: 18,
-              ),
-              Positioned(
-                top: 9,
-                right: 10,
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: dRed,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: dSurface, width: 1.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        _buildNotificationBell(user),
       ],
+    );
+  }
+
+  /// Cloche de notifications : badge du nombre de notifications non lues
+  /// (stream Firestore), ouverture de l'écran Notifications au tap.
+  Widget _buildNotificationBell(user) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NotificationsScreen(
+              db: widget._db,
+              phone: user.phoneNumber,
+            ),
+          ),
+        );
+      },
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: dSurface,
+          shape: BoxShape.circle,
+          border: Border.all(color: dBorder),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.notifications_none_outlined,
+              color: dGreen,
+              size: 18,
+            ),
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _db
+                  .collection('notifications')
+                  .where('phone', isEqualTo: user.phoneNumber)
+                  .snapshots(),
+              builder: (context, snap) {
+                final docs = snap.data?.docs ?? const [];
+                final unread = docs
+                    .where((d) => (d.data()['read'] as bool? ?? false) != true)
+                    .length;
+                if (unread == 0) return const SizedBox.shrink();
+                return Positioned(
+                  top: 7,
+                  right: 7,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 15),
+                    height: 15,
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    decoration: BoxDecoration(
+                      color: dRed,
+                      shape: BoxShape.rectangle,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: dSurface, width: 1.2),
+                    ),
+                    child: Center(
+                      child: Text(
+                        unread > 9 ? '9+' : '$unread',
+                        style: TextStyle(
+                          color: cream,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 

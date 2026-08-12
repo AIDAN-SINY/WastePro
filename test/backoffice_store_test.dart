@@ -58,4 +58,42 @@ void main() {
       expect(store.clients.length, count);
     });
   });
+
+  group('BackofficeStore.notifications', () {
+    test('approuver une candidature crée une notification approved', () async {
+      final store = BackofficeStore();
+      final reg = store.pendingRegistrations.first;
+
+      await store.approveRegistration(reg, collecteurId: 'co1');
+
+      final notif = store.notifications.single;
+      expect(notif.id, 'notif${reg.id}');
+      expect(notif.type, 'approved');
+      expect(notif.title, 'Application approved');
+      expect(notif.read, isFalse);
+    });
+
+    test('rejeter une candidature crée une notification rejected', () async {
+      final store = BackofficeStore();
+      final reg = store.pendingRegistrations.first;
+
+      await store.rejectRegistration(reg);
+
+      final notif = store.notifications.single;
+      expect(notif.type, 'rejected');
+      expect(notif.title, 'Application rejected');
+    });
+
+    test('une nouvelle décision sur la même candidature remplace la notif',
+        () async {
+      final store = BackofficeStore();
+      final reg = store.pendingRegistrations.first;
+
+      await store.rejectRegistration(reg);
+      await store.approveRegistration(reg, collecteurId: 'co1');
+
+      expect(store.notifications.length, 1);
+      expect(store.notifications.single.type, 'approved');
+    });
+  });
 }

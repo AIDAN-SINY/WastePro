@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../models/agence_model.dart';
 import '../../../services/auth_service.dart';
+import 'application_status_screen.dart';
 import 'login_screen.dart';
 
 /// Pré-inscription client — réservée aux clients (le login reste pour tous).
@@ -16,10 +17,22 @@ import 'login_screen.dart';
 /// d'agence qui l'approuve et lui assigne un collecteur — le compte n'est
 /// créé qu'à ce moment.
 class PreRegisterScreen extends StatefulWidget {
-  const PreRegisterScreen({super.key, FirebaseFirestore? db}) : _db = db;
+  const PreRegisterScreen({
+    super.key,
+    FirebaseFirestore? db,
+    this.initialName = '',
+    this.initialPhone = '',
+    this.initialZone = '',
+  }) : _db = db;
 
   /// Base injectée par les tests ; sinon l'instance par défaut.
   final FirebaseFirestore? _db;
+
+  /// Pré-remplissage du formulaire — utilisé par « Re-apply » depuis
+  /// l'écran de statut d'une candidature rejetée (infos conservées).
+  final String initialName;
+  final String initialPhone;
+  final String initialZone;
 
   @override
   State<PreRegisterScreen> createState() => _PreRegisterScreenState();
@@ -58,6 +71,11 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
   @override
   void initState() {
     super.initState();
+    // Re-apply : le formulaire repart avec les infos de la candidature
+    // rejetée (le client n'a qu'à ajuster ce qui a changé).
+    _nameCtrl.text = widget.initialName;
+    _phoneCtrl.text = widget.initialPhone;
+    _zoneCtrl.text = widget.initialZone;
     _loadAgencies();
   }
 
@@ -560,6 +578,26 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
                 ),
               ),
               child: const Text('Go to login'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () {
+              // Suivi en direct : l'écran de statut se met à jour quand le
+              // chef d'agence approuve/rejette la candidature.
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ApplicationStatusScreen(
+                    db: widget._db,
+                    initialPhone: _phoneCtrl.text.trim(),
+                  ),
+                ),
+              );
+            },
+            child: const Text(
+              'Track application status',
+              style: TextStyle(color: muted, fontSize: 12),
             ),
           ),
         ],

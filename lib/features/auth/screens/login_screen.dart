@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import '../../../providers/user_provider.dart';
 import '../../../main.dart';
+import 'application_status_screen.dart';
 import 'pre_register_screen.dart';
 
 /// Écran de connexion — responsive.
@@ -14,7 +16,10 @@ import 'pre_register_screen.dart';
 /// ~440px (plus d'étirement sur tout l'écran). Sur mobile : le même contenu
 /// empilé verticalement, carte également bornée pour rester élégante.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, FirebaseFirestore? db}) : _db = db;
+
+  /// Base injectée par les tests ; sinon l'instance par défaut.
+  final FirebaseFirestore? _db;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -376,6 +381,30 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
         ),
+        Center(
+          child: TextButton(
+            onPressed: () {
+              // Suivi de candidature : l'écran de statut se met à jour en
+              // direct quand le chef d'agence approuve/rejette. Push simple
+              // (sous-écran d'auth, comme ProfileScreen) — le routeur ne
+              // gère pas cette route.
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ApplicationStatusScreen(),
+                ),
+              );
+            },
+            child: Text(
+              'Check application status',
+              style: GoogleFonts.sora(
+                color: muted,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
       ],
     );
@@ -392,12 +421,13 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
+      final auth = AuthService(db: widget._db);
       // La normalisation du numéro (+237, espaces, tirets) est gérée par
       // AuthService.login via canonicalKeys : on lui passe la saisie brute
       // pour qu'il essaie aussi la clé telle que stockée — un compte créé
       // à la main dans la console Firebase peut utiliser le numéro sans
       // préfixe +237 (ex. '653645807' au lieu de '+237653645807').
-      final user = await AuthService().login(
+      final user = await auth.login(
         _phoneController.text.trim(),
         _passwordController.text,
       );
@@ -418,7 +448,23 @@ class _LoginScreenState extends State<LoginScreen>
           }
         }
       } else {
-        throw "User not found. Please sign up first.";
+        // Pas de compte `users/{téléphone}` : le client est peut-être en
+        // pré-inscription. On le guide selon l'état de sa candidature au
+        // lieu du générique « User not found ».
+        final status = await auth.registrationStatus(
+          _phoneController.text.trim(),
+        );
+        throw switch (status) {
+          'pending' => 'Your application is pending approval. The agency '
+              'manager will review it and assign you a collector — you can '
+              'log in once it is approved.',
+          'rejected' => 'Your application was rejected. You can submit a new '
+              'one or contact the agency. Use "Check application status" to '
+              're-apply.',
+          'approved' => 'Your application has been approved. If you still '
+              "can't log in, please contact your agency.",
+          _ => "User not found. Please sign up first.",
+        };
       }
     } catch (e) {
       if (mounted) {

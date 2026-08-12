@@ -118,6 +118,31 @@ class AuthService {
     });
   }
 
+  /// Statut de la candidature (pré-inscription) la plus récente pour
+  /// [phone] : `'pending'` | `'approved'` | `'rejected'`, ou null si ce
+  /// numéro n'a aucune candidature.
+  ///
+  /// Utilisé par l'écran de login : un client qui tente de se connecter
+  /// AVANT l'approbation n'a pas encore de compte `users/{téléphone}` — au
+  /// lieu du générique « User not found », on lui explique où en est sa
+  /// candidature.
+  Future<String?> registrationStatus(String phone) async {
+    return _runWithRetry<String?>(() async {
+      final canonical = canonicalPhone(phone);
+      if (canonical.isEmpty) return null;
+      final snap = await _db
+          .collection('registrations')
+          .where('phone', isEqualTo: canonical)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      // La plus récente d'abord : les ids sont `reg<microsecondes>` et se
+      // trient donc chronologiquement.
+      final docs = snap.docs.toList()
+        ..sort((a, b) => b.id.compareTo(a.id));
+      return docs.first.data()['status'] as String?;
+    });
+  }
+
   /// Soumet une candidature client (pré-inscription).
   ///
   /// Le client remplit ses infos + choisit son agence ; la candidature est
@@ -177,7 +202,13 @@ class AuthService {
       // backoffice (scopé par agenceId) du chef d'agence.
       var finalAgenceId = agenceId;
       var finalSocieteId = societeId;
-      if (finalAgenceId.isEmpty && agenceName.trim().isNotEmpty) {
+      // Nom d'agence enregistré : la sélection, sinon le texte tapé — mis à
+      // jour avec le nom RÉEL de l'agence quand le texte tapé est résolu
+      // (ex. « bonanjo » → « Douala — Bonanjo »), pour que le backoffice
+      // scopé retrouve la candidature par NOM et que la carte Applications
+      // affiche la vraie agence.
+      var finalAgenceName = agenceName.trim();
+      if (finalAgenceId.isEmpty && finalAgenceName.isNotEmpty) {
         final name = agenceName.trim().toLowerCase();
         final agences = await _db.collection('agences').get();
         // D'abord le nom EXACT (ex. « douala — bonanjo »), puis un nom
@@ -200,6 +231,9 @@ class AuthService {
           finalAgenceId = matches.single.id;
           finalSocieteId =
               matches.single.data()['societeId'] as String? ?? '';
+          final resolvedVille =
+              matches.single.data()['ville'] as String? ?? '';
+          if (resolvedVille.isNotEmpty) finalAgenceName = resolvedVille;
         } else {
           // Aucune correspondance (nom inconnu) OU nom ambigu (ex. « douala »
           // → deux agences) : refuser plutôt que d'écrire une candidature
@@ -224,7 +258,7 @@ class AuthService {
         'phone': canonical,
         'zone': zone.trim(),
         'agenceId': finalAgenceId,
-        'agenceName': agenceName.trim(),
+        'agenceName': finalAgenceName,
         'societeId': finalSocieteId,
         'status': 'pending',
         'collecteurId': '',

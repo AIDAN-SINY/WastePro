@@ -37,6 +37,45 @@ void main() {
     });
   });
 
+  group('AuthService.registrationStatus', () {
+    test('retourne null quand le numéro n a aucune candidature', () async {
+      final db = FakeFirebaseFirestore();
+      final auth = AuthService(db: db);
+      expect(await auth.registrationStatus('698 22 44 66'), isNull);
+    });
+
+    test('retourne le statut de la candidature (pending)', () async {
+      final db = FakeFirebaseFirestore();
+      await db.collection('registrations').doc('reg1').set({
+        'id': 'reg1',
+        'fullName': 'Carine Mbappe',
+        'phone': '+237698224466',
+        'status': 'pending',
+        'agenceId': 'ag1',
+      });
+      final auth = AuthService(db: db);
+      expect(await auth.registrationStatus('698 22 44 66'), 'pending');
+    });
+
+    test('retourne le statut de la candidature la PLUS RÉCENTE', () async {
+      final db = FakeFirebaseFirestore();
+      // Deux candidatures pour le même numéro (ex. rejetée puis renvoyée) :
+      // la plus récente fait foi (ids triés par timestamp).
+      await db.collection('registrations').doc('reg1').set({
+        'id': 'reg1',
+        'phone': '+237698224466',
+        'status': 'pending',
+      });
+      await db.collection('registrations').doc('reg2').set({
+        'id': 'reg2',
+        'phone': '+237698224466',
+        'status': 'rejected',
+      });
+      final auth = AuthService(db: db);
+      expect(await auth.registrationStatus('+237698224466'), 'rejected');
+    });
+  });
+
   group('AuthService.submitPreRegistration', () {
     Future<void> submit(AuthService auth, {String phone = '698 22 44 66'}) {
       return auth.submitPreRegistration(

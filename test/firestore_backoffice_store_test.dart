@@ -553,6 +553,17 @@ void main() {
       expect(login.data()?['password'], 'secret123');
       expect(login.data()?['fullName'], 'Carine Mbappe');
 
+      // Le client est notifié dans l'app (cloche du dashboard).
+      final notif = await db
+          .collection('notifications')
+          .doc('notifrgX')
+          .get();
+      expect(notif.exists, isTrue);
+      expect(notif.data()?['phone'], '+237698224466');
+      expect(notif.data()?['type'], 'approved');
+      expect(notif.data()?['read'], false);
+      expect(notif.data()?['title'], 'Application approved');
+
       store.dispose();
     },
   );
@@ -589,6 +600,16 @@ void main() {
       (await db.collection('users').doc('+237698224466').get()).exists,
       isFalse,
     );
+
+    // Le client est notifié du rejet (cloche du dashboard).
+    final notif = await db
+        .collection('notifications')
+        .doc('notifrgX')
+        .get();
+    expect(notif.exists, isTrue);
+    expect(notif.data()?['phone'], '+237698224466');
+    expect(notif.data()?['type'], 'rejected');
+    expect(notif.data()?['read'], false);
 
     store.dispose();
   });

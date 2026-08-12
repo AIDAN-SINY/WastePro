@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models.dart';
+import '../../../models/notification_model.dart';
 import 'seed_data.dart';
 
 /// In-memory store for the mobile backoffice (entreprise manager).
@@ -70,6 +71,10 @@ class BackofficeStore extends ChangeNotifier {
   /// Candidatures clients (pré-inscriptions) — le store Firestore les
   /// remplace par les vraies données de la collection `registrations`.
   final List<RegistrationModel> registrations = [...seedRegistrations];
+
+  /// Notifications in-app des décisions de candidature (approuvée /
+  /// rejetée) — le store Firestore écrit dans la collection `notifications`.
+  final List<NotificationModel> notifications = [];
 
   List<RegistrationModel> get pendingRegistrations =>
       registrations.where((r) => r.status == 'pending').toList();
@@ -233,6 +238,7 @@ class BackofficeStore extends ChangeNotifier {
         collecteurId: collecteurId,
       ),
     );
+    _addNotification(reg, type: 'approved');
     notifyListeners();
   }
 
@@ -245,7 +251,34 @@ class BackofficeStore extends ChangeNotifier {
     } else {
       registrations.add(updated);
     }
+    _addNotification(reg, type: 'rejected');
     notifyListeners();
+  }
+
+  /// Ajoute la notification in-app correspondant à une décision.
+  void _addNotification(RegistrationModel reg, {required String type}) {
+    final now = DateTime.now();
+    final iso =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    notifications.removeWhere((n) => n.id == 'notif${reg.id}');
+    notifications.add(
+      NotificationModel(
+        id: 'notif${reg.id}',
+        phone: reg.phone,
+        type: type,
+        title: type == 'approved'
+            ? 'Application approved'
+            : 'Application rejected',
+        message: type == 'approved'
+            ? 'Your application was approved. You can now log in and start '
+                  'scheduling your pickups.'
+            : 'Your application was rejected. You can submit a new '
+                  'application from the app.',
+        createdAt: iso,
+      ),
+    );
   }
 
   /// Réassigne le collecteur d'un client : met à jour la fiche client et

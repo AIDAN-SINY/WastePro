@@ -100,24 +100,28 @@ class CompanyStore extends ChangeNotifier {
       societes.isNotEmpty ? societes.first.raisonSociale : '';
 
   // --- Agences CRUD (mock) ---
-  Future<void> addAgence({
+  /// Creates and returns the new agency (callers use its id to attach
+  /// resources like the agency manager).
+  Future<AgenceModel> addAgence({
     required String ville,
+    String location = '',
     required String responsable,
     required String telephone,
     required String status,
   }) async {
-    agences.add(
-      AgenceModel(
-        id: nextId(),
-        societe: societeNom,
-        societeId: societeId,
-        ville: ville,
-        responsable: responsable,
-        telephone: telephone,
-        status: status,
-      ),
+    final agence = AgenceModel(
+      id: nextId(),
+      societe: societeNom,
+      societeId: societeId,
+      ville: ville,
+      location: location,
+      responsable: responsable,
+      telephone: telephone,
+      status: status,
     );
+    agences.add(agence);
     notifyListeners();
+    return agence;
   }
 
   Future<void> updateAgence(AgenceModel updated) async {

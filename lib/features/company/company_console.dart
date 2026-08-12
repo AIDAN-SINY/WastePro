@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +19,8 @@ import '../superadmin/widgets/status_badge.dart';
 import 'data/company_store.dart';
 import 'data/firestore_company_store.dart';
 import 'widgets/company_charts.dart';
+import 'widgets/create_agency_modal.dart';
+import 'widgets/manager_credentials_dialog.dart';
 
 /// Console entreprise — General Administrator.
 ///
@@ -1357,32 +1361,112 @@ class _AgenciesPage extends StatefulWidget {
 class _AgenciesPageState extends State<_AgenciesPage> {
   final Map<String, dynamic> _form = {};
 
-  void openCreate() {
-    _form
-      ..clear()
-      ..['status'] = 'Active';
-    showCrudDrawer(
+  /// Opens the "New agency" modal: a centered dialog whose non-editable
+  /// top badge shows the logged-in General Administrator's company, then
+  /// asks for the agency name, location, manager, manager phone, city and
+  /// agency phone. When a manager name is entered, the Agency Manager
+  /// account is created right away with a generated numeric login password
+  /// (shown once afterwards) — the admin doesn't have to open the Managers
+  /// page again.
+  void openCreate() async {
+    final societeNom = context.read<CompanyStore>().societeNom;
+    String? createdManagerName;
+    String? createdManagerPhone;
+    String? createdManagerPassword;
+    await showCreateAgencyModal(
       context,
-      title: 'New agency',
-      body: _buildForm(),
-      onSave: () async {
+      companyName:
+          societeNom.isNotEmpty ? societeNom : 'Your Company',
+      onSave: (form) async {
         try {
-          final ville = requireField(_form, 'ville', 'City');
-          await context.read<CompanyStore>().addAgence(
-                ville: ville,
-                responsable:
-                    _form['responsable']?.toString().trim() ?? '',
-                telephone:
-                    _form['telephone']?.toString().trim() ?? '',
-                status: _form['status']?.toString() ?? 'Active',
+          final store = context.read<CompanyStore>();
+          final nom = form['nom']?.toString().trim() ?? '';
+          final villePart = form['ville']?.toString().trim() ?? '';
+          // The agency is named after its city (e.g. "Douala — Bonanjo"):
+          // City and Agency name are combined into the existing ville field.
+          // If the name already includes the city, keep it as-is to avoid
+          // duplication ("Douala — Douala — Bonanjo").
+          final ville = villePart.isEmpty
+              ? nom
+              : nom.isEmpty || villePart.contains(nom)
+                    ? villePart
+                    : '$villePart — $nom';
+          if (ville.isEmpty) {
+            throw const ValidationError(
+              'Please enter an agency name or a city.',
+            );
+          }
+          final managerName =
+              form['responsable']?.toString().trim() ?? '';
+          final managerPhone =
+              form['managerPhone']?.toString().trim() ?? '';
+          if (managerName.isNotEmpty && managerPhone.isEmpty) {
+            throw const ValidationError(
+              'Please enter the manager phone number.',
+            );
+          }
+          if (managerName.isEmpty && managerPhone.isNotEmpty) {
+            throw const ValidationError(
+              'Please enter the manager name.',
+            );
+          }
+          final agence = await store.addAgence(
+            ville: ville,
+            location: form['location']?.toString().trim() ?? '',
+            responsable: managerName,
+            telephone: form['telephone']?.toString().trim() ?? '',
+            status: 'Active',
+          );
+          // Sync with the managers: the name entered here becomes the
+          // Agency Manager of the new agency, so it shows up in the
+          // Managers page without being re-created there.
+          if (managerName.isNotEmpty) {
+            final password = _numericPassword();
+            try {
+              await store.addUtilisateur(
+                nom: managerName,
+                telephone: managerPhone,
+                role: 'Agency Manager',
+                agence: agence.ville,
+                agenceId: agence.id,
+                status: 'Active',
+                password: password,
               );
-          ToastService.show('Agency created successfully.');
+            } catch (e) {
+              // Best-effort rollback: keep agency + manager creation
+              // atomic so a retry doesn't leave/duplicate an orphan agency.
+              try {
+                await store.deleteAgence(agence.id);
+              } catch (_) {}
+              rethrow;
+            }
+            createdManagerName = managerName;
+            createdManagerPhone = managerPhone;
+            createdManagerPassword = password;
+          }
+          // When a manager was created, the credentials dialog right after
+          // is the confirmation — a toast would be hidden behind it.
+          if (managerName.isEmpty) {
+            ToastService.show('Agency created successfully.');
+          }
         } catch (e) {
           ToastService.show(e.toString(), isError: true);
           rethrow;
         }
       },
     );
+    // Reveal the generated credentials once, after the modal closes.
+    if (mounted &&
+        createdManagerName != null &&
+        createdManagerPhone != null &&
+        createdManagerPassword != null) {
+      await showManagerCredentialsDialog(
+        context,
+        managerName: createdManagerName!,
+        managerPhone: createdManagerPhone!,
+        password: createdManagerPassword!,
+      );
+    }
   }
 
   void openEdit(AgenceModel agence) {
@@ -1488,13 +1572,7 @@ class _AgenciesPageState extends State<_AgenciesPage> {
             PrimaryButton(
               label: 'New agency',
               icon: Icons.add_rounded,
-              onTap: store is! FirestoreCompanyStore
-                  ? () => ToastService.show(
-                        'Demo preview — log in as a General Administrator '
-                        'to create agencies.',
-                        isError: true,
-                      )
-                  : openCreate,
+              onTap: openCreate,
             ),
           ],
         ),
@@ -1566,49 +1644,6 @@ class _ManagersPageState extends State<_ManagersPage> {
       if (a.ville == ville) return a.id;
     }
     return '';
-  }
-
-  void openCreate() {
-    _form
-      ..clear()
-      ..['status'] = 'Active'
-      ..['role'] = 'Agency Manager'
-      ..['agence'] = '—';
-    showCrudDrawer(
-      context,
-      title: 'New manager',
-      body: _buildForm(),
-      onSave: () async {
-        try {
-          final nom = requireField(_form, 'nom', 'Full name');
-          final telephone = requireField(_form, 'telephone', 'Phone');
-          final password = requireField(_form, 'password', 'Password');
-          // Flow validé : chaque chef d'agence est assigné à une agence.
-          // Sans agence, son compte serait créé mais le backoffice serait
-          // vide (aucune donnée ne lui appartiendrait).
-          final agenceVille = _form['agence']?.toString() ?? '—';
-          if (agenceVille == '—') {
-            throw 'Please assign this manager to an agency.';
-          }
-          await context.read<CompanyStore>().addUtilisateur(
-                nom: nom,
-                telephone: telephone,
-                role: 'Agency Manager',
-                agence: agenceVille,
-                agenceId: _agenceIdFor(agenceVille),
-                status: _form['status']?.toString() ?? 'Active',
-                password: password,
-              );
-          ToastService.show(
-            'Manager created. They can log in with their number and '
-            'this password.',
-          );
-        } catch (e) {
-          ToastService.show(e.toString(), isError: true);
-          rethrow;
-        }
-      },
-    );
   }
 
   void openEdit(PlatformUserModel user) {
@@ -1718,16 +1753,14 @@ class _ManagersPageState extends State<_ManagersPage> {
         Row(
           children: [
             const Spacer(),
-            PrimaryButton(
-              label: 'New manager',
-              icon: Icons.add_rounded,
-              onTap: store is! FirestoreCompanyStore
-                  ? () => ToastService.show(
-                        'Demo preview — log in as a General Administrator '
-                        'to create managers.',
-                        isError: true,
-                      )
-                  : openCreate,
+            // Managers are created together with their agency (agency
+            // modal) — no separate creation flow here.
+            Text(
+              'Managers are created with their agency.',
+              style: SuperAdminTheme.inter(
+                12,
+                color: SuperAdminTheme.muted,
+              ),
             ),
           ],
         ),
@@ -1775,4 +1808,11 @@ class _ManagersPageState extends State<_ManagersPage> {
       ],
     );
   }
+}
+
+/// Generates a short numeric login password (digits only) for
+/// auto-created managers.
+String _numericPassword([int length = 6]) {
+  final rand = Random.secure();
+  return List.generate(length, (_) => rand.nextInt(10)).join();
 }

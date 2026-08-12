@@ -89,5 +89,12 @@ service cloud.firestore {
     match /registrations/{id} {
       allow read, write: if true;
     }
+
+    // --- Notifications in-app (décisions du chef d'agence) ---
+    // Écrites par le backoffice à l'approbation/rejet d'une candidature,
+    // lues par l'app client (cloche du dashboard).
+    match /notifications/{id} {
+      allow read, write: if true;
+    }
   }
 }

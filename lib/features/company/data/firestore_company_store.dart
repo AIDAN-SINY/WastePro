@@ -143,8 +143,9 @@ class FirestoreCompanyStore extends CompanyStore {
   // --- Agences CRUD ---
 
   @override
-  Future<void> addAgence({
+  Future<AgenceModel> addAgence({
     required String ville,
+    String location = '',
     required String responsable,
     required String telephone,
     required String status,
@@ -154,6 +155,7 @@ class FirestoreCompanyStore extends CompanyStore {
       societe: societeNom,
       societeId: societeId,
       ville: ville,
+      location: location,
       responsable: responsable,
       telephone: telephone,
       status: status,
@@ -170,6 +172,7 @@ class FirestoreCompanyStore extends CompanyStore {
       agences[index] = model;
     }
     notifyListeners();
+    return model;
   }
 
   @override

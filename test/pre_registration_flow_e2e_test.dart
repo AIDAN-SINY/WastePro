@@ -169,6 +169,10 @@ void main() {
       // partiel — sinon le chef d'agence ne la verrait jamais.
       expect(regs.docs.single.data()['agenceId'], 'ag1');
       expect(regs.docs.single.data()['societeId'], 'so1');
+      // Le NOM enregistré est celui RÉEL de l'agence résolue (pas le texte
+      // tapé) — c'est la clé de secours qui rend la candidature visible
+      // dans le backoffice scopé et affichée avec la bonne agence.
+      expect(regs.docs.single.data()['agenceName'], 'Douala — Bonanjo');
     },
   );
 
