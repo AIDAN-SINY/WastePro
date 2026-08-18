@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/company/data/firestore_company_store.dart';
 import 'package:waste_pro/services/auth_service.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Laisse les listeners de snapshots rattraper les écritures.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
@@ -74,7 +76,11 @@ void main() {
     });
 
     // La console du General Administrator de so1 ne doit voir QUE so1.
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      societeId: 'so1',
+    );
     await store.initialLoad;
     await _settle();
 
@@ -96,7 +102,12 @@ void main() {
       'email': 'contact@douala.cm',
       'status': 'Active',
     });
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final backend = FakeAuthBackend();
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: backend,
+      societeId: 'so1',
+    );
     await store.initialLoad;
     await _settle();
 
@@ -128,7 +139,7 @@ void main() {
     expect(login.data()?['societeId'], 'so1');
     expect(login.data()?['agenceId'], agence.id);
 
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     final user = await auth.login('+237699887766', 'mdp-chef');
     expect(user, isNotNull);
     expect(user!.role, 'agency_manager');
@@ -148,7 +159,11 @@ void main() {
       'email': 'contact@douala.cm',
       'status': 'Active',
     });
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      societeId: 'so1',
+    );
     await store.initialLoad;
     await _settle();
 

@@ -1,6 +1,27 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waste_pro/services/auth_backend.dart';
 import 'package:waste_pro/services/auth_service.dart';
+
+import 'fakes/fake_auth_backend.dart';
+
+/// AuthService branché sur un backend Auth en mémoire (pas de Firebase).
+AuthService makeAuth(FakeFirebaseFirestore db) =>
+    AuthService(db: db, backend: FakeAuthBackend());
+
+/// Backend qui reproduit la protection anti-énumération du projet :
+/// l'API Auth ne permet pas de savoir si le compte existe — toute tentative
+/// de connexion échoue avec `invalid-credentials` (comme le vrai backend
+/// avec l'erreur `invalid-credential` fusionnée des SDK récents).
+class _EnumerationProtectedBackend extends FakeAuthBackend {
+  @override
+  Future<String> signIn({
+    required String email,
+    required String password,
+  }) {
+    throw AuthBackendException('invalid-credentials');
+  }
+}
 
 void main() {
   group('AuthService.canonicalPhone', () {
@@ -37,10 +58,63 @@ void main() {
     });
   });
 
+  group('AuthService.login avec protection anti-énumération', () {
+    test('signale un mauvais mot de passe quand le doc users existe',
+        () async {
+      final db = FakeFirebaseFirestore();
+      // Compte migré : doc users présent (avec uid), mais l'API Auth
+      // refuse de dire si l'email existe (protection anti-énumération).
+      await db.collection('users').doc('+237640996787').set({
+        'phoneNumber': '+237640996787',
+        'fullName': 'Super Admin',
+        'role': 'super_admin',
+        'uid': 'uid-superadmin',
+      });
+      final auth = AuthService(
+        db: db,
+        backend: _EnumerationProtectedBackend(),
+      );
+
+      expect(
+        () => auth.login('+237640996787', 'mauvais'),
+        throwsA('Incorrect Password'),
+      );
+    });
+
+    test('retourne null (user not found) quand aucun doc users', () async {
+      final db = FakeFirebaseFirestore();
+      final auth = AuthService(
+        db: db,
+        backend: _EnumerationProtectedBackend(),
+      );
+
+      expect(await auth.login('+237600000000', 'x'), isNull);
+    });
+
+    test('retrouve le doc users via une clé brute (canonicalKeys)', () async {
+      final db = FakeFirebaseFirestore();
+      // Compte créé à la main dans la console avec une clé NON canonique.
+      await db.collection('users').doc('640996787').set({
+        'phoneNumber': '640996787',
+        'fullName': 'Admin legacy',
+        'role': 'admin',
+      });
+      final auth = AuthService(
+        db: db,
+        backend: _EnumerationProtectedBackend(),
+      );
+
+      expect(
+        () => auth.login('640996787', 'mauvais'),
+        throwsA('Incorrect Password'),
+      );
+    });
+  });
+
   group('AuthService.registrationStatus', () {
     test('retourne null quand le numéro n a aucune candidature', () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       expect(await auth.registrationStatus('698 22 44 66'), isNull);
     });
 
@@ -53,7 +127,7 @@ void main() {
         'status': 'pending',
         'agenceId': 'ag1',
       });
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       expect(await auth.registrationStatus('698 22 44 66'), 'pending');
     });
 
@@ -71,7 +145,7 @@ void main() {
         'phone': '+237698224466',
         'status': 'rejected',
       });
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       expect(await auth.registrationStatus('+237698224466'), 'rejected');
     });
   });
@@ -91,7 +165,7 @@ void main() {
 
     test('écrit une candidature pending avec le numéro canonique', () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       await submit(auth);
 
       final docs = await db.collection('registrations').get();
@@ -110,7 +184,7 @@ void main() {
         'role': 'client',
         'password': 'x',
       });
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       expect(
         () => submit(auth),
         throwsA(contains('already has an account')),
@@ -120,7 +194,7 @@ void main() {
 
     test('refuse une candidature déjà en attente pour le même numéro', () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       await submit(auth);
       expect(
         () => submit(auth),
@@ -131,7 +205,7 @@ void main() {
 
     test('refuse sans numéro valide', () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       expect(
         () => submit(auth, phone: '  '),
         throwsA(contains('Invalid phone number')),
@@ -152,7 +226,7 @@ void main() {
         'status': 'Active',
       });
 
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
@@ -171,7 +245,7 @@ void main() {
 
     test('refuse un nom d agence qui ne correspond à aucune agence', () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = makeAuth(db);
       // Aucune agence en base : taper un nom inconnu ne doit PAS créer une
       // candidature « orpheline » (agenceId vide) qu'aucun chef d'agence ne
       // pourrait voir ni traiter — le client choisit une agence existante.

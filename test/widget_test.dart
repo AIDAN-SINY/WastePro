@@ -12,8 +12,11 @@ import 'package:waste_pro/main.dart';
 import 'package:waste_pro/models/user_model.dart';
 import 'package:waste_pro/providers/user_provider.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 class FakeUserProvider extends UserProvider {
-  FakeUserProvider({this.fakeUser, this.fakeIsLoading = false});
+  FakeUserProvider({this.fakeUser, this.fakeIsLoading = false})
+      : super(backend: FakeAuthBackend());
 
   final UserModel? fakeUser;
   final bool fakeIsLoading;
@@ -29,7 +32,7 @@ void main() {
   testWidgets('app shows welcome screen', (WidgetTester tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
-        create: (_) => UserProvider(),
+        create: (_) => UserProvider(backend: FakeAuthBackend()),
         child: const WasteProApp(),
       ),
     );

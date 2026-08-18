@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/backoffice/data/firestore_backoffice_store.dart';
 import 'package:waste_pro/services/auth_service.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Laisse les listeners de snapshots rattraper les écritures.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
@@ -18,6 +20,8 @@ void main() {
     '→ client se connecte',
     () async {
       final db = FakeFirebaseFirestore();
+      final backend = FakeAuthBackend()
+        ..seedAccount('237677123456@wastepro.cm', 'manager123');
 
       // --- Contexte : une agence existe (ag1, société so1) ---
       await db.collection('agences').doc('ag1').set({
@@ -41,19 +45,19 @@ void main() {
         'societeId': 'so1',
       });
       // Le chef d'agence (compte de connexion créé par la console super
-      // admin : rôle agency_manager, scopé à ag1).
+      // admin : rôle agency_manager, scopé à ag1, uid Auth).
       await db.collection('users').doc('+237677123456').set({
         'phoneNumber': '+237677123456',
         'fullName': 'Jean Dooh',
         'role': 'agency_manager',
-        'password': 'manager123',
+        'uid': backend.uidFor('237677123456@wastepro.cm'),
         'societeId': 'so1',
         'agenceId': 'ag1',
         'consoleCreated': true,
       });
 
       // --- 1. Le client remplit la pré-inscription (app) ---
-      final auth = AuthService(db: db);
+      final auth = AuthService(db: db, backend: backend);
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
@@ -68,15 +72,16 @@ void main() {
       final regs = await db.collection('registrations').get();
       expect(regs.docs.single.data()['status'], 'pending');
       expect(regs.docs.single.data()['agenceId'], 'ag1');
-      // Pas encore de compte client ni de compte de connexion.
+      // Le client a son profil pending_client (créé dès l'inscription) mais
+      // pas encore de client backoffice.
       expect((await db.collection('clients').get()).docs, isEmpty);
-      expect(
-        (await db.collection('users').doc('+237698224466').get()).exists,
-        isFalse,
-      );
+      final pendingUser =
+          await db.collection('users').doc('+237698224466').get();
+      expect(pendingUser.exists, isTrue);
+      expect(pendingUser.data()?['role'], 'pending_client');
 
       // --- 2. Le chef d'agence se connecte → backoffice scopé à ag1 ---
-      final manager = await AuthService(db: db).login(
+      final manager = await AuthService(db: db, backend: backend).login(
         '+237 677 12 34 56',
         'manager123',
       );
@@ -86,6 +91,7 @@ void main() {
 
       final store = FirestoreBackofficeStore(
         db: db,
+        backend: backend,
         seedIfEmpty: false,
         agenceId: manager.agenceId,
         societeId: manager.societeId,
@@ -100,6 +106,7 @@ void main() {
       // Un autre chef d'agence (ag2) ne la verrait PAS.
       final otherStore = FirestoreBackofficeStore(
         db: db,
+        backend: backend,
         seedIfEmpty: false,
         agenceId: 'ag2',
       );
@@ -124,11 +131,13 @@ void main() {
       final login = await db.collection('users').doc('+237698224466').get();
       expect(login.exists, isTrue);
       expect(login.data()?['role'], 'client');
-      expect(login.data()?['password'], 'secret123');
+      expect(login.data()?['uid'], isNotEmpty);
+      expect(login.data()?['password'], isNull);
       expect(login.data()?['collecteurId'], 'co1');
 
       // --- 4. Le client peut maintenant se connecter ---
-      final clientUser = await AuthService(db: db).login('698 22 44 66', 'secret123');
+      final clientUser = await AuthService(db: db, backend: backend)
+          .login('698 22 44 66', 'secret123');
       expect(clientUser, isNotNull);
       expect(clientUser!.role, 'client');
       expect(clientUser.agenceId, 'ag1');
@@ -152,7 +161,7 @@ void main() {
         'status': 'Active',
       });
 
-      final auth = AuthService(db: db);
+      final auth = AuthService(db: db, backend: FakeAuthBackend());
       // Le client tape « bonanjo » (pas le nom complet) sans sélectionner.
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
@@ -181,7 +190,7 @@ void main() {
     '(pas d index composé requis)',
     () async {
       final db = FakeFirebaseFirestore();
-      final auth = AuthService(db: db);
+      final auth = AuthService(db: db, backend: FakeAuthBackend());
 
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',

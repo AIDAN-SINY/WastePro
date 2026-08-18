@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
+import '../../../services/auth_backend.dart';
 import '../../superadmin/data/login_account_sync.dart';
 import 'company_store.dart';
 
@@ -23,11 +24,13 @@ import 'company_store.dart';
 class FirestoreCompanyStore extends CompanyStore {
   FirestoreCompanyStore({
     FirebaseFirestore? db,
+    AuthBackend? backend,
     required super.societeId,
     this.seedIfEmpty = false,
     @visibleForTesting bool Function()? isSignedOut,
   }) : _isSignedOutOverride = isSignedOut,
-       _db = db ?? FirebaseFirestore.instance {
+       _db = db ?? FirebaseFirestore.instance,
+       _backend = backend ?? FirebaseAuthBackend() {
     societes.clear();
     agences.clear();
     utilisateurs.clear();
@@ -35,6 +38,10 @@ class FirestoreCompanyStore extends CompanyStore {
   }
 
   final FirebaseFirestore _db;
+
+  /// Backend Auth (création de comptes chef d'agence). Injectable en test.
+  final AuthBackend _backend;
+
   final bool seedIfEmpty;
   final List<StreamSubscription<dynamic>> _subs = [];
 
@@ -223,12 +230,23 @@ class FirestoreCompanyStore extends CompanyStore {
     );
     LoginAccountSync.requirePhone(model);
     await LoginAccountSync.preflight(_db, model);
+    // Compte Firebase Auth créé AVANT le batch (le `uid` est écrit dans le
+    // doc `users`) ; en cas d'échec du batch, le compte est détruit.
+    final authUid = await LoginAccountSync.createAuthAccount(
+      _backend,
+      _db,
+      model,
+    );
     try {
       final batch = _db.batch();
       batch.set(_db.collection('utilisateurs').doc(model.id), model.toMap());
-      await LoginAccountSync.stage(batch, _db, model);
+      await LoginAccountSync.stage(batch, _db, model, uid: authUid);
       await batch.commit();
     } catch (error) {
+      // Rollback du compte Auth (jamais d'orphelin côté Firebase Auth).
+      if (authUid.isNotEmpty) {
+        await LoginAccountSync.deleteAuthAccount(_backend, model);
+      }
       if (error is! FirebaseException) rethrow;
       throw _friendlyError(error);
     }
@@ -245,21 +263,75 @@ class FirestoreCompanyStore extends CompanyStore {
   Future<void> updateUtilisateur(PlatformUserModel updated) async {
     LoginAccountSync.requirePhone(updated);
     String oldPhone = '';
+    // Ancienne version (mot de passe actuel) pour la synchro Auth.
+    final existingDoc =
+        await _db.collection('utilisateurs').doc(updated.id).get();
+    final oldModel = existingDoc.exists
+        ? PlatformUserModel.fromMap(existingDoc.data()!)
+        : updated;
+    if (existingDoc.exists) {
+      oldPhone = LoginAccountSync.canonicalPhone(oldModel.telephone);
+    }
     try {
-      final existingDoc =
-          await _db.collection('utilisateurs').doc(updated.id).get();
-      if (existingDoc.exists) {
-        oldPhone = LoginAccountSync.canonicalPhone(
-          PlatformUserModel.fromMap(existingDoc.data()!).telephone,
+      await LoginAccountSync.preflight(_db, updated);
+      // Suspension → le compte Auth est SUPPRIMÉ (plus de login possible),
+      // pas seulement le doc `users` : sans ça, la réactivation buterait sur
+      // `email-already-in-use` en recréant le compte.
+      final isNowSuspended =
+          updated.status == 'Suspended' || updated.status == 'Suspendu';
+      final wasActive =
+          oldModel.status != 'Suspended' && oldModel.status != 'Suspendu';
+      if (isNowSuspended && wasActive) {
+        await LoginAccountSync.deleteAuthAccount(_backend, oldModel);
+      }
+      // Numéro CHANGÉ → le compte Auth de l'ANCIEN numéro est supprimé (pas
+      // seulement le doc `users` + `auth_profiles`) : sans ça, les comptes
+      // Auth orphelins s'accumuleraient dans Firebase. [oldPhone] est déjà
+      // calculé au-dessus.
+      final newPhone = LoginAccountSync.canonicalPhone(updated.telephone);
+      if (oldPhone.isNotEmpty && oldPhone != newPhone) {
+        await LoginAccountSync.deleteAuthAccount(_backend, oldModel);
+      }
+      // Le compte Auth existait-il déjà ? Si non, createAuthAccount vient
+      // de le créer avec le NOUVEAU mot de passe → rien à mettre à jour
+      // (sinon on essaierait de passer de l'ANCIEN au nouveau sur un compte
+      // qui a déjà le nouveau : échec).
+      final targetPhone = LoginAccountSync.canonicalPhone(updated.telephone);
+      final loginDoc = targetPhone.isEmpty
+          ? null
+          : await _db.collection('users').doc(targetPhone).get();
+      final hadAuthAccount =
+          (loginDoc?.data()?['uid'] as String? ?? '').isNotEmpty;
+      final authUid = await LoginAccountSync.createAuthAccount(
+        _backend,
+        _db,
+        updated,
+      );
+      // Mot de passe changé → mise à jour du compte Auth. Jamais pendant
+      // une suspension : le compte Auth vient d'être SUPPRIMÉ, il n'y a
+      // rien à mettre à jour.
+      if (!isNowSuspended &&
+          hadAuthAccount &&
+          updated.password.isNotEmpty &&
+          updated.password != oldModel.password) {
+        await LoginAccountSync.updateAuthPassword(
+          _backend,
+          oldModel,
+          updated.password,
         );
       }
-      await LoginAccountSync.preflight(_db, updated);
       final batch = _db.batch();
       batch.set(
         _db.collection('utilisateurs').doc(updated.id),
         updated.toMap(),
       );
-      await LoginAccountSync.stage(batch, _db, updated, oldPhone: oldPhone);
+      await LoginAccountSync.stage(
+        batch,
+        _db,
+        updated,
+        oldPhone: oldPhone,
+        uid: authUid,
+      );
       await batch.commit();
     } catch (error) {
       if (error is! FirebaseException) rethrow;
@@ -286,6 +358,8 @@ class FirestoreCompanyStore extends CompanyStore {
         break;
       }
     }
+    // Suppression réelle du compte Auth (la console connaît le mot de passe).
+    await LoginAccountSync.deleteAuthAccount(_backend, existing);
     try {
       final batch = _db.batch();
       batch.delete(_db.collection('utilisateurs').doc(id));

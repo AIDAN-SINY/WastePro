@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../services/auth_backend.dart';
 import '../services/auth_service.dart';
 
+/// État de connexion global de l'app.
+///
+/// Depuis la migration sécurité, la session vit dans Firebase Auth (email
+/// dérivé du numéro) : [tryAutoLogin] restaure la session persistée par Auth
+/// et recharge le profil `users/{téléphone}` correspondant via
+/// `auth_profiles/{uid}` (uid → téléphone).
 class UserProvider with ChangeNotifier {
+  UserProvider({AuthBackend? backend})
+      : _backend = backend ?? FirebaseAuthBackend();
+
+  final AuthBackend _backend;
+
   UserModel? _user;
   bool _isLoading = false;
 
@@ -22,12 +34,24 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // 2. Try Auto-Login on Startup
+  // 2. Try Auto-Login on Startup (session Firebase Auth persistée)
   Future<void> tryAutoLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final phone = prefs.getString('saved_phone');
-    if (phone == null) return;
-    await refreshUser(phone);
+    // Auth restaure sa propre session : si un uid est actif, on retrouve le
+    // téléphone via auth_profiles/{uid} puis on charge le profil.
+    final uid = _backend.currentUid;
+    if (uid == null) return;
+    try {
+      final profile = await FirebaseFirestore.instance
+          .collection('auth_profiles')
+          .doc(uid)
+          .get();
+      if (!profile.exists) return;
+      final phone = profile.data()?['phone'] as String?;
+      if (phone == null || phone.isEmpty) return;
+      await refreshUser(phone);
+    } catch (e) {
+      debugPrint("Error restoring session: $e");
+    }
   }
 
   // 3. Fetch/Refresh user data from Firestore
@@ -58,11 +82,29 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // 4. Logout and Clear Session
+  // 4. Logout and Clear Session (Firebase Auth)
   Future<void> logout() async {
+    // ⚠️ Ordre critique : la session APP est vidée SYNCHRONIQUEMENT, AVANT
+    // le signOut backend. Si le signOut Firebase reste bloqué (réseau,
+    // plugin web/desktop…), l'utilisateur doit quand même pouvoir quitter
+    // le backoffice et se reconnecter avec un autre compte — le prochain
+    // signInWithEmailAndPassword remplacera de toute façon la session Auth.
     _user = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('saved_phone'); // Delete saved session
     notifyListeners();
+
+    // Nettoyage local best-effort (ne bloque jamais le logout).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('saved_phone'); // Delete saved session
+    } catch (e) {
+      debugPrint("Error clearing saved session: $e");
+    }
+
+    // SignOut Firebase en arrière-plan (best-effort).
+    try {
+      await _backend.signOut();
+    } catch (e) {
+      debugPrint("Error signing out: $e");
+    }
   }
 }

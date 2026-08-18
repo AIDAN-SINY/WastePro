@@ -5,6 +5,8 @@ import 'package:waste_pro/features/superadmin/data/firestore_platform_store.dart
 import 'package:waste_pro/features/superadmin/data/platform_store.dart';
 import 'package:waste_pro/features/superadmin/super_admin_console.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Régression : « A FirestorePlatformStore was used after being disposed ».
 ///
 /// Scénario réel qui déclenchait l'erreur :
@@ -22,6 +24,7 @@ void main() {
     final db = FakeFirebaseFirestore();
     final store = FirestorePlatformStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       isSignedOut: () => false,
     );

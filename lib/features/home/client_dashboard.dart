@@ -5,10 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../models/user_model.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../subscription/screens/subscription_screen.dart';
 import '../subscription/screens/history_screen.dart';
+import '../payment/screens/extra_pickup_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../auth/screens/welcome_screen.dart';
 import 'notifications_screen.dart';
@@ -148,7 +150,7 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
               const SizedBox(height: 12),
               _buildChartSection(),
               const SizedBox(height: 12),
-              _buildCollectorTracking(),
+              _buildCollectorTracking(user),
 
               const SizedBox(height: 22),
 
@@ -795,7 +797,76 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
     );
   }
 
-  Widget _buildCollectorTracking() {
+  /// Carte « Collector » : affiche le collecteur ASSIGNÉ au client (lu dans
+  /// `collecteurs/{collecteurId}` via le compte de connexion) — plus jamais
+  /// un collecteur codé en dur.
+  ///
+  /// - collecteur assigné → nom + initiales + note (en direct Firestore) ;
+  /// - aucun collecteur → message explicite (« pas encore assigné ») ;
+  /// - collecteur introuvable (supprimé) → message dédié.
+  Widget _buildCollectorTracking(UserModel user) {
+    final collecteurId = user.collecteurId;
+    if (collecteurId.isEmpty) {
+      return _collectorCard(
+        initials: "?",
+        name: "No collector assigned yet",
+        sub: "Your agency will assign one after approval",
+        icon: Icons.person_search_outlined,
+      );
+    }
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _db.collection('collecteurs').doc(collecteurId).snapshots(),
+      builder: (context, snap) {
+        if (snap.hasError || !snap.hasData || !snap.data!.exists) {
+          return _collectorCard(
+            initials: "?",
+            name: "Collector unavailable",
+            sub: "Contact your agency for details",
+            icon: Icons.person_off_outlined,
+          );
+        }
+        final data = snap.data!.data()!;
+        final name = (data['name'] as String? ?? '').trim();
+        final rating = (data['rating'] as num?)?.toDouble() ?? 0;
+        if (name.isEmpty) {
+          return _collectorCard(
+            initials: "?",
+            name: "Collector unavailable",
+            sub: "Contact your agency for details",
+            icon: Icons.person_off_outlined,
+          );
+        }
+        final initials = name
+            .split(' ')
+            .where((p) => p.isNotEmpty)
+            .map((p) => p[0])
+            .take(2)
+            .join()
+            .toUpperCase();
+        final stars = rating >= 4.5
+            ? "★★★★★"
+            : rating >= 3.5
+            ? "★★★★☆"
+            : rating >= 2.5
+            ? "★★★☆☆"
+            : "★★☆☆☆";
+        return _collectorCard(
+          initials: initials,
+          name: name,
+          sub: '$stars ${rating.toStringAsFixed(1)}',
+          icon: Icons.person_pin_circle_outlined,
+        );
+      },
+    );
+  }
+
+  /// Corps commun de la carte collecteur (assigné ou non).
+  Widget _collectorCard({
+    required String initials,
+    required String name,
+    required String sub,
+    required IconData icon,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -803,149 +874,56 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
         border: Border.all(color: dBorder),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: dGoldSoft,
-                  shape: BoxShape.circle,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: dGoldSoft,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                initials,
+                style: GoogleFonts.sora(
+                  color: dGold,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
-                child: Center(
-                  child: Text(
-                    "PM",
-                    style: GoogleFonts.sora(
-                      color: dGold,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Paul Mbarga",
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: dText,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          "★★★★★",
-                          style: TextStyle(
-                            color: dGold,
-                            fontSize: 10.5,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          "4.8",
-                          style: TextStyle(
-                            color: dMuted,
-                            fontSize: 10.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE4F3EA),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2E8B57),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      "On the way",
-                      style: TextStyle(
-                        color: const Color(0xFF2E8B57),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Route visualization
-          SizedBox(
-            height: 36,
-            child: CustomPaint(
-              painter: _RoutePainter(
-                progress: 0.3,
-                lineColor: dBorder,
-                startColor: dGreen,
-                endColor: dGold,
-                truckColor: dGold,
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    "15",
-                    style: GoogleFonts.sora(
-                      color: dGreen,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    "min · ETA",
-                    style: TextStyle(
-                      color: dMuted,
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                decoration: BoxDecoration(
-                  color: dGreen,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  "Track",
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: cream,
-                    fontSize: 11.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
+                    color: dText,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: dMuted,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          Icon(icon, size: 20, color: dGreen),
         ],
       ),
     );
@@ -965,16 +943,27 @@ class _ClientDashboardState extends State<ClientDashboard> with SingleTickerProv
   Widget _actionItem(IconData i, String l, Color bg, Color ic) {
     return InkWell(
       onTap: () {
-        if (l.contains("My Bill"))
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HistoryScreen()),
-          );
-        if (l.contains("supp."))
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-          );
+        switch (l) {
+          case "My Bill":
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HistoryScreen()),
+            );
+          case "Extra Pickup":
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ExtraPickupScreen()),
+            );
+          case "Report Issue":
+          case "Support":
+            // Hors périmètre « paiement » — bientôt disponible.
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$l is coming soon.'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+        }
       },
       child: Column(
         children: [
@@ -1335,83 +1324,3 @@ class _RingPainter extends CustomPainter {
   }
 }
 
-// Custom painter for the route visualization
-class _RoutePainter extends CustomPainter {
-  final double progress;
-  final Color lineColor;
-  final Color startColor;
-  final Color endColor;
-  final Color truckColor;
-
-  _RoutePainter({
-    required this.progress,
-    required this.lineColor,
-    required this.startColor,
-    required this.endColor,
-    required this.truckColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final startX = 10.0;
-    final endX = size.width - 10.0;
-    final centerY = size.height / 2;
-
-    // Draw the line
-    final linePaint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(
-      Offset(startX, centerY),
-      Offset(endX, centerY),
-      linePaint,
-    );
-
-    // Draw start point
-    final startPaint = Paint()
-      ..color = startColor
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(startX, centerY), 5, startPaint);
-
-    // Draw end point
-    final endPaint = Paint()
-      ..color = endColor
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(endX, centerY), 7, endPaint);
-
-    // Draw end point border
-    final endBorderPaint = Paint()
-      ..color = endColor
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawCircle(Offset(endX, centerY), 7, endBorderPaint);
-
-    // Draw truck position
-    final truckX = startX + (endX - startX) * progress;
-    
-    // Draw ping effect
-    final pingPaint = Paint()
-      ..color = truckColor.withOpacity(0.35)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(truckX, centerY), 9, pingPaint);
-
-    // Draw truck
-    final truckPaint = Paint()
-      ..color = truckColor
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(truckX, centerY), 6, truckPaint);
-  }
-
-  @override
-  bool shouldRepaint(_RoutePainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}

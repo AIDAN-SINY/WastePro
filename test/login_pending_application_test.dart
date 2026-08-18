@@ -3,16 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/auth/screens/login_screen.dart';
 
-/// Le client qui remplit une pré-inscription n'a PAS encore de compte
-/// `users/{téléphone}` : il ne peut se connecter qu'après approbation par
-/// le chef d'agence. Le login doit le guider selon l'état de sa candidature
-/// au lieu du générique « User not found ».
+import 'fakes/fake_auth_backend.dart';
+
+/// Une candidature soumise AVANT la migration Auth n'a pas de compte
+/// connectable (ni users/{téléphone}, ni compte Auth) : le login doit
+/// guider le client selon l'état de sa candidature au lieu du générique
+/// « User not found ».
 void main() {
   Future<void> pumpLogin(WidgetTester tester, FakeFirebaseFirestore db) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(home: LoginScreen(db: db)));
+    await tester.pumpWidget(
+      MaterialApp(home: LoginScreen(db: db, backend: FakeAuthBackend())),
+    );
     // pump fixe : le logo du login a une animation infinie (pas de
     // pumpAndSettle).
     await tester.pump(const Duration(seconds: 1));

@@ -1,9 +1,10 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
 
 // Providers
@@ -14,6 +15,7 @@ import 'providers/navigation_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/pre_register_screen.dart';
+import 'features/auth/screens/application_status_screen.dart';
 import 'features/home/client_dashboard.dart';
 import 'features/home/collector_dashboard.dart';
 import 'features/backoffice/backoffice_screen.dart';
@@ -29,6 +31,32 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // App Check : prouve que les requêtes viennent de la vraie app (et non
+  // d'un client qui aurait extrait les clés API publiques). En debug, le
+  // provider debug atteste TOUT appareil ; en production, Play Integrity
+  // (Android) / App Attest (iOS).
+  //
+  // ⚠️ PAS sur web : sans webProvider (reCAPTCHA), le plugin web jette un
+  // `ArgumentError` à CHAQUE lancement (l'erreur « App Check activation
+  // skipped » dans la console) — et App Check n'est pas appliqué côté
+  // console, donc inutile de le déclencher ici. À réactiver le jour où un
+  // provider reCAPTCHA web est configuré.
+  if (!kIsWeb) {
+    try {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: kDebugMode
+            ? AndroidProvider.debug
+            : AndroidProvider.playIntegrity,
+        appleProvider: kDebugMode
+            ? AppleProvider.debug
+            : AppleProvider.appAttest,
+      );
+    } catch (e) {
+      debugPrint('App Check activation skipped: $e');
+    }
+  }
+
   // Inside your main() or where you initialize Firebase
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true, // Allows app to work while "unavailable"
@@ -297,6 +325,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return CompanyConsole(societeId: user.societeId);
     } else if (role == 'collector') {
       return const CollectorDashboard();
+    } else if (role == 'pending_client') {
+      // Candidature en attente (pré-inscription) : le compte existe déjà
+      // (créé à la soumission), mais le client n'est pas encore approuvé —
+      // on le garde sur l'écran de suivi de candidature.
+      return ApplicationStatusScreen(initialPhone: user.phoneNumber);
     } else if (role == 'agency_manager') {
       // Phase 3 (défense en profondeur) : un chef d'agence sans agence
       // assignée ne doit JAMAIS tomber sur le backoffice non scopé (il

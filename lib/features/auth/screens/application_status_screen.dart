@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
+import '../../../providers/user_provider.dart';
 import '../../../services/auth_service.dart';
 import 'login_screen.dart';
 import 'pre_register_screen.dart';
@@ -57,6 +59,11 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
   void initState() {
     super.initState();
     _phoneCtrl.text = widget.initialPhone;
+    // Arrivée depuis le dashboard (candidat connecté, rôle pending_client) :
+    // le suivi démarre directement, sans saisie.
+    if (widget.initialPhone.isNotEmpty) {
+      _checked = true;
+    }
   }
 
   @override
@@ -106,6 +113,28 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     }
+  }
+
+  /// Approuvé : le profil Firestore porte désormais le rôle `client` — on
+  /// recharge le profil pour que le routeur bascule sur le dashboard client.
+  Future<void> _handleApproved() async {
+    final provider = context.read<UserProvider>();
+    if (provider.user != null) {
+      await provider.refreshUser(provider.user!.phoneNumber);
+      if (!mounted) return;
+      // Rôle rafraîchi → le routeur redirige vers le dashboard client.
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        router.go('/');
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+      return;
+    }
+    _goToLogin();
   }
 
   void _goToApply({String name = '', String phone = '', String zone = ''}) {
@@ -220,9 +249,10 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
                       const SizedBox(height: 16),
                       Center(
                         child: TextButton(
-                          onPressed: _goToLogin,
+                          onPressed: () =>
+                              context.read<UserProvider>().logout(),
                           child: const Text(
-                            'Back to login',
+                            'Log out',
                             style: TextStyle(color: muted, fontSize: 12),
                           ),
                         ),
@@ -390,10 +420,9 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
       title: 'Approved! 🎉',
       message:
           'Your application was approved and a collector has been assigned '
-          'to you. Log in with the password you chose during registration to '
-          'start scheduling your pickups.',
-      actionLabel: 'Go to login',
-      onAction: _goToLogin,
+          'to you. You can now start scheduling your pickups.',
+      actionLabel: 'Go to my dashboard',
+      onAction: _handleApproved,
       extra: _stepsIndicator(step: 2),
     );
   }

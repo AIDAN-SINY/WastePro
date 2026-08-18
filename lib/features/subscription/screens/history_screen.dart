@@ -4,7 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
+import 'subscription_screen.dart';
 
+/// Historique des paiements (« My Bill ») — alimenté par la collection
+/// `transactions` (écrite par [PaymentService] après chaque encaissement
+/// CamPay). Plus jamais un écran vide : chaque paiement réussi
+/// (abonnement, collecte supplémentaire…) apparaît ici.
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -20,6 +25,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final Color dGold = const Color(0xFFD4A853);
   final Color dMuted = const Color(0xFF7C8A80);
   final Color dBorder = const Color(0xFFE8EBE9);
+  final Color dRed = const Color(0xFFC1443D);
 
   @override
   Widget build(BuildContext context) {
@@ -29,36 +35,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: dBg,
       appBar: AppBar(
-        title: Text("Payment History", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: dGreen)),
+        title: Text(
+          "Payment History",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: dGreen),
+        ),
         backgroundColor: dSurface,
         elevation: 0,
         foregroundColor: dGreen,
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        // For a prototype, we check the user's active sub document
-        stream: FirebaseFirestore.instance.collection('subscriptions').doc(user.phoneNumber).snapshots(),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        // Transactions du client, les plus récentes d'abord.
+        stream: FirebaseFirestore.instance
+            .collection('transactions')
+            .where('phone', isEqualTo: user.phoneNumber)
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (snapshot.hasError) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.receipt_long, size: 64, color: dMuted.withOpacity(0.3)),
-                  const SizedBox(height: 16),
-                  Text(
-                    "No subscription history found.",
-                    style: GoogleFonts.inter(color: dMuted, fontSize: 16),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  "Unable to load your payment history.\n${snapshot.error}",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(color: dMuted, fontSize: 14),
+                ),
               ),
             );
           }
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF0F3D2E)),
+            );
+          }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final startDate = (data['startDate'] as Timestamp).toDate();
-          
+          final docs = snapshot.data!.docs;
+          if (docs.isEmpty) {
+            return _buildEmptyState();
+          }
+
           return SingleChildScrollView(
-            padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 100),
+            padding: const EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: 100,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -72,21 +94,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Track your subscription payments",
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: dMuted,
-                  ),
+                  "Track your payments",
+                  style: GoogleFonts.inter(fontSize: 14, color: dMuted),
                 ),
                 const SizedBox(height: 24),
-
-                _buildTransactionCard(
-                  "${data['planName']} Plan",
-                  "${data['price']} XAF",
-                  "${startDate.day}/${startDate.month}/${startDate.year}",
-                  "SUCCESS",
-                  Icons.receipt_long,
-                ),
+                ...docs.map((doc) => _buildTransactionCard(doc)),
               ],
             ),
           );
@@ -96,8 +108,91 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildTransactionCard(String title, String amount, String date, String status, IconData icon) {
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.receipt_long,
+              size: 64,
+              color: dMuted.withOpacity(0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No payments yet.",
+              style: GoogleFonts.inter(
+                color: dMuted,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "Subscribe to a plan to get started — every payment will "
+              "appear here.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: dMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: dGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              child: Text(
+                "View Plans",
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionCard(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final title = (data['description'] as String? ?? 'Payment').trim();
+    final amount = (data['amount'] as num?)?.toDouble() ?? 0;
+    final currency = data['currency'] as String? ?? 'XAF';
+    final status = (data['status'] as String? ?? 'cancelled').toLowerCase();
+    final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+
+    final isSuccess = status == 'successful';
+    final statusLabel = isSuccess
+        ? 'SUCCESS'
+        : status == 'pending'
+        ? 'PENDING'
+        : 'FAILED';
+    final statusColor = isSuccess ? dGreen : dRed;
+    final statusBg = isSuccess
+        ? dGreen.withOpacity(0.1)
+        : dRed.withOpacity(0.1);
+    final date = createdAt == null
+        ? ''
+        : '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+
     return Container(
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: dSurface,
@@ -119,7 +214,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               color: dGreen.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: dGreen, size: 24),
+            child: const Icon(
+              Icons.receipt_long,
+              color: Color(0xFF0F3D2E),
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -128,6 +227,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               children: [
                 Text(
                   title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.sora(
                     color: dGreen,
                     fontSize: 16,
@@ -136,32 +237,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Paid: $amount",
-                  style: GoogleFonts.inter(
-                    color: dMuted,
-                    fontSize: 13,
-                  ),
+                  "Paid: ${amount.toStringAsFixed(0)} $currency",
+                  style: GoogleFonts.inter(color: dMuted, fontSize: 13),
                 ),
-                Text(
-                  "Date: $date",
-                  style: GoogleFonts.inter(
-                    color: dMuted,
-                    fontSize: 12,
+                if (date.isNotEmpty)
+                  Text(
+                    "Date: $date",
+                    style: GoogleFonts.inter(color: dMuted, fontSize: 12),
                   ),
-                ),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: dGreen.withOpacity(0.1),
+              color: statusBg,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              status,
+              statusLabel,
               style: GoogleFonts.inter(
-                color: dGreen,
+                color: statusColor,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
@@ -217,7 +313,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 index: 2,
                 onTap: () {
                   navProvider.setIndex(2);
-                  Navigator.pushReplacementNamed(context, '/subscription');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+                  );
                 },
               ),
               _buildNavItem(
@@ -260,7 +359,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               decoration: BoxDecoration(
                 color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
-                border: isSelected 
+                border: isSelected
                     ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
                     : null,
               ),

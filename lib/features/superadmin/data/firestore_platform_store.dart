@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
+import '../../../services/auth_backend.dart';
 import '../../backoffice/models.dart';
+import 'login_account_sync.dart';
 import 'platform_store.dart';
 import 'seed_data.dart';
 
@@ -23,10 +25,12 @@ import 'seed_data.dart';
 class FirestorePlatformStore extends PlatformStore {
   FirestorePlatformStore({
     FirebaseFirestore? db,
+    AuthBackend? backend,
     this.seedIfEmpty = true,
     @visibleForTesting bool Function()? isSignedOut,
   }) : _isSignedOutOverride = isSignedOut,
-       _db = db ?? FirebaseFirestore.instance {
+       _db = db ?? FirebaseFirestore.instance,
+       _backend = backend ?? FirebaseAuthBackend() {
     // Never flash the design's mock data in the real console.
     societes.clear();
     agences.clear();
@@ -37,6 +41,9 @@ class FirestorePlatformStore extends PlatformStore {
   }
 
   final FirebaseFirestore _db;
+
+  /// Backend Auth (création de comptes console). Injectable par les tests.
+  final AuthBackend _backend;
 
   /// When true, an empty collection is populated with [seedSocietes] /
   /// [seedAgences] / [seedUtilisateurs] on first load.
@@ -193,11 +200,10 @@ class FirestorePlatformStore extends PlatformStore {
 
   /// Vrai quand aucune session active n'existe (déconnecté).
   ///
-  /// La connexion n'utilise plus Firebase Auth (restaurée en mode
-  /// « numéro + mot de passe » Firestore) : il n'y a donc jamais de token
-  /// à révoquer au logout et les erreurs de flux ne doivent pas être
-  /// masquées. Le cas « logout → permission-denied attendu » reste testable
-  /// via [_isSignedOutOverride].
+  /// Le cas « logout → permission-denied attendu » reste testable via
+  /// [_isSignedOutOverride] ; en production la valeur par défaut affiche
+  /// les erreurs (défense en profondeur : ne jamais masquer un vrai
+  /// problème d'accès sous prétexte d'un démontage).
   bool _isSignedOut() {
     final override = _isSignedOutOverride;
     if (override != null) return override();
@@ -392,15 +398,22 @@ class FirestorePlatformStore extends PlatformStore {
     // apparaîtrait dans la liste sans compte de connexion.
     _requireLoginPhone(model);
     await _preflightLogin(model);
+    // Compte Firebase Auth créé AVANT le batch (le `uid` est écrit dans le
+    // doc `users`) ; en cas d'échec du batch, le compte est détruit.
+    final authUid = await _createOrReuseAuth(model);
     try {
       // Un seul batch atomique : soit l'utilisateur ET son compte de
       // connexion sont écrits, soit rien (jamais un utilisateur dans
       // `utilisateurs` sans compte dans `users`).
       final batch = _db.batch();
       batch.set(_db.collection('utilisateurs').doc(model.id), model.toMap());
-      await _stageLoginSync(batch, model);
+      await _stageLoginSync(batch, model, uid: authUid);
       await batch.commit();
     } catch (error) {
+      // Rollback du compte Auth (jamais d'orphelin côté Firebase Auth).
+      if (authUid.isNotEmpty) {
+        await LoginAccountSync.deleteAuthAccount(_backend, model);
+      }
       if (error is! FirebaseException) rethrow;
       throw _friendlyError(error);
     }
@@ -417,20 +430,57 @@ class FirestorePlatformStore extends PlatformStore {
   @override
   Future<void> updateUtilisateur(PlatformUserModel updated) async {
     _requireLoginPhone(updated);
+    // Ancienne version (mot de passe actuel + numéro) pour la synchro Auth.
+    final existingDoc =
+        await _db.collection('utilisateurs').doc(updated.id).get();
+    final oldModel = existingDoc.exists
+        ? PlatformUserModel.fromMap(existingDoc.data()!)
+        : updated;
+    final oldPhone = _canonicalPhone(oldModel.telephone);
     try {
-      // Ancien numéro : si l'édition change le téléphone, l'ancien compte de
-      // connexion users/{oldPhone} doit être supprimé (sinon l'ancien numéro
-      // continuerait de se connecter). Lu depuis Firestore — pas depuis la
-      // liste en mémoire — pour être exact même si le doc a été modifié hors
-      // console.
-      final existingDoc =
-          await _db.collection('utilisateurs').doc(updated.id).get();
-      final oldPhone = existingDoc.exists
-          ? _canonicalPhone(
-              PlatformUserModel.fromMap(existingDoc.data()!).telephone,
-            )
-          : '';
       await _preflightLogin(updated);
+      // Suspension → le compte Auth est SUPPRIMÉ (plus de login possible),
+      // pas seulement le doc `users` : sans ça, la réactivation buterait sur
+      // `email-already-in-use` en recréant le compte.
+      final isNowSuspended =
+          updated.status == 'Suspended' || updated.status == 'Suspendu';
+      final wasActive =
+          oldModel.status != 'Suspended' && oldModel.status != 'Suspendu';
+      if (isNowSuspended && wasActive) {
+        await LoginAccountSync.deleteAuthAccount(_backend, oldModel);
+      }
+      // Numéro CHANGÉ → le compte Auth de l'ANCIEN numéro est supprimé (pas
+      // seulement le doc `users` + `auth_profiles`) : sans ça, les comptes
+      // Auth orphelins s'accumuleraient dans Firebase. [oldPhone] est déjà
+      // calculé au-dessus.
+      final newPhone = _canonicalPhone(updated.telephone);
+      if (oldPhone.isNotEmpty && oldPhone != newPhone) {
+        await LoginAccountSync.deleteAuthAccount(_backend, oldModel);
+      }
+      // Le compte Auth existait-il déjà ? Si non, [_createOrReuseAuth]
+      // vient de le créer avec le NOUVEAU mot de passe → rien à mettre à
+      // jour (sinon on essaierait de passer de l'ANCIEN au nouveau sur un
+      // compte qui a déjà le nouveau : échec).
+      final targetPhone = _canonicalPhone(updated.telephone);
+      final loginDoc = targetPhone.isEmpty
+          ? null
+          : await _db.collection('users').doc(targetPhone).get();
+      final hadAuthAccount =
+          (loginDoc?.data()?['uid'] as String? ?? '').isNotEmpty;
+      final authUid = await _createOrReuseAuth(updated);
+      // Mot de passe changé → mise à jour du compte Auth (la console
+      // connaît le mot de passe actuel). Jamais pendant une suspension : le
+      // compte Auth vient d'être SUPPRIMÉ, il n'y a rien à mettre à jour.
+      if (!isNowSuspended &&
+          hadAuthAccount &&
+          updated.password.isNotEmpty &&
+          updated.password != oldModel.password) {
+        await LoginAccountSync.updateAuthPassword(
+          _backend,
+          oldModel,
+          updated.password,
+        );
+      }
       // Batch atomique : utilisateur + synchro du compte de connexion +
       // suppression de l'ancien compte en cas de changement de numéro.
       final batch = _db.batch();
@@ -438,7 +488,7 @@ class FirestorePlatformStore extends PlatformStore {
         _db.collection('utilisateurs').doc(updated.id),
         updated.toMap(),
       );
-      await _stageLoginSync(batch, updated, oldPhone: oldPhone);
+      await _stageLoginSync(batch, updated, oldPhone: oldPhone, uid: authUid);
       await batch.commit();
     } catch (error) {
       if (error is! FirebaseException) rethrow;
@@ -466,6 +516,8 @@ class FirestorePlatformStore extends PlatformStore {
         break;
       }
     }
+    // Suppression réelle du compte Auth (la console connaît le mot de passe).
+    await LoginAccountSync.deleteAuthAccount(_backend, existing);
     try {
       final batch = _db.batch();
       batch.delete(_db.collection('utilisateurs').doc(id));
@@ -476,6 +528,10 @@ class FirestorePlatformStore extends PlatformStore {
         final loginDoc = await _db.collection('users').doc(phone).get();
         if (loginDoc.exists && loginDoc.data()?['consoleCreated'] == true) {
           batch.delete(loginDoc.reference);
+          final uid = loginDoc.data()?['uid'] as String?;
+          if (uid != null && uid.isNotEmpty) {
+            batch.delete(_db.collection('auth_profiles').doc(uid));
+          }
         }
       }
       await batch.commit();
@@ -526,81 +582,30 @@ class FirestorePlatformStore extends PlatformStore {
   }
 
   /// Ajoute au batch [batch] la synchronisation du compte de connexion
-  /// `users/{téléphone}` pour [user] (création, mise à jour, suspension ou
-  /// suppression). Appelé entre deux écritures du même batch pour garder
-  /// l'ensemble atomique : soit l'utilisateur console ET son compte de
-  /// connexion existent, soit rien.
+  /// `users/{téléphone}` + `auth_profiles/{uid}` pour [user] (création,
+  /// mise à jour, suspension ou suppression) — délègue à
+  /// [LoginAccountSync.stage].
   ///
-  /// - [oldPhone] : ancien numéro avant édition — son compte de connexion
-  ///   est supprimé s'il a été créé par la console (migration de numéro).
+  /// [uid] : uid Auth créé via [_createOrReuseAuth] ('' si aucun compte).
   Future<void> _stageLoginSync(
     WriteBatch batch,
     PlatformUserModel user, {
     String oldPhone = '',
-  }) async {
-    // Défense en profondeur : jamais de compte manquant.
-    _requireLoginPhone(user);
-    final phone = _canonicalPhone(user.telephone);
-
-    // Téléphone changé à l'édition → supprime l'ancien compte de connexion
-    // (s'il a été créé par la console) pour ne pas laisser l'ancien numéro
-    // continuer de se connecter. Placé AVANT le return « sans mot de
-    // passe » : un utilisateur qui perd son mot de passe ne doit pas non
-    // plus garder un ancien compte actif.
-    final oldCanonical = _canonicalPhone(oldPhone);
-    if (oldCanonical.isNotEmpty && oldCanonical != phone) {
-      final oldDoc = await _db.collection('users').doc(oldCanonical).get();
-      if (oldDoc.exists && oldDoc.data()?['consoleCreated'] == true) {
-        batch.delete(_db.collection('users').doc(oldCanonical));
-      }
-    }
-
-    // Sans mot de passe, aucun compte de connexion (ex. utilisateurs seedés).
-    if (user.password.isEmpty) return;
-    final ref = _db.collection('users').doc(phone);
-
-    // Accepte aussi le statut hérité français ('Suspendu') : les docs
-    // créés avant le passage à l'anglais gardent leur valeur d'origine.
-    if (user.status == 'Suspended' || user.status == 'Suspendu') {
-      final doc = await ref.get();
-      if (doc.exists && doc.data()?['consoleCreated'] == true) {
-        batch.delete(ref);
-      }
-    } else {
-      await _assertLoginPhoneAvailable(ref, user);
-      batch.set(ref, {
-        'phoneNumber': phone,
-        'fullName': user.nom,
-        // Rôle de connexion dérivé du rôle console : le General
-        // Administrator accède à la console de son entreprise, l'Agency
-        // Manager au backoffice de son agence (garde aussi les valeurs
-        // héritées françaises).
-        'role': _loginRoleFor(user.role),
-        'password': user.password,
-        'societeId': user.societeId,
-        'agenceId': user.agenceId,
-        'isSubscribed': false,
-        // Marqueur : ce compte a été créé/géré par la console super admin.
-        'consoleCreated': true,
-        // Propriétaire : empêche un autre utilisateur console d'écraser le
-        // compte de connexion en réutilisant le même numéro.
-        'consoleUserId': user.id,
-      });
-    }
+    String uid = '',
+  }) {
+    return LoginAccountSync.stage(
+      batch,
+      _db,
+      user,
+      oldPhone: oldPhone,
+      uid: uid,
+    );
   }
 
-  /// Rôle de connexion (`users`) correspondant à un rôle console
-  /// (`utilisateurs`). Historiquement tous les comptes console recevaient
-  /// `'admin'` ; depuis Phase 1 ils reçoivent leur vrai rôle pour que le
-  /// routeur dirige chacun vers son écran (console entreprise vs backoffice).
-  static String _loginRoleFor(String consoleRole) {
-    final role = consoleRole.trim().toLowerCase();
-    if (role == 'general administrator' ||
-        role == 'administrateur général') {
-      return 'general_admin';
-    }
-    // 'Agency Manager' / "Responsable d'Agence" (et tout rôle inconnu).
-    return 'agency_manager';
+  /// Crée (ou réutilise) le compte Firebase Auth d'un utilisateur console.
+  /// Le `uid` renvoyé est stocké dans le doc `users` par [_stageLoginSync].
+  Future<String> _createOrReuseAuth(PlatformUserModel user) {
+    return LoginAccountSync.createAuthAccount(_backend, _db, user);
   }
 
   /// Refuse d'écraser : (1) un compte client/collecteur réel (pas de

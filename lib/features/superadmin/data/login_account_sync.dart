@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../models/platform_user_model.dart';
+import '../../../services/auth_backend.dart';
+import '../../../services/auth_service.dart';
 
 /// Erreur métier de la synchro du compte de connexion (message affiché tel
 /// quel par le toast du drawer, sans préfixe « Exception: »).
@@ -14,8 +16,17 @@ class LoginSyncError implements Exception {
 }
 
 /// Helpers partagés entre la console super admin et la console entreprise
-/// pour créer / mettre à jour / supprimer le compte de connexion
-/// `users/{téléphone}` d'un utilisateur console.
+/// pour créer / mettre à jour / supprimer le compte de connexion d'un
+/// utilisateur console.
+///
+/// Depuis la migration sécurité :
+///   - le mot de passe vit dans Firebase Auth (email dérivé du numéro) et
+///     n'est PLUS écrit dans Firestore ;
+///   - `users/{téléphone}` porte le profil de connexion + le `uid` Auth ;
+///   - `auth_profiles/{uid}` porte rôle + scope pour les règles Firestore ;
+///   - la création du compte Auth (via [createAuthAccount]) se fait AVANT le
+///     batch Firestore (le `uid` est écrit dans le doc) ; en cas d'échec du
+///     batch, l'appelant doit détruire le compte Auth (rollback).
 class LoginAccountSync {
   LoginAccountSync._();
 
@@ -58,15 +69,93 @@ class LoginAccountSync {
     await _assertPhoneAvailable(db, db.collection('users').doc(phone), user);
   }
 
+  // --- Compte Firebase Auth ---
+
+  /// Crée (ou réutilise) le compte Firebase Auth d'un utilisateur console.
+  ///
+  /// Idempotent : si `users/{téléphone}` porte déjà un `uid`, il est renvoyé
+  /// (pas de doublon Auth). Sinon le compte est créé avec [user.password].
+  /// Lève [LoginSyncError] si le numéro est déjà pris par un autre compte.
+  static Future<String> createAuthAccount(
+    AuthBackend backend,
+    FirebaseFirestore db,
+    PlatformUserModel user,
+  ) async {
+    final phone = canonicalPhone(user.telephone);
+    if (user.password.isEmpty || phone.isEmpty) return '';
+    final existing = await db.collection('users').doc(phone).get();
+    final existingUid = existing.data()?['uid'] as String?;
+    if (existingUid != null && existingUid.isNotEmpty) return existingUid;
+    try {
+      return await backend.createAccount(
+        email: AuthService.emailFor(phone),
+        password: user.password,
+      );
+    } on AuthBackendException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        throw LoginSyncError(
+          'An account already exists with this number. Choose a different '
+          'number.',
+        );
+      }
+      throw LoginSyncError(
+        e.message.isEmpty ? 'Unable to create the login account.' : e.message,
+      );
+    }
+  }
+
+  /// Change le mot de passe Firebase Auth d'un compte existant (la console
+  /// connaît le mot de passe actuel, stocké sur l'utilisateur).
+  static Future<void> updateAuthPassword(
+    AuthBackend backend,
+    PlatformUserModel user,
+    String newPassword,
+  ) async {
+    final phone = canonicalPhone(user.telephone);
+    if (phone.isEmpty || user.password.isEmpty) return;
+    try {
+      await backend.updatePassword(
+        email: AuthService.emailFor(phone),
+        currentPassword: user.password,
+        newPassword: newPassword,
+      );
+    } on AuthBackendException catch (e) {
+      throw LoginSyncError(
+        'Password change failed: ${e.message.isEmpty ? e.code : e.message}',
+      );
+    }
+  }
+
+  /// Supprime le compte Firebase Auth d'un utilisateur console (suppression
+  /// ou suspension). La console connaît le mot de passe → suppression réelle.
+  static Future<void> deleteAuthAccount(
+    AuthBackend backend,
+    PlatformUserModel user,
+  ) async {
+    final phone = canonicalPhone(user.telephone);
+    if (phone.isEmpty || user.password.isEmpty) return;
+    try {
+      await backend.deleteAccount(
+        email: AuthService.emailFor(phone),
+        password: user.password,
+      );
+    } catch (_) {
+      // Best-effort : si le compte Auth n'existe pas déjà, ce n'est pas grave.
+    }
+  }
+
   /// Ajoute au batch [batch] la synchronisation du compte de connexion
-  /// `users/{téléphone}` pour [user] (création, mise à jour, suspension ou
-  /// suppression). Appelé entre deux écritures du même batch pour garder
-  /// l'ensemble atomique.
+  /// `users/{téléphone}` + `auth_profiles/{uid}` pour [user] (création,
+  /// mise à jour, suspension ou suppression). Appelé entre deux écritures du
+  /// même batch pour garder l'ensemble atomique.
+  ///
+  /// [uid] : uid Auth déjà créé via [createAuthAccount] ('' si aucun compte).
   static Future<void> stage(
     WriteBatch batch,
     FirebaseFirestore db,
     PlatformUserModel user, {
     String oldPhone = '',
+    String uid = '',
   }) async {
     requirePhone(user);
     final phone = canonicalPhone(user.telephone);
@@ -79,6 +168,10 @@ class LoginAccountSync {
       final oldDoc = await db.collection('users').doc(oldCanonical).get();
       if (oldDoc.exists && oldDoc.data()?['consoleCreated'] == true) {
         batch.delete(db.collection('users').doc(oldCanonical));
+        final oldUid = oldDoc.data()?['uid'] as String?;
+        if (oldUid != null && oldUid.isNotEmpty) {
+          batch.delete(db.collection('auth_profiles').doc(oldUid));
+        }
       }
     }
 
@@ -89,6 +182,10 @@ class LoginAccountSync {
       final doc = await ref.get();
       if (doc.exists && doc.data()?['consoleCreated'] == true) {
         batch.delete(ref);
+        final oldUid = doc.data()?['uid'] as String?;
+        if (oldUid != null && oldUid.isNotEmpty) {
+          batch.delete(db.collection('auth_profiles').doc(oldUid));
+        }
       }
     } else {
       await _assertPhoneAvailable(db, ref, user);
@@ -96,13 +193,23 @@ class LoginAccountSync {
         'phoneNumber': phone,
         'fullName': user.nom,
         'role': loginRoleFor(user.role),
-        'password': user.password,
+        'uid': uid,
         'societeId': user.societeId,
         'agenceId': user.agenceId,
         'isSubscribed': false,
         'consoleCreated': true,
         'consoleUserId': user.id,
       });
+      if (uid.isNotEmpty) {
+        batch.set(db.collection('auth_profiles').doc(uid), {
+          'uid': uid,
+          'phone': phone,
+          'role': loginRoleFor(user.role),
+          'status': 'active',
+          'societeId': user.societeId,
+          'agenceId': user.agenceId,
+        });
+      }
     }
   }
 
@@ -118,6 +225,10 @@ class LoginAccountSync {
     final doc = await db.collection('users').doc(canonical).get();
     if (doc.exists && doc.data()?['consoleCreated'] == true) {
       batch.delete(db.collection('users').doc(canonical));
+      final uid = doc.data()?['uid'] as String?;
+      if (uid != null && uid.isNotEmpty) {
+        batch.delete(db.collection('auth_profiles').doc(uid));
+      }
     }
   }
 

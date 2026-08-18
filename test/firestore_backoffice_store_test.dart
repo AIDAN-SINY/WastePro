@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/backoffice/data/firestore_backoffice_store.dart';
 import 'package:waste_pro/features/backoffice/data/seed_data.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Lets the snapshot listeners catch up with seed writes / CRUD writes.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
@@ -18,7 +20,10 @@ void main() {
     'seeds empty collections with the design data + collector whitelist',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+      );
       await store.initialLoad;
       await _settle();
 
@@ -53,7 +58,10 @@ void main() {
       'status': 'Active',
     });
 
-    final store = FirestoreBackofficeStore(db: db);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+    );
     await store.initialLoad;
     await _settle();
 
@@ -69,7 +77,11 @@ void main() {
     'creating a client with a password creates a real login account',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -86,12 +98,14 @@ void main() {
       final clientDoc = await db.collection('clients').get();
       expect(clientDoc.docs.single.data()['name'], 'Claude Nguema');
 
-      // Le compte de connexion existe : rôle client + mot de passe identique,
-      // pour que la personne puisse se connecter à son interface client.
+      // Le compte de connexion existe : rôle client + uid Auth (le mot de
+      // passe vit dans Firebase Auth, jamais dans le doc), pour que la
+      // personne puisse se connecter à son interface client.
       final login = await db.collection('users').doc('+237612345678').get();
       expect(login.exists, isTrue);
       expect(login.data()?['role'], 'client');
-      expect(login.data()?['password'], 'secret123');
+      expect(login.data()?['uid'], isNotEmpty);
+      expect(login.data()?['password'], isNull);
       expect(login.data()?['fullName'], 'Claude Nguema');
       expect(login.data()?['consoleCreated'], isTrue);
       expect(login.data()?['subscription_plan'], 'Premium');
@@ -105,7 +119,11 @@ void main() {
     'creating a client without a password creates no login account',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -128,7 +146,11 @@ void main() {
   test('creating a collector with a password creates a collector login + '
       'whitelist entry', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -145,7 +167,8 @@ void main() {
     final login = await db.collection('users').doc('+237655000000').get();
     expect(login.exists, isTrue);
     expect(login.data()?['role'], 'collector');
-    expect(login.data()?['password'], 'collector123');
+    expect(login.data()?['uid'], isNotEmpty);
+    expect(login.data()?['password'], isNull);
     expect(login.data()?['fullName'], 'Boris Ndongo');
 
     // Le numéro est pré-approuvé pour l'auto-inscription.
@@ -160,7 +183,11 @@ void main() {
 
   test('updating name and password keeps the login account in sync', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -181,7 +208,8 @@ void main() {
 
     final login = await db.collection('users').doc('+237612345678').get();
     expect(login.data()?['fullName'], 'Claude Nguema Jr');
-    expect(login.data()?['password'], 'newpass456');
+    expect(login.data()?['uid'], isNotEmpty);
+    expect(login.data()?['password'], isNull);
 
     store.dispose();
   });
@@ -190,7 +218,11 @@ void main() {
     'suspending a client removes its login; reactivating recreates it',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -211,12 +243,12 @@ void main() {
         isFalse,
       );
 
-      // Reactivated → the login account is recreated with the kept password
-      // (the field stays empty on the admin side).
+      // Reactivated → the login account is recreated (uid + auth_profiles).
       await store.updateClient(client.copyWith(status: 'Active'));
       final login = await db.collection('users').doc('+237612345678').get();
       expect(login.exists, isTrue);
-      expect(login.data()?['password'], 'secret123');
+      expect(login.data()?['uid'], isNotEmpty);
+      expect(login.data()?['password'], isNull);
 
       store.dispose();
     },
@@ -226,7 +258,11 @@ void main() {
     'an inactive collector gets no login account nor whitelist entry',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -265,7 +301,11 @@ void main() {
 
   test('deleting a client removes its console-created login account', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -290,7 +330,11 @@ void main() {
 
   test('deleting a collecteur removes its whitelist entry too', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -327,7 +371,6 @@ void main() {
         'phoneNumber': '+237655000000',
         'fullName': 'Client Réel',
         'role': 'client',
-        'password': 'clientpass',
       });
       await db.collection('collecteurs').doc('x1').set({
         'id': 'x1',
@@ -338,7 +381,11 @@ void main() {
         'status': 'Inactive',
       });
 
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -348,7 +395,6 @@ void main() {
       final real = await db.collection('users').doc('+237655000000').get();
       expect(real.exists, isTrue);
       expect(real.data()?['role'], 'client');
-      expect(real.data()?['password'], 'clientpass');
 
       store.dispose();
     },
@@ -361,10 +407,13 @@ void main() {
       'phoneNumber': '+237688888888',
       'fullName': 'Client Existant',
       'role': 'client',
-      'password': 'clientpass',
     });
 
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -383,7 +432,6 @@ void main() {
     // Le compte client réel n'a pas été écrasé.
     final client = await db.collection('users').doc('+237688888888').get();
     expect(client.data()?['role'], 'client');
-    expect(client.data()?['password'], 'clientpass');
     // Et aucun client n'a été créé dans la collection du backoffice.
     expect(store.clients, isEmpty);
 
@@ -397,6 +445,7 @@ void main() {
     // encore actifs sont rejetés par les règles → pas d'erreur affichée.
     final store = FirestoreBackofficeStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       isSignedOut: () => true,
     );
@@ -419,6 +468,7 @@ void main() {
     final db = FakeFirebaseFirestore();
     final store = FirestoreBackofficeStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -479,6 +529,7 @@ void main() {
     // Le chef d'agence de agA ne voit QUE les données de agA.
     final store = FirestoreBackofficeStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       agenceId: 'agA',
       societeId: 'so1',
@@ -508,7 +559,11 @@ void main() {
     'approving a registration creates the client + its login account',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -546,11 +601,13 @@ void main() {
       expect(client.agenceId, 'ag1');
       expect(client.zone, 'Bonanjo');
 
-      // Compte de connexion créé avec le mot de passe choisi par le client.
+      // Compte de connexion : uid Auth + auth_profiles (le mot de passe
+      // choisi par le client vit dans Auth, pas dans Firestore).
       final login = await db.collection('users').doc('+237698224466').get();
       expect(login.exists, isTrue);
       expect(login.data()?['role'], 'client');
-      expect(login.data()?['password'], 'secret123');
+      expect(login.data()?['uid'], isNotEmpty);
+      expect(login.data()?['password'], isNull);
       expect(login.data()?['fullName'], 'Carine Mbappe');
 
       // Le client est notifié dans l'app (cloche du dashboard).
@@ -571,7 +628,11 @@ void main() {
   test('rejecting a registration marks it rejected without creating a client',
       () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -614,12 +675,15 @@ void main() {
     store.dispose();
   });
 
-  test(
-    'reassigning a collector updates the client, the login account and '
+  test(      'reassigning a collector updates the client, the login account and '
     'the upcoming collections',
     () async {
       final db = FakeFirebaseFirestore();
-      final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+      final store = FirestoreBackofficeStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        seedIfEmpty: false,
+      );
       await store.initialLoad;
       await _settle();
 
@@ -656,7 +720,7 @@ void main() {
         'phoneNumber': '+237698224466',
         'fullName': 'Carine Mbappe',
         'role': 'client',
-        'password': 'secret123',
+        'uid': 'uid-legacy-client',
         'consoleCreated': true,
         'agenceId': 'ag1',
         'societeId': 'so1',
@@ -702,7 +766,11 @@ void main() {
   test('reassigning works even when the client has no login account',
       () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -747,7 +815,11 @@ void main() {
 
   test('changing the phone number migrates the login account', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestoreBackofficeStore(db: db, seedIfEmpty: false);
+    final store = FirestoreBackofficeStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -770,7 +842,8 @@ void main() {
     );
     final moved = await db.collection('users').doc('+237699999999').get();
     expect(moved.exists, isTrue);
-    expect(moved.data()?['password'], 'secret123');
+    expect(moved.data()?['uid'], isNotEmpty);
+    expect(moved.data()?['password'], isNull);
 
     store.dispose();
   });

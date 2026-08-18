@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../../services/auth_backend.dart';
+import '../../../services/auth_service.dart';
 import '../models.dart';
 import 'backoffice_store.dart';
 import 'seed_data.dart';
@@ -25,12 +27,14 @@ import 'seed_data.dart';
 class FirestoreBackofficeStore extends BackofficeStore {
   FirestoreBackofficeStore({
     FirebaseFirestore? db,
+    AuthBackend? backend,
     this.seedIfEmpty = true,
     this.agenceId = '',
     this.societeId = '',
     @visibleForTesting bool Function()? isSignedOut,
   }) : _isSignedOutOverride = isSignedOut,
-       _db = db ?? FirebaseFirestore.instance {
+       _db = db ?? FirebaseFirestore.instance,
+       _backend = backend ?? FirebaseAuthBackend() {
     _isScoped = agenceId.isNotEmpty;
     // Never flash the design's mock data in the real backoffice.
     clients.clear();
@@ -40,6 +44,9 @@ class FirestoreBackofficeStore extends BackofficeStore {
   }
 
   final FirebaseFirestore _db;
+
+  /// Backend Auth (création de comptes client/collecteur). Injectable en test.
+  final AuthBackend _backend;
 
   /// When true, an empty collection is populated with [seedClients] /
   /// [seedCollecteurs] on first load.
@@ -280,11 +287,10 @@ class FirestoreBackofficeStore extends BackofficeStore {
 
   /// Vrai quand aucune session active n'existe (déconnecté).
   ///
-  /// La connexion n'utilise plus Firebase Auth (restaurée en mode
-  /// « numéro + mot de passe » Firestore) : il n'y a donc jamais de token
-  /// à révoquer au logout et les erreurs de flux ne doivent pas être
-  /// masquées. Le cas « logout → permission-denied attendu » reste testable
-  /// via [_isSignedOutOverride].
+  /// Le cas « logout → permission-denied attendu » reste testable via
+  /// [_isSignedOutOverride] ; en production la valeur par défaut affiche
+  /// les erreurs (défense en profondeur : ne jamais masquer un vrai
+  /// problème d'accès sous prétexte d'un démontage).
   bool _isSignedOut() {
     final override = _isSignedOutOverride;
     if (override != null) return override();
@@ -353,8 +359,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
     );
     final canonical = _canonicalPhone(reg.phone);
     // Garde anti-doublon : une candidature déjà traitée (ou supprimée) ne
-    // doit jamais créer un second client + compte de connexion. Vérifiée
-    // AVANT l'écriture — l'approbation est atomique ou rien.
+    // doit jamais créer un second client. Vérifiée AVANT l'écriture —
+    // l'approbation est atomique ou rien.
     final regDoc = await _db.collection('registrations').doc(reg.id).get();
     if (!regDoc.exists) {
       throw _SyncError('This application no longer exists.');
@@ -362,21 +368,48 @@ class FirestoreBackofficeStore extends BackofficeStore {
     if (regDoc.data()?['status'] != 'pending') {
       throw _SyncError('This application has already been reviewed.');
     }
+
+    // Le compte de connexion du client existe DÉJÀ (créé à la soumission,
+    // rôle `pending_client`) : l'approbation bascule son rôle vers
+    // `client`. Fallback legacy : une candidature soumise AVANT la
+    // migration Auth peut n'avoir aucun compte — on le crée alors (avec le
+    // mot de passe choisi par le client, encore stocké sur la candidature).
+    var uid = '';
+    var authEmail = '';
+    final userDoc = canonical.isEmpty
+        ? null
+        : await _db.collection('users').doc(canonical).get();
+    if (userDoc != null && userDoc.exists) {
+      uid = userDoc.data()?['uid'] as String? ?? '';
+    } else if (reg.password.isNotEmpty && canonical.isNotEmpty) {
+      authEmail = AuthService.emailFor(canonical);
+      try {
+        uid = await _backend.createAccount(
+          email: authEmail,
+          password: reg.password,
+        );
+      } on AuthBackendException catch (e) {
+        if (e.code != 'email-already-in-use') {
+          throw _SyncError(
+            e.message.isEmpty ? 'Unable to create the login account.' : e.message,
+          );
+        }
+      }
+    }
+
     try {
       final batch = _db.batch();
-      // 1. Le client (le mot de passe choisi par le client est conservé
-      //    dans le doc, comme pour les clients créés à la main).
-      batch.set(_db.collection('clients').doc(clientId), {
-        ...client.toMap(),
-        'password': reg.password,
-      });
-      // 2. Son compte de connexion : il peut enfin se connecter.
-      if (canonical.isNotEmpty && reg.password.isNotEmpty) {
+      // 1. Le client (plus aucun mot de passe en clair : il vit dans Auth).
+      batch.set(_db.collection('clients').doc(clientId), client.toMap());
+      // 2. Compte de connexion : le rôle passe de pending_client à client
+      //    (le client peut enfin accéder à son dashboard).
+      if (canonical.isNotEmpty) {
         batch.set(_db.collection('users').doc(canonical), {
           'phoneNumber': canonical,
           'fullName': reg.fullName,
           'role': 'client',
-          'password': reg.password,
+          'uid': uid,
+          'registrationStatus': 'approved',
           'subscription_plan': 'Standard',
           'isSubscribed': true,
           'agenceId': reg.agenceId,
@@ -385,6 +418,16 @@ class FirestoreBackofficeStore extends BackofficeStore {
           // Marqueur : compte créé/géré par le backoffice admin.
           'consoleCreated': true,
         });
+        if (uid.isNotEmpty) {
+          batch.set(_db.collection('auth_profiles').doc(uid), {
+            'uid': uid,
+            'phone': canonical,
+            'role': 'client',
+            'status': 'approved',
+            'societeId': reg.societeId,
+            'agenceId': reg.agenceId,
+          });
+        }
       }
       // 3. La candidature passe à 'approved' avec le collecteur assigné.
       batch.update(_db.collection('registrations').doc(reg.id), {
@@ -408,6 +451,12 @@ class FirestoreBackofficeStore extends BackofficeStore {
       }
       await batch.commit();
     } catch (error) {
+      // Rollback : jamais de compte Auth orphelin si l'approbation échoue.
+      if (authEmail.isNotEmpty && uid.isNotEmpty) {
+        try {
+          await _backend.deleteAccount(email: authEmail, password: reg.password);
+        } catch (_) {}
+      }
       throw _SyncError(_friendlyError(error));
     }
     // Mise à jour locale optimiste (le snapshot confirmera).
@@ -430,6 +479,23 @@ class FirestoreBackofficeStore extends BackofficeStore {
       batch.update(_db.collection('registrations').doc(reg.id), {
         'status': 'rejected',
       });
+      // Le client peut rester connecté : son compte n'est pas supprimé — il
+      // verra le rejet sur son écran de suivi et pourra re-postuler. Le
+      // statut est marqué sur le profil + auth_profiles (règles).
+      if (canonical.isNotEmpty) {
+        final userDoc = await _db.collection('users').doc(canonical).get();
+        if (userDoc.exists) {
+          batch.update(_db.collection('users').doc(canonical), {
+            'registrationStatus': 'rejected',
+          });
+          final uid = userDoc.data()?['uid'] as String?;
+          if (uid != null && uid.isNotEmpty) {
+            batch.update(_db.collection('auth_profiles').doc(uid), {
+              'status': 'rejected',
+            });
+          }
+        }
+      }
       // Notifie le client dans l'app (cloche du dashboard).
       if (canonical.isNotEmpty) {
         batch.set(
@@ -787,9 +853,20 @@ class FirestoreBackofficeStore extends BackofficeStore {
 
   // --- Comptes de connexion ---
 
-  /// Écrit l'entité + synchronise son compte de connexion dans `users`
-  /// (et la liste blanche `collectors` pour les collecteurs) dans un seul
-  /// batch, donc de façon atomique.
+  /// Écrit l'entité + synchronise son compte de connexion `users/{téléphone}`
+  /// + `auth_profiles/{uid}` (et la liste blanche `collectors` pour les
+  /// collecteurs) dans un seul batch, donc de façon atomique.
+  ///
+  /// Depuis la migration sécurité :
+  ///   - le mot de passe choisi par l'admin est envoyé à Firebase Auth
+  ///     (compte créé AVANT le batch, `uid` stocké dans le doc `users`) et
+  ///     reste stocké sur l'ENTITÉ `clients`/`collecteurs` (lisible par les
+  ///     admins uniquement, comme `utilisateurs` — jamais dans `users`, qui
+  ///     est lisible par son propriétaire) ;
+  ///   - un mot de passe existant non modifié est conservé tel quel dans
+  ///     Firebase Auth (aucune écriture) ;
+  ///   - un mot de passe MODIFIÉ recrée le compte Auth (pas d'Admin SDK :
+  ///     suppression de l'ancien + création du nouveau, `uid` renouvelé).
   ///
   /// - Statut inactif/suspendu → le compte de connexion est supprimé (plus
   ///   de login possible) tant que la personne n'est pas réactivée.
@@ -829,21 +906,59 @@ class FirestoreBackofficeStore extends BackofficeStore {
       }
     }
 
+    // Ancien mot de passe de l'entité (pour détecter un changement).
+    final oldEntityDoc = await _db.collection(collection).doc(id).get();
+    final oldEntityPassword =
+        oldEntityDoc.data()?['password'] as String? ?? '';
+
+    // Compte Firebase Auth (créé/recréé AVANT le batch).
+    String authUid = '';
+    String authEmail = '';
+    if (loginRef != null && active) {
+      final existingUid = existing!.data()?['uid'] as String? ?? '';
+      authEmail = AuthService.emailFor(canonical);
+      if (existingUid.isNotEmpty &&
+          password.isNotEmpty &&
+          password != oldEntityPassword) {
+        // Mot de passe changé → recréation du compte (uid renouvelé).
+        if (oldEntityPassword.isNotEmpty) {
+          try {
+            await _backend.deleteAccount(
+              email: authEmail,
+              password: oldEntityPassword,
+            );
+          } catch (_) {}
+        }
+        try {
+          authUid = await _backend.createAccount(
+            email: authEmail,
+            password: password,
+          );
+        } on AuthBackendException catch (e) {
+          if (e.code != 'email-already-in-use') rethrow;
+          authUid = existingUid;
+        }
+      } else if (existingUid.isNotEmpty) {
+        authUid = existingUid;
+      } else if (password.isNotEmpty) {
+        authUid = await _backend.createAccount(
+          email: authEmail,
+          password: password,
+        );
+      }
+    }
+
     final batch = _db.batch();
     batch.set(_db.collection(collection).doc(id), entityMap);
 
     if (loginRef != null) {
       if (active) {
-        // Mot de passe final : le nouveau saisi, sinon l'existant.
-        final finalPassword = password.isNotEmpty
-            ? password
-            : (existing!.data()?['password'] as String? ?? '');
-        if (finalPassword.isNotEmpty) {
+        if (authUid.isNotEmpty) {
           batch.set(loginRef, {
             'phoneNumber': canonical,
             'fullName': fullName,
             'role': role,
-            'password': finalPassword,
+            'uid': authUid,
             'subscription_plan': ?subscriptionPlan,
             'isSubscribed': ?isSubscribed,
             // Le collecteur du client est porté par son compte : l'app
@@ -853,10 +968,33 @@ class FirestoreBackofficeStore extends BackofficeStore {
             // type de compte peut être écrasé ou supprimé proprement.
             'consoleCreated': true,
           });
+          batch.set(_db.collection('auth_profiles').doc(authUid), {
+            'uid': authUid,
+            'phone': canonical,
+            'role': role,
+            'status': 'active',
+            'societeId': entityMap['societeId'] as String? ?? '',
+            'agenceId': entityMap['agenceId'] as String? ?? '',
+          });
         }
       } else if (existing!.exists &&
           existing.data()?['consoleCreated'] == true) {
         batch.delete(loginRef);
+        final oldUid = existing.data()?['uid'] as String?;
+        if (oldUid != null && oldUid.isNotEmpty) {
+          batch.delete(_db.collection('auth_profiles').doc(oldUid));
+        }
+        // Suspension → le compte Auth est SUPPRIMÉ (plus de login
+        // possible). Sans ça, la réactivation recréerait le compte et
+        // buterait sur `email-already-in-use`.
+        if (canonical.isNotEmpty && oldEntityPassword.isNotEmpty) {
+          try {
+            await _backend.deleteAccount(
+              email: AuthService.emailFor(canonical),
+              password: oldEntityPassword,
+            );
+          } catch (_) {}
+        }
       }
     }
 
@@ -881,12 +1019,22 @@ class FirestoreBackofficeStore extends BackofficeStore {
       final oldDoc = await _db.collection('users').doc(oldCanonical).get();
       if (oldDoc.exists && oldDoc.data()?['consoleCreated'] == true) {
         batch.delete(_db.collection('users').doc(oldCanonical));
+        final oldUid = oldDoc.data()?['uid'] as String?;
+        if (oldUid != null && oldUid.isNotEmpty) {
+          batch.delete(_db.collection('auth_profiles').doc(oldUid));
+        }
       }
     }
 
     try {
       await batch.commit();
     } catch (error) {
+      // Rollback du compte Auth si le batch échoue.
+      if (authEmail.isNotEmpty && authUid.isNotEmpty) {
+        try {
+          await _backend.deleteAccount(email: authEmail, password: password);
+        } catch (_) {}
+      }
       throw _SyncError(_friendlyError(error));
     }
   }

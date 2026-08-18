@@ -65,7 +65,7 @@ void main() {
     await checkStatus(tester, '698 22 44 66');
 
     expect(find.text('Approved! 🎉'), findsOneWidget);
-    expect(find.text('Go to login'), findsOneWidget);
+    expect(find.text('Go to my dashboard'), findsOneWidget);
     expect(find.text('Re-apply'), findsNothing);
   });
 

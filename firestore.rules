@@ -43,6 +43,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Profils de règles (rôle + scope), consultés par firestore.rules.
+    // Règles OUVERTES pendant la migration Auth (comptes créés par
+    // `tool/migrate_auth.mjs`) — à durcir avec les autres collections.
+    match /auth_profiles/{uid} {
+      allow read, write: if true;
+    }
+
     // Liste blanche des collecteurs (pré-approbation admin)
     match /collectors/{phone} {
       allow read, write: if true;
@@ -67,6 +74,12 @@ service cloud.firestore {
     }
 
     match /pickups/{id} {
+      allow read, write: if true;
+    }
+
+    // Paiements : transactions enregistrées après un encaissement CamPay,
+    // lues par l'écran « My Bill » du client.
+    match /transactions/{id} {
       allow read, write: if true;
     }
 

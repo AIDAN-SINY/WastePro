@@ -6,6 +6,8 @@ import 'package:waste_pro/features/company/data/company_store.dart';
 import 'package:waste_pro/features/company/data/firestore_company_store.dart';
 import 'package:waste_pro/models/agence_model.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 void main() {
   Future<void> pumpConsole(WidgetTester tester, {CompanyStore? store}) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -129,7 +131,11 @@ void main() {
       'email': 'contact@wastepro.cm',
       'status': 'Active',
     });
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      societeId: 'so1',
+    );
     await store.initialLoad;
 
     tester.view.physicalSize = const Size(1440, 900);
@@ -192,13 +198,15 @@ void main() {
     expect(manager.agenceId, agence.id);
     expect(manager.password, matches(RegExp(r'^\d{6}$')));
 
-    // Le compte de connexion users/{phone} a bien été créé.
+    // Le compte de connexion users/{phone} a bien été créé (uid Auth,
+    // pas de mot de passe en clair dans Firestore).
     final userDoc =
         await db.collection('users').doc('+237699887766').get();
     expect(userDoc.exists, isTrue);
     expect(userDoc.data()!['role'], 'agency_manager');
     expect(userDoc.data()!['fullName'], 'Jean Dooh');
-    expect(userDoc.data()!['password'], manager.password);
+    expect(userDoc.data()!['uid'], isNotEmpty);
+    expect(userDoc.data()!['password'], isNull);
     expect(userDoc.data()!['consoleCreated'], isTrue);
 
     // Le dialogue affiche les identifiants générés une seule fois.
@@ -225,7 +233,11 @@ void main() {
         'email': 'contact@wastepro.cm',
         'status': 'Active',
       });
-      final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+      final store = FirestoreCompanyStore(
+        db: db,
+        backend: FakeAuthBackend(),
+        societeId: 'so1',
+      );
       await store.initialLoad;
 
       tester.view.physicalSize = const Size(1440, 900);
@@ -279,7 +291,11 @@ void main() {
       'email': 'contact@wastepro.cm',
       'status': 'Active',
     });
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      societeId: 'so1',
+    );
     await store.initialLoad;
 
     tester.view.physicalSize = const Size(1440, 900);
@@ -328,7 +344,11 @@ void main() {
       'email': 'contact@wastepro.cm',
       'status': 'Active',
     });
-    final store = FirestoreCompanyStore(db: db, societeId: 'so1');
+    final store = FirestoreCompanyStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      societeId: 'so1',
+    );
     await store.initialLoad;
 
     tester.view.physicalSize = const Size(1440, 900);

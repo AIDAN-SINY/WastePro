@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../models/agence_model.dart';
+import '../../../services/auth_backend.dart';
 import '../../../services/auth_service.dart';
-import 'application_status_screen.dart';
 import 'login_screen.dart';
 
 /// Pré-inscription client — réservée aux clients (le login reste pour tous).
@@ -20,13 +20,18 @@ class PreRegisterScreen extends StatefulWidget {
   const PreRegisterScreen({
     super.key,
     FirebaseFirestore? db,
+    AuthBackend? backend,
     this.initialName = '',
     this.initialPhone = '',
     this.initialZone = '',
-  }) : _db = db;
+  }) : _db = db,
+       _backend = backend;
 
   /// Base injectée par les tests ; sinon l'instance par défaut.
   final FirebaseFirestore? _db;
+
+  /// Backend Auth injecté par les tests ; sinon l'instance Firebase.
+  final AuthBackend? _backend;
 
   /// Pré-remplissage du formulaire — utilisé par « Re-apply » depuis
   /// l'écran de statut d'une candidature rejetée (infos conservées).
@@ -49,9 +54,15 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
 
   FirebaseFirestore get _db => widget._db ?? FirebaseFirestore.instance;
 
-  /// Agences chargées pour les suggestions.
+  /// Agences chargées pour les suggestions — filtrées sur celles qui ont
+  /// un chef d'agence actif (une candidature vers une agence SANS chef
+  /// serait invisible dans tous les backoffices, donc dans le vide).
   List<AgenceModel> _agences = [];
   bool _loadingAgencies = true;
+
+  /// Vrai quand des agences existent mais qu'AUCUNE n'a de chef d'agence
+  /// actif : on le distingue de « aucune agence » pour guider le client.
+  bool _hasManagerlessAgencies = false;
 
   /// Agence sélectionnée (null = l'utilisateur tape son propre nom).
   AgenceModel? _selected;
@@ -81,13 +92,42 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
 
   Future<void> _loadAgencies() async {
     try {
-      final snap = await _db.collection('agences').get();
-      final list =
-          snap.docs.map((d) => AgenceModel.fromMap(d.data())).toList()
+      // Agences + comptes console (chefs d'agence) en parallèle : le filtre
+      // ci-dessous ne garde que les agences couvertes par un chef actif.
+      final results = await Future.wait<QuerySnapshot<Map<String, dynamic>>>([
+        _db.collection('agences').get(),
+        _db.collection('utilisateurs').get(),
+      ]);
+      final agencesSnap = results[0];
+      final usersSnap = results[1];
+
+      // Agences gérées : un utilisateur actif de rôle « Agency Manager »
+      // (ou variantes legacy) scopé à l'agence.
+      final managed = <String>{};
+      for (final d in usersSnap.docs) {
+        final data = d.data();
+        final role = (data['role'] as String? ?? '')
+            .toLowerCase()
+            .replaceAll("'", '');
+        final isManager =
+            role == 'agency manager' || role == 'responsable dagence';
+        final status = (data['status'] as String? ?? '').toLowerCase();
+        final agenceId = data['agenceId'] as String? ?? '';
+        if (isManager &&
+            (status == 'active' || status == 'actif') &&
+            agenceId.isNotEmpty) {
+          managed.add(agenceId);
+        }
+      }
+
+      final all =
+          agencesSnap.docs.map((d) => AgenceModel.fromMap(d.data())).toList()
             ..sort((a, b) => a.ville.compareTo(b.ville));
+      final list = all.where((a) => managed.contains(a.id)).toList();
       if (mounted) {
         setState(() {
           _agences = list;
+          _hasManagerlessAgencies = all.isNotEmpty && list.isEmpty;
           _loadingAgencies = false;
         });
       }
@@ -117,13 +157,42 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
     return (idx > 0 ? z.substring(0, idx) : z).trim().toLowerCase();
   }
 
-  /// Agences suggérées pour la zone saisie.
-  List<AgenceModel> get _suggested {
-    final city = _zoneCity;
-    if (city.isEmpty) return [];
-    return _agences
-        .where((a) => a.ville.toLowerCase().contains(city))
+  /// Agences correspondant à la zone/quartier saisi (ville OU adresse).
+  ///
+  /// La zone peut être un quartier seul (« etoudi »), une ville+quartier
+  /// (« Douala: Akwa ») ou un nom libre (« carrefour du palais ») : on
+  /// découpe la saisie en mots-clés (sur « : », « , », « - », « / ») et une
+  /// agence correspond si son `ville` ou sa `location` contient au moins un
+  /// de ces mots-clés.
+  List<AgenceModel> get _zoneMatches {
+    final z = _zoneCtrl.text.trim().toLowerCase();
+    if (z.isEmpty) return [];
+    final keywords = z
+        .split(RegExp(r'[:,\-/]'))
+        .map((s) => s.trim())
+        .where((s) => s.length >= 3)
         .toList();
+    if (keywords.isEmpty) return [];
+    return _agences.where((a) {
+      final haystack = '${a.ville} ${a.location}'.toLowerCase();
+      return keywords.any((k) => haystack.contains(k));
+    }).toList();
+  }
+
+  /// Agences suggérées pour la zone saisie (chips).
+  List<AgenceModel> get _suggested => _zoneMatches;
+
+  /// La zone/quartier saisi désigne UNE seule agence (ex. « etoudi » →
+  /// l'agence d'etoudi) : on l'assigne automatiquement — le client n'a pas
+  /// à chercher son agence, le quartier suffit.
+  void _onZoneChanged(String _) {
+    setState(() {
+      final matches = _zoneMatches;
+      if (matches.length == 1) {
+        _selected = matches.single;
+        _agencyCtrl.text = matches.single.ville;
+      }
+    });
   }
 
   /// Résultat de la recherche libre par nom d'agence.
@@ -160,11 +229,21 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
       _toast('Please choose an agency or type its name');
       return;
     }
+    // Garde anti-« vide » : seule une agence AYANT un chef d'agence actif
+    // est proposée (voir [_loadAgencies]). Une saisie libre qui ne
+    // correspond à aucune de ces agences partirait vers une agence sans
+    // backoffice — on la bloque ici plutôt que de l'envoyer dans le vide.
+    if (_selected == null) {
+      _toast(
+        'Choose an agency from the list — this name has no agency manager yet.',
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
       final phone = AuthService.canonicalPhone(_phoneCtrl.text.trim());
-      await AuthService(db: _db).submitPreRegistration(
+      await AuthService(db: _db, backend: widget._backend).submitPreRegistration(
         fullName: _nameCtrl.text.trim(),
         phone: phone,
         zone: _zoneCtrl.text.trim(),
@@ -328,7 +407,7 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
               _zoneCtrl,
               hint: 'Ex. Douala: Akwa',
               icon: Icons.map_outlined,
-              onChanged: (_) => setState(() {}),
+              onChanged: _onZoneChanged,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter your zone' : null,
             ),
@@ -360,8 +439,10 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
             _searchAgencyField(),
             const SizedBox(height: 6),
 
-            // Aucune agence enregistrée sur la plateforme : le client doit
-            // le savoir (sinon il croirait que la recherche est cassée).
+            // Aucune agence proposée : le client doit savoir POURQUOI (sinon
+            // il croirait que la recherche est cassée). Deux cas : aucune
+            // agence sur la plateforme, ou des agences mais sans chef
+            // d'agence pour les traiter.
             if (!_loadingAgencies && _agences.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
@@ -375,7 +456,10 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'No agency available yet',
+                        _hasManagerlessAgencies
+                            ? 'No agency has a manager yet — applications '
+                                  "can't be processed until one is assigned"
+                            : 'No agency available yet',
                         style: const TextStyle(color: muted, fontSize: 11),
                       ),
                     ),
@@ -558,8 +642,9 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
           const SizedBox(height: 10),
           Text(
             'Your request has been sent to ${_effectiveAgencyName.isEmpty ? 'your agency' : _effectiveAgencyName}. '
-            'The agency manager will review it and assign you a collector. '
-            'You will be able to log in once your account is approved.',
+            'Your account was created — you can log in right away with the '
+            'password you chose to track your application in real time. The '
+            'agency manager will review it and assign you a collector.',
             textAlign: TextAlign.center,
             style: TextStyle(color: muted, fontSize: 13, height: 1.5),
           ),
@@ -582,21 +667,9 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
           ),
           const SizedBox(height: 8),
           TextButton(
-            onPressed: () {
-              // Suivi en direct : l'écran de statut se met à jour quand le
-              // chef d'agence approuve/rejette la candidature.
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ApplicationStatusScreen(
-                    db: widget._db,
-                    initialPhone: _phoneCtrl.text.trim(),
-                  ),
-                ),
-              );
-            },
+            onPressed: _goToLogin,
             child: const Text(
-              'Track application status',
+              'Log in to track your application',
               style: TextStyle(color: muted, fontSize: 12),
             ),
           ),

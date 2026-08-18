@@ -99,7 +99,11 @@ function encodeFields(obj) {
   return fields;
 }
 
-const docPath = (id) => `${BASE}/users/${encodeURIComponent(id)}`;
+// Chemin du doc : la collection DOIT être dans le chemin REST v1
+// (`documents/users/{id}`) et le masque se passe via
+// `updateMask.fieldPaths=` (l'ancien `updateMask.field=` n'est plus
+// accepté par l'API).
+const docPath = (id) => `${BASE}/documents/users/${encodeURIComponent(id)}`;
 
 async function createDoc(id, fields) {
   const res = await fetch(
@@ -116,7 +120,7 @@ async function createDoc(id, fields) {
 
 async function patchDoc(id, fields) {
   const mask = Object.keys(fields)
-    .map((k) => `updateMask.field=${encodeURIComponent(k)}`)
+    .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
     .join('&');
   const res = await fetch(`${docPath(id)}?${mask}`, {
     method: 'PATCH',

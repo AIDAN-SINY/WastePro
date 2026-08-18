@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/config.dart';
+import '../../../services/auth_service.dart';
+import '../../../services/payment_service.dart';
 import '../../../services/subscription_service.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
@@ -26,23 +30,44 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   // Professional Payment Handshake Logic
   void _handleSubscription(String cycleName, double amount) async {
     setState(() => _isProcessing = true);
-    
+
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final phone = userProvider.user!.phoneNumber;
+    final user = userProvider.user!;
+    final phone = user.phoneNumber;
 
     try {
-      // 1. Simulate the Bank/MoMo API Handshake
-      bool paymentSuccess = await SubscriptionService().simulatePayment(amount.toInt());
+      // 1. Paiement réel via l'API CamPay (MTN MoMo / Orange Money) :
+      //    le client confirme la demande USSD avec son PIN sur son
+      //    téléphone.
+      final result = await PaymentService().charge(
+        context: context,
+        amount: amount,
+        currency: AppConfig.currency,
+        email: AuthService.emailFor(phone),
+        phone: phone,
+        name: user.fullName,
+        title: '$cycleName plan',
+        type: 'subscription',
+        description: 'WastePro $cycleName subscription',
+      );
 
-      if (paymentSuccess) {
+      if (result.success) {
         // 2. IMPLEMENT THE FLOW: Create the 'Contract' document linked to 'Frequency'
         // This follows the Manager's Class Diagram exactly
         await SubscriptionService().createContractFlow(phone, cycleName, amount);
 
+        // 3. Doc historique lu par l'écran « My Bill » / Payment History.
+        await FirebaseFirestore.instance
+            .collection('subscriptions')
+            .doc(phone)
+            .set({
+          'planName': cycleName,
+          'price': amount,
+          'startDate': FieldValue.serverTimestamp(),
+          'status': 'active',
+        });
+
         if (mounted) {
-          // 3. Refresh user data to show the new active_contract_id
-          await userProvider.refreshUser(phone);
-          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Success! Your $cycleName contract is now active."),
@@ -50,9 +75,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             ),
           );
           Navigator.pop(context); // Return to Dashboard
+          // 4. Refresh user data to show the new active_contract_id
+          await userProvider.refreshUser(phone);
         }
+      } else if (mounted) {
+        // Paiement non confirmé (annulé/échec) : aucune charge n'a été faite.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment not completed — no charge was made.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
       );
@@ -110,12 +146,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       Icon(Icons.lock, size: 16, color: dMuted),
                       const SizedBox(width: 8),
                       Text(
-                        "Secure checkout via SARA Money / MoMo",
+                        "Secure checkout via CamPay (MTN MoMo / Orange Money)",
                         style: GoogleFonts.inter(color: dMuted, fontSize: 12),
                       ),
                     ],
                   ),
-                )
+                ),
+                if (AppConfig.isCampayDemo) ...[ 
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: dGold.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "Demo mode — CamPay sandbox caps payments at "
+                      "${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF. "
+                      "Your plan activates with a test charge; real prices apply "
+                      "in production.",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(color: dMuted, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ]
               ],
             ),
           ),

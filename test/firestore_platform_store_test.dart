@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/superadmin/data/firestore_platform_store.dart';
 import 'package:waste_pro/features/superadmin/data/seed_data.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Lets the snapshot listeners catch up with seed writes / CRUD writes.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
@@ -16,7 +18,10 @@ void main() {
 
   test('seeds empty collections with the design data', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+    );
     await store.initialLoad;
     await _settle();
 
@@ -56,7 +61,11 @@ void main() {
       'societeId': 'so1',
     });
 
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -79,7 +88,10 @@ void main() {
       'status': 'Active',
     });
 
-    final store = FirestorePlatformStore(db: db);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+    );
     await store.initialLoad;
     await _settle();
 
@@ -94,7 +106,11 @@ void main() {
 
   test('CRUD writes through to Firestore', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -174,7 +190,10 @@ void main() {
 
   test('renaming a société cascades to its agences', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+    );
     await store.initialLoad;
     await _settle();
 
@@ -205,7 +224,11 @@ void main() {
 
   test('agences and utilisateurs CRUD round-trip too', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -248,7 +271,11 @@ void main() {
 
   test('console user with a password gets a real login account', () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -280,14 +307,26 @@ void main() {
     final login = await db.collection('users').doc('+237699999999').get();
     expect(login.exists, isTrue);
     expect(login.data()?['role'], 'agency_manager');
-    expect(login.data()?['password'], 'secret123');
+    expect(login.data()?['uid'], isNotEmpty,
+        reason: 'le mot de passe vit dans Auth — le doc porte le uid');
+    expect(login.data()?['password'], isNull,
+        reason: 'plus aucun mot de passe en clair dans Firestore');
     expect(login.data()?['fullName'], 'Marie Ekwalla');
+    // Le profil de règles auth_profiles/{uid} existe (consulté par les règles).
+    expect(
+      (await db
+              .collection('auth_profiles')
+              .doc(login.data()?['uid'] as String)
+              .get())
+          .exists,
+      isTrue,
+    );
 
-    // Éditer le mot de passe met à jour le compte de connexion.
+    // Éditer le mot de passe met à jour le compte Auth (uid conservé).
     final user = store.utilisateurs.firstWhere((u) => u.nom == 'Marie Ekwalla');
     await store.updateUtilisateur(user.copyWith(password: 'newpass456'));
     final updated = await db.collection('users').doc('+237699999999').get();
-    expect(updated.data()?['password'], 'newpass456');
+    expect(updated.data()?['uid'], login.data()?['uid']);
 
     // Suspending the user removes their login account (no more login).
     await store.updateUtilisateur(user.copyWith(status: 'Suspended'));
@@ -322,10 +361,13 @@ void main() {
       'phoneNumber': '+237688888888',
       'fullName': 'Client Existant',
       'role': 'client',
-      'password': 'clientpass',
     });
 
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
@@ -344,7 +386,6 @@ void main() {
     // Le compte client n'a pas été écrasé.
     final client = await db.collection('users').doc('+237688888888').get();
     expect(client.data()?['role'], 'client');
-    expect(client.data()?['password'], 'clientpass');
 
     store.dispose();
   });
@@ -352,17 +393,21 @@ void main() {
   test('editing a legacy console user migrates its login role (Phase 1)',
       () async {
     final db = FakeFirebaseFirestore();
-    final store = FirestorePlatformStore(db: db, seedIfEmpty: false);
+    final store = FirestorePlatformStore(
+      db: db,
+      backend: FakeAuthBackend(),
+      seedIfEmpty: false,
+    );
     await store.initialLoad;
     await _settle();
 
     // Compte de connexion legacy créé AVANT la Phase 1 : rôle générique
-    // 'admin' dans `users`, propriétaire = l'utilisateur console.
+    // 'admin' dans `users`, propriétaire = l'utilisateur console. Pas
+    // encore de compte Auth (migration non exécutée).
     await db.collection('users').doc('+237677111111').set({
       'phoneNumber': '+237677111111',
       'fullName': 'Legacy',
       'role': 'admin',
-      'password': 'oldpass',
       'consoleCreated': true,
       'consoleUserId': 'legacy-user',
     });
@@ -379,11 +424,13 @@ void main() {
     final user = store.utilisateurs.firstWhere((u) => u.id == 'legacy-user');
 
     // Une édition (nouveau mot de passe) réécrit le vrai rôle console dans
-    // `users` : le legacy 'admin' devient 'agency_manager'.
+    // `users` : le legacy 'admin' devient 'agency_manager'. Le mot de passe
+    // part vers Auth, pas vers Firestore.
     await store.updateUtilisateur(user.copyWith(password: 'newpass'));
     final migrated = await db.collection('users').doc('+237677111111').get();
     expect(migrated.data()?['role'], 'agency_manager');
-    expect(migrated.data()?['password'], 'newpass');
+    expect(migrated.data()?['uid'], isNotEmpty);
+    expect(migrated.data()?['password'], isNull);
 
     store.dispose();
   });

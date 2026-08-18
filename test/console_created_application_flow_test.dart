@@ -4,6 +4,8 @@ import 'package:waste_pro/features/backoffice/data/firestore_backoffice_store.da
 import 'package:waste_pro/features/company/data/firestore_company_store.dart';
 import 'package:waste_pro/services/auth_service.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Laisse les listeners de snapshots rattraper les écritures.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
@@ -20,6 +22,7 @@ void main() {
     'dans le backoffice scopé',
     () async {
       final db = FakeFirebaseFirestore();
+      final backend = FakeAuthBackend();
 
       // --- L entreprise existe ---
       await db.collection('societes').doc('so9').set({
@@ -34,6 +37,7 @@ void main() {
       // --- 1. Le General Administrator crée une agence (console entreprise) ---
       final company = FirestoreCompanyStore(
         db: db,
+        backend: backend,
         societeId: 'so9',
         seedIfEmpty: false,
       );
@@ -74,7 +78,7 @@ void main() {
       expect(managerLogin.data()?['agenceId'], agence.id);
 
       // --- 3. Le client remplit la pré-inscription (choix de l'agence) ---
-      final auth = AuthService(db: db);
+      final auth = AuthService(db: db, backend: backend);
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
@@ -89,7 +93,7 @@ void main() {
       expect(regs.docs.single.data()['agenceId'], agence.id);
 
       // --- 4. Le chef d'agence se connecte → backoffice scopé ---
-      final manager = await AuthService(db: db).login(
+      final manager = await AuthService(db: db, backend: backend).login(
         '+237 677 12 34 56',
         'manager123',
       );
@@ -98,6 +102,7 @@ void main() {
 
       final store = FirestoreBackofficeStore(
         db: db,
+        backend: backend,
         seedIfEmpty: false,
         agenceId: manager.agenceId,
         societeId: manager.societeId,
@@ -155,7 +160,8 @@ void main() {
 
       // Le client a sélectionné l'agence homonyme agSeed (même nom) : sa
       // candidature porte l'id de agSeed mais le nom « Douala — Bonanjo ».
-      await AuthService(db: db).submitPreRegistration(
+      await AuthService(db: db, backend: FakeAuthBackend())
+          .submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
         zone: 'Bonanjo',
@@ -167,6 +173,7 @@ void main() {
 
       final store = FirestoreBackofficeStore(
         db: db,
+        backend: FakeAuthBackend(),
         seedIfEmpty: false,
         agenceId: 'agReal',
         societeId: 'so9',

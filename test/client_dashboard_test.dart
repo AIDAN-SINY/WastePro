@@ -100,6 +100,44 @@ void main() {
     expect(find.text('9+'), findsNothing);
   });
 
+  testWidgets('le collecteur assigné est affiché sur le dashboard client', (
+    tester,
+  ) async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('collecteurs').doc('co1').set({
+      'id': 'co1',
+      'name': 'Vincent Onana',
+      'phone': '+237 693 55 44 33',
+      'zone': 'etoudi',
+      'rating': 4.5,
+      'status': 'Actif',
+    });
+    final provider = FakeUserProvider(
+      UserModel(
+        phoneNumber: '+237699999999',
+        fullName: 'Test Client',
+        role: 'client',
+        password: 'pw',
+        collecteurId: 'co1',
+      ),
+    );
+
+    await tester.pumpWidget(wrap(provider, db));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // Le nom du collecteur assigné (et sa note) remplacent le mock.
+    expect(find.text('Vincent Onana'), findsOneWidget);
+    expect(find.textContaining('4.5'), findsOneWidget);
+  });
+
+  testWidgets('pas de collecteur assigné → message dédié', (tester) async {
+    await pumpDashboard(tester, FakeFirebaseFirestore());
+
+    expect(find.text('No collector assigned yet'), findsOneWidget);
+  });
+
   testWidgets('le tap sur la cloche ouvre l écran Notifications', (
     tester,
   ) async {

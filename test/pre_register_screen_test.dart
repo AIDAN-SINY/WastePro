@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/auth/screens/pre_register_screen.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 void main() {
   Future<FakeFirebaseFirestore> seededDb() async {
     final db = FakeFirebaseFirestore();
@@ -24,6 +26,30 @@ void main() {
       'telephone': '+237 699 33 67 41',
       'status': 'Active',
     });
+    // Les chefs d'agence (comptes console) : seules les agences couvertes
+    // par un chef actif sont proposées aux clients.
+    await db.collection('utilisateurs').doc('u1').set({
+      'id': 'u1',
+      'nom': 'Jean Dooh',
+      'telephone': '+237 677 12 34 56',
+      'role': 'Agency Manager',
+      'agence': 'Douala — Bonanjo',
+      'societeId': 'so1',
+      'agenceId': 'ag1',
+      'status': 'Active',
+      'password': 'x',
+    });
+    await db.collection('utilisateurs').doc('u2').set({
+      'id': 'u2',
+      'nom': 'Aïcha Bello',
+      'telephone': '+237 699 33 67 41',
+      'role': 'Agency Manager',
+      'agence': 'Douala — Bassa',
+      'societeId': 'so1',
+      'agenceId': 'ag2',
+      'status': 'Active',
+      'password': 'x',
+    });
     return db;
   }
 
@@ -32,7 +58,7 @@ void main() {
     FakeFirebaseFirestore db,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: PreRegisterScreen(db: db)),
+      MaterialApp(home: PreRegisterScreen(db: db, backend: FakeAuthBackend())),
     );
     await tester.pumpAndSettle();
   }
@@ -87,6 +113,59 @@ void main() {
     },
   );
 
+  testWidgets(
+    'zone « etoudi » → agence d etoudi auto-sélectionnée (pas de recherche '
+    'manuelle)',
+    (tester) async {
+      final db = FakeFirebaseFirestore();
+      // Agence d etoudi + son chef d agence actif.
+      await db.collection('agences').doc('c1').set({
+        'id': 'c1',
+        'societe': 'emana',
+        'societeId': 'so1',
+        'ville': "Yaounde — agence d'etoudi",
+        'location': 'carrefour du palais',
+        'responsable': 'Eric Ekwa',
+        'telephone': '699887667',
+        'status': 'Active',
+      });
+      await db.collection('utilisateurs').doc('u1').set({
+        'id': 'u1',
+        'nom': 'Eric Ekwa',
+        'telephone': '+237677980000',
+        'role': 'Agency Manager',
+        'agence': "Yaounde — agence d'etoudi",
+        'societeId': 'so1',
+        'agenceId': 'c1',
+        'status': 'Active',
+        'password': 'x',
+      });
+      await pumpPreRegister(tester, db);
+
+      await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
+      await tester.enterText(find.byType(TextFormField).at(1), '698 22 44 66');
+      // Quartier seul « etoudi » → l agence d etoudi est choisie seule.
+      await tester.enterText(find.byType(TextFormField).at(2), 'etoudi');
+      await tester.pumpAndSettle();
+
+      // Auto-sélection : la puce « Selected agency » apparaît sans tap.
+      expect(find.text('Selected agency'), findsOneWidget);
+      expect(find.text("Yaounde — agence d'etoudi"), findsWidgets);
+
+      final passFields = find.byType(TextFormField);
+      await tester.enterText(passFields.at(3), 'secret123');
+      await tester.enterText(passFields.at(4), 'secret123');
+      await tester.ensureVisible(find.text('Submit application'));
+      await tester.tap(find.text('Submit application'));
+      await tester.pumpAndSettle();
+
+      // Candidature bien écrite sur l agence d etoudi.
+      final regs = await db.collection('registrations').get();
+      expect(regs.docs.single.data()['agenceId'], 'c1');
+      expect(regs.docs.single.data()['status'], 'pending');
+    },
+  );
+
   testWidgets('mot de passe trop court → erreur, pas de candidature', (
     tester,
   ) async {
@@ -97,6 +176,9 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), '698 22 44 66');
     await tester.enterText(find.byType(TextFormField).at(2), 'Bonanjo');
     await tester.pumpAndSettle();
+    // La zone « Bonanjo » correspond à UNE seule agence : elle est déjà
+    // auto-sélectionnée — la puce peut être hors écran, le tap est optionnel.
+    await tester.ensureVisible(find.text('Douala — Bonanjo').last);
     await tester.tap(find.text('Douala — Bonanjo').last);
     await tester.pumpAndSettle();
 
@@ -122,4 +204,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No agency available yet'), findsOneWidget);
   });
+
+  testWidgets(
+    'agence sans chef d agence actif → non proposée + message dédié + '
+    'soumission bloquée',
+    (tester) async {
+      final db = FakeFirebaseFirestore();
+      // Une agence existe (ag1) mais AUCUN chef d'agence ne la gère.
+      await db.collection('agences').doc('ag1').set({
+        'id': 'ag1',
+        'societe': 'WastePro Douala Ltd',
+        'societeId': 'so1',
+        'ville': 'Douala — Bonanjo',
+        'responsable': 'Jean Dooh',
+        'telephone': '+237 677 12 34 56',
+        'status': 'Active',
+      });
+      await pumpPreRegister(tester, db);
+
+      await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
+      await tester.enterText(find.byType(TextFormField).at(1), '698 22 44 66');
+      await tester.enterText(find.byType(TextFormField).at(2), 'Bonanjo');
+      await tester.pumpAndSettle();
+
+      // L'agence existe mais n'est PAS proposée (aucun chef pour la
+      // traiter) — message dédié au lieu de la liste.
+      expect(find.text('Douala — Bonanjo'), findsNothing);
+      expect(find.textContaining('No agency has a manager yet'), findsOneWidget);
+
+      // Taper le nom de l'agence ne la sélectionne pas (pas de chef)…
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (w) =>
+              w is TextField &&
+              (w.decoration?.hintText ?? '').contains('type your agency'),
+        ),
+        'Douala — Bonanjo',
+      );
+      await tester.pumpAndSettle();
+      final passFields = find.byType(TextFormField);
+      await tester.enterText(passFields.at(3), 'secret123');
+      await tester.enterText(passFields.at(4), 'secret123');
+      await tester.ensureVisible(find.text('Submit application'));
+      await tester.tap(find.text('Submit application'));
+      await tester.pumpAndSettle();
+
+      // …donc la soumission est bloquée : pas de candidature dans le vide.
+      expect(
+        find.textContaining('has no agency manager yet'),
+        findsOneWidget,
+      );
+      expect((await db.collection('registrations').get()).docs, isEmpty);
+    },
+  );
 }

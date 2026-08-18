@@ -5,18 +5,21 @@ import 'package:waste_pro/features/superadmin/data/firestore_platform_store.dart
 import 'package:waste_pro/features/superadmin/super_admin_console.dart';
 import 'package:waste_pro/services/auth_service.dart';
 
+import 'fakes/fake_auth_backend.dart';
+
 /// Parcours de bout en bout : le superadmin crée un utilisateur dans la
 /// console (store Firestore réel), le compte de connexion `users/{téléphone}`
-/// est écrit avec le mot de passe fixé, et cet utilisateur parvient à se
-/// connecter avec son numéro + mot de passe (AuthService, login Firestore
-/// simple).
+/// est écrit avec le uid Auth (le mot de passe vit dans Firebase Auth), et
+/// cet utilisateur parvient à se connecter avec son numéro + mot de passe.
 void main() {
   testWidgets(
       'superadmin crée un utilisateur via le drawer → il peut se connecter',
       (tester) async {
     final db = FakeFirebaseFirestore();
+    final backend = FakeAuthBackend();
     final store = FirestorePlatformStore(
       db: db,
+      backend: backend,
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -58,21 +61,23 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(seconds: 4));
 
-    // Le compte de connexion a bien été écrit dans `users` (rôle admin,
-    // mot de passe en clair = celui fixé par le superadmin).
+    // Le compte de connexion a bien été écrit dans `users` (rôle
+    // agency_manager + uid Auth — le mot de passe vit dans Firebase Auth).
     final loginDoc = await db.collection('users').doc('+237699999999').get();
     expect(loginDoc.exists, isTrue,
         reason: 'la console doit créer le compte de connexion users/{phone}');
     // Rôle par défaut du drawer = Agency Manager → rôle de connexion
     // agency_manager (Phase 1 : vrai rôle, plus le générique 'admin').
     expect(loginDoc.data()?['role'], 'agency_manager');
-    expect(loginDoc.data()?['password'], 'secret123');
+    expect(loginDoc.data()?['uid'], isNotEmpty);
+    expect(loginDoc.data()?['password'], isNull,
+        reason: 'plus aucun mot de passe en clair dans Firestore');
     expect(loginDoc.data()?['fullName'], 'Marie Ekwalla');
     expect(loginDoc.data()?['consoleCreated'], isTrue);
 
     // L'utilisateur créé se connecte avec son numéro + le mot de passe fixé
     // par le superadmin.
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     final user = await auth.login('+237 699 99 99 99', 'secret123');
     expect(user, isNotNull,
         reason: 'l utilisateur créé par le superadmin doit pouvoir se '
@@ -86,8 +91,10 @@ void main() {
   testWidgets('un mauvais mot de passe est rejeté pour un user créé en console',
       (tester) async {
     final db = FakeFirebaseFirestore();
+    final backend = FakeAuthBackend();
     final store = FirestorePlatformStore(
       db: db,
+      backend: backend,
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -103,7 +110,7 @@ void main() {
       password: 'mdp-cons',
     );
 
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     expect(
       () => auth.login('+237677123456', 'mauvais'),
       throwsA('Incorrect Password'),
@@ -118,8 +125,10 @@ void main() {
 
   test('le rôle de connexion reflète le rôle console (Phase 1)', () async {
     final db = FakeFirebaseFirestore();
+    final backend = FakeAuthBackend();
     final store = FirestorePlatformStore(
       db: db,
+      backend: backend,
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -144,7 +153,7 @@ void main() {
       password: 'mdp-am',
     );
 
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     final ga = await auth.login('+237699444444', 'mdp-ga');
     expect(ga, isNotNull);
     expect(ga!.role, 'general_admin');
@@ -160,6 +169,7 @@ void main() {
     final db = FakeFirebaseFirestore();
     final store = FirestorePlatformStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -207,6 +217,7 @@ void main() {
     final db = FakeFirebaseFirestore();
     final store = FirestorePlatformStore(
       db: db,
+      backend: FakeAuthBackend(),
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -242,8 +253,10 @@ void main() {
   test('changer le téléphone d un utilisateur migre son compte de connexion',
       () async {
     final db = FakeFirebaseFirestore();
+    final backend = FakeAuthBackend();
     final store = FirestorePlatformStore(
       db: db,
+      backend: backend,
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -260,7 +273,7 @@ void main() {
     final created = store.utilisateurs.single;
 
     // Le compte d'origine fonctionne.
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     expect((await auth.login('+237699111111', 'secret123'))?.fullName,
         'Marie Ekwalla');
 
@@ -286,8 +299,10 @@ void main() {
   test('deux utilisateurs console ne peuvent pas partager le même numéro',
       () async {
     final db = FakeFirebaseFirestore();
+    final backend = FakeAuthBackend();
     final store = FirestorePlatformStore(
       db: db,
+      backend: backend,
       seedIfEmpty: false,
       isSignedOut: () => false,
     );
@@ -321,7 +336,7 @@ void main() {
 
     // Le compte de connexion du premier est intact : son mot de passe marche,
     // celui du second (jamais créé) est rejeté.
-    final auth = AuthService(db: db);
+    final auth = AuthService(db: db, backend: backend);
     expect((await auth.login('+237699333333', 'mdp-1'))?.fullName, 'Premier');
     expect(
       () => auth.login('+237699333333', 'mdp-2'),
