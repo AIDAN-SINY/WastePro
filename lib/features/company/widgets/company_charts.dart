@@ -103,7 +103,7 @@ class CcBarChart extends StatelessWidget {
     );
   }
 
-  /// Shortens "Douala — Bonanjo" to "Douala" for the axis labels.
+  /// Shortens "Yaoundé — Bastos" to "Yaoundé" for the axis labels.
   String _shortLabel(String label) {
     final parts = label.split('—');
     return parts.first.trim();

@@ -3,11 +3,11 @@ import 'package:waste_pro/features/backoffice/data/backoffice_store.dart';
 
 void main() {
   group('BackofficeStore.reassignCollecteur', () {
-    test('met à jour le client et ses collectes à venir uniquement', () async {
+    test('updates the client and only their upcoming collections', () async {
       final store = BackofficeStore();
 
-      // Aïcha Bello (cl4) est assignée à Paul Mbarga (co1) ; sa collecte
-      // cc3 (Scheduled) est portée par Paul Mbarga.
+      // Aïcha Bello (cl4) is assigned to Paul Mbarga (co1); her collection
+      // cc3 (Scheduled) is carried by Paul Mbarga.
       final cl4 = store.clients.firstWhere((c) => c.id == 'cl4');
       expect(cl4.collecteurId, 'co1');
       expect(store.collectes.firstWhere((c) => c.id == 'cc3').collecteur,
@@ -15,19 +15,19 @@ void main() {
 
       await store.reassignCollecteur(clientId: 'cl4', collecteurId: 'co2');
 
-      // La fiche client porte le nouveau collecteur.
+      // The client record carries the new collector.
       expect(store.clients.firstWhere((c) => c.id == 'cl4').collecteurId, 'co2');
 
-      // La collecte à venir bascule vers Vincent Onana.
+      // The upcoming collection switches to Vincent Onana.
       expect(store.collectes.firstWhere((c) => c.id == 'cc3').collecteur,
           'Vincent Onana');
 
-      // L'historique (collecte effectuée) ne change pas.
+      // History (completed collection) does not change.
       expect(store.collectes.firstWhere((c) => c.id == 'cc1').collecteur,
           'Paul Mbarga');
     });
 
-    test('ne touche pas aux collectes des autres clients', () async {
+    test('does not touch collections of other clients', () async {
       final store = BackofficeStore();
 
       await store.reassignCollecteur(clientId: 'cl4', collecteurId: 'co2');
@@ -39,7 +39,7 @@ void main() {
           'Vincent Onana');
     });
 
-    test('ne fait rien quand le collecteur est identique', () async {
+    test('does nothing when the collector is the same', () async {
       final store = BackofficeStore();
 
       await store.reassignCollecteur(clientId: 'cl1', collecteurId: 'co1');
@@ -49,7 +49,7 @@ void main() {
           'Paul Mbarga');
     });
 
-    test('un client inconnu est un no-op', () async {
+    test('an unknown client is a no-op', () async {
       final store = BackofficeStore();
       final count = store.clients.length;
 
@@ -60,7 +60,7 @@ void main() {
   });
 
   group('BackofficeStore.notifications', () {
-    test('approuver une candidature crée une notification approved', () async {
+    test('approving an application creates an approved notification', () async {
       final store = BackofficeStore();
       final reg = store.pendingRegistrations.first;
 
@@ -73,7 +73,7 @@ void main() {
       expect(notif.read, isFalse);
     });
 
-    test('rejeter une candidature crée une notification rejected', () async {
+    test('rejecting an application creates a rejected notification', () async {
       final store = BackofficeStore();
       final reg = store.pendingRegistrations.first;
 
@@ -84,7 +84,7 @@ void main() {
       expect(notif.title, 'Application rejected');
     });
 
-    test('une nouvelle décision sur la même candidature remplace la notif',
+    test('a new decision on the same application replaces the notification',
         () async {
       final store = BackofficeStore();
       final reg = store.pendingRegistrations.first;

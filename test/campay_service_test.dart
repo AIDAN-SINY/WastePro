@@ -7,7 +7,7 @@ import 'package:waste_pro/services/campay_service.dart';
 
 void main() {
   group('CampayService.initCollect', () {
-    test('envoie la demande et parse la référence + code USSD', () async {
+    test('sends the request and parses the reference + USSD code', () async {
       final client = MockClient((request) async {
         expect(request.url.path, '/api/collect/');
         expect(request.headers['Authorization'], 'Token test-token');
@@ -40,7 +40,7 @@ void main() {
       expect(result.operator, 'MTN');
     });
 
-    test('lève CampayException quand CamPay refuse (message exploitable)',
+    test('throws CampayException when CamPay rejects (actionable message)',
         () async {
       final client = MockClient((request) async {
         return http.Response(
@@ -68,7 +68,7 @@ void main() {
       );
     });
 
-    test('lève si aucun jeton n est configuré', () async {
+    test('throws if no token is configured', () async {
       final service = CampayService(token: '', client: MockClient((_) async {
         return http.Response('{}', 200);
       }));
@@ -114,7 +114,7 @@ void main() {
       expect(status.code, 'CP201027T00005');
     });
 
-    test('distingue PENDING / FAILED', () async {
+    test('distinguishes PENDING / FAILED', () async {
       final pending = CampayService(
         token: 't',
         client: MockClient(
@@ -140,20 +140,20 @@ void main() {
   });
 
   group('CampayService helpers', () {
-    test('normalizePhone retire + et espaces', () {
+    test('normalizePhone strips + and spaces', () {
       expect(CampayService.normalizePhone('+237 690 000 000'), '237690000000');
       expect(CampayService.normalizePhone('+237-690-000-000'), '237690000000');
       expect(CampayService.normalizePhone('+237690000000'), '237690000000');
     });
 
-    test('newExternalReference génère une référence unique avec préfixe', () {
+    test('newExternalReference generates a unique reference with prefix', () {
       final a = CampayService.newExternalReference('WP');
       final b = CampayService.newExternalReference('WP');
       expect(a, startsWith('WP-'));
       expect(a, isNot(b));
     });
 
-    test('isConfigured reflète la présence du jeton', () {
+    test('isConfigured reflects the presence of the token', () {
       expect(CampayService(token: '').isConfigured, isFalse);
       expect(CampayService(token: 'abc').isConfigured, isTrue);
     });

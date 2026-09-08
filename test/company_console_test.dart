@@ -14,8 +14,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    // Sans store fourni, la console crée son propre store mock et le seed
-    // (chemin « preview démo ») — c'est ce que les tests de preview testent.
+    // Without a provided store, the console creates its own mock store and seeds it
+    // ("demo preview" path) — this is what the preview tests exercise.
     await tester.pumpWidget(
       MaterialApp(home: CompanyConsole(store: store)),
     );
@@ -29,9 +29,9 @@ void main() {
     store.agences.add(
       const AgenceModel(
         id: 'ag1',
-        societe: 'WastePro Douala Ltd',
+        societe: 'WastePro Yaoundé SARL',
         societeId: 'so1',
-        ville: 'Douala — Bonanjo',
+        ville: 'Yaoundé — Bastos',
         responsable: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
         status: 'Active',
@@ -49,7 +49,7 @@ void main() {
     expect(find.text('Managers'), findsWidgets);
     // Agency dropdown present
     expect(find.byKey(const Key('cc_agency_dropdown')), findsOneWidget);
-    // Bandeau aperçu démo (store mock) présent.
+    // Demo preview banner (mock store) present.
     expect(find.textContaining('Demo preview'), findsOneWidget);
   });
 
@@ -58,15 +58,15 @@ void main() {
   ) async {
     await pumpConsole(tester);
 
-    // Preview store → agences sont seedées.
+    // Preview store → agencies are seeded.
     await tester.tap(find.byKey(const Key('cc_nav_agencies')));
     await tester.pumpAndSettle();
 
     expect(find.text('New agency'), findsOneWidget);
-    // Les 3 agences seedées sont visibles.
-    expect(find.text('Douala — Bonanjo'), findsOneWidget);
-    expect(find.text('Douala — Bassa'), findsOneWidget);
-    expect(find.text('Yaoundé'), findsOneWidget);
+    // The 3 seeded agencies are visible.
+    expect(find.text('Yaoundé — Bastos'), findsOneWidget);
+    expect(find.text('Yaoundé — Nlongkak'), findsOneWidget);
+    expect(find.text('Yaoundé — Mokolo'), findsOneWidget);
     // Footer
     expect(find.textContaining('3 agenc'), findsOneWidget);
   });
@@ -100,14 +100,14 @@ void main() {
     await tester.tap(find.byKey(const Key('cc_agency_dropdown')));
     await tester.pumpAndSettle();
 
-    // Choisir la première agence : Douala — Bonanjo.
+    // Choisir la première agence : Yaoundé — Bastos.
     await tester.tap(find.byKey(const Key('cc_dd_preview-ag1')));
     await tester.pumpAndSettle();
 
     // Le titre du dropdown a changé pour l'agence sélectionnée.
-    expect(find.text('Douala — Bonanjo'), findsWidgets);
-    // L'Overview affiche le scope : 'Viewing Douala — Bonanjo'
-    expect(find.textContaining('Viewing Douala'), findsOneWidget);
+    expect(find.text('Yaoundé — Bastos'), findsWidgets);
+    // L'Overview affiche le scope : 'Viewing Yaoundé — Bastos'
+    expect(find.textContaining('Viewing Yaoundé'), findsOneWidget);
 
     // Revenir à « All agencies ».
     await tester.tap(find.byKey(const Key('cc_agency_dropdown')));
@@ -125,8 +125,8 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
-      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'raisonSociale': 'WastePro Yaoundé SARL',
+      'adresse': '127 Rue du Commerce, Bastos, Yaoundé',
       'telephone': '+237 233 42 10 55',
       'email': 'contact@wastepro.cm',
       'status': 'Active',
@@ -154,7 +154,7 @@ void main() {
 
     // Badge non-éditable avec l'entreprise du connecté en haut du modal.
     expect(find.textContaining('Creating agency for:'), findsOneWidget);
-    expect(find.textContaining('WastePro Douala Ltd'), findsWidgets);
+    expect(find.textContaining('WastePro Yaoundé SARL'), findsWidgets);
 
     // Les 6 champs demandés sont présents.
     expect(find.text('Agency name'), findsOneWidget);
@@ -171,19 +171,19 @@ void main() {
     await tester.enterText(fields.at(1), 'Rue de la Paix');
     await tester.enterText(fields.at(2), 'Jean Dooh');
     await tester.enterText(fields.at(3), '+237 699 88 77 66');
-    await tester.enterText(fields.at(4), 'Douala');
+    await tester.enterText(fields.at(4), 'Yaoundé');
     await tester.enterText(fields.at(5), '+237 677 12 34 56');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    // L'agence est créée : ville fusionnée « Douala — Bonanjo » + location.
+    // L'agence est créée : ville fusionnée « Yaoundé — Bastos » + location.
     expect(store.agences, hasLength(1));
     final agence = store.agences.first;
-    expect(agence.ville, 'Douala — Bonanjo');
+    expect(agence.ville, 'Yaoundé — Bonanjo');
     expect(agence.location, 'Rue de la Paix');
     expect(agence.responsable, 'Jean Dooh');
     expect(agence.telephone, '+237 677 12 34 56');
-    expect(agence.societe, 'WastePro Douala Ltd');
+    expect(agence.societe, 'WastePro Yaoundé SARL');
     expect(agence.status, 'Active');
 
     // Le manager saisi est synchronisé avec l'agence : il apparaît dans la
@@ -194,7 +194,7 @@ void main() {
     expect(manager.nom, 'Jean Dooh');
     expect(manager.telephone, '+237 699 88 77 66');
     expect(manager.role, 'Agency Manager');
-    expect(manager.agence, 'Douala — Bonanjo');
+    expect(manager.agence, 'Yaoundé — Bonanjo');
     expect(manager.agenceId, agence.id);
     expect(manager.password, matches(RegExp(r'^\d{6}$')));
 
@@ -227,8 +227,8 @@ void main() {
       final db = FakeFirebaseFirestore();
       await db.collection('societes').doc('so1').set({
         'id': 'so1',
-        'raisonSociale': 'WastePro Douala Ltd',
-        'adresse': '127 Rue du Commerce, Akwa, Douala',
+        'raisonSociale': 'WastePro Yaoundé SARL',
+        'adresse': '127 Rue du Commerce, Bastos, Yaoundé',
         'telephone': '+237 233 42 10 55',
         'email': 'contact@wastepro.cm',
         'status': 'Active',
@@ -285,8 +285,8 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
-      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'raisonSociale': 'WastePro Yaoundé SARL',
+      'adresse': '127 Rue du Commerce, Bastos, Yaoundé',
       'telephone': '+237 233 42 10 55',
       'email': 'contact@wastepro.cm',
       'status': 'Active',
@@ -338,8 +338,8 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
-      'adresse': '127 Rue du Commerce, Akwa, Douala',
+      'raisonSociale': 'WastePro Yaoundé SARL',
+      'adresse': '127 Rue du Commerce, Bastos, Yaoundé',
       'telephone': '+237 233 42 10 55',
       'email': 'contact@wastepro.cm',
       'status': 'Active',
@@ -368,7 +368,7 @@ void main() {
     // Remplir l'agence mais laisser le manager (et son téléphone) vides.
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'Bonanjo');
-    await tester.enterText(fields.at(4), 'Douala');
+    await tester.enterText(fields.at(4), 'Yaoundé');
     await tester.enterText(fields.at(5), '+237 677 12 34 56');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();

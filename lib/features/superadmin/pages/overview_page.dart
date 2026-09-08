@@ -2,9 +2,11 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../backoffice/models.dart';
 import '../data/platform_store.dart';
 import '../theme.dart';
 import '../widgets/kpi_card.dart';
+import '../widgets/monthly_clients_bar.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({super.key});
@@ -101,6 +103,18 @@ class OverviewPage extends StatelessWidget {
 
             const SizedBox(height: 16),
 
+            // --- Nouveaux clients abonnés par mois (toute la plateforme) ---
+            _chartCard(
+              title: 'New clients subscribed',
+              tag: '${DateTime.now().year} · all companies',
+              height: chartHeight,
+              child: MonthlyClientsBar(
+                values: monthlySubscriptions(store.clients, DateTime.now().year),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // --- Activity feed ---
             Container(
               padding: const EdgeInsets.all(20),
@@ -116,8 +130,7 @@ class OverviewPage extends StatelessWidget {
                     time: '2 h ago',
                   ),
                   const _ActivityItem(
-                    color: SuperAdminTheme.green,
-                    text: 'Agency "Douala — Bassa" activated',
+                    color: SuperAdminTheme.green,                     text: 'Agency "Yaoundé — Nlongkak" activated',
                     time: 'yesterday',
                   ),
                   const _ActivityItem(

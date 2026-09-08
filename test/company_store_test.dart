@@ -5,7 +5,7 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Laisse les listeners de snapshots rattraper les écritures.
+/// Lets snapshot listeners catch up with writes.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -15,15 +15,15 @@ Future<void> _settle() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('charge uniquement les données de SON entreprise (scoping)', () async {
+  test('loads only data for ITS company (scoping)', () async {
     final db = FakeFirebaseFirestore();
-    // Deux entreprises avec agences et utilisateurs.
+    // Two companies with agencies and users.
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
+      'raisonSociale': 'WastePro Yaoundé SARL',
       'adresse': 'Bonanjo',
       'telephone': '+237 233 42 10 10',
-      'email': 'contact@douala.cm',
+      'email': 'contact@yde.cm',
       'status': 'Active',
     });
     await db.collection('societes').doc('so2').set({
@@ -36,9 +36,9 @@ void main() {
     });
     await db.collection('agences').doc('ag1').set({
       'id': 'ag1',
-      'societe': 'WastePro Douala Ltd',
+      'societe': 'WastePro Yaoundé SARL',
       'societeId': 'so1',
-      'ville': 'Douala — Bonanjo',
+      'ville': 'Yaoundé — Bastos',
       'responsable': 'Jean Dooh',
       'telephone': '+237 677 12 34 56',
       'status': 'Active',
@@ -57,7 +57,7 @@ void main() {
       'nom': 'Chef Bonanjo',
       'telephone': '+237 677 12 34 56',
       'role': 'Agency Manager',
-      'agence': 'Douala — Bonanjo',
+      'agence': 'Yaoundé — Bastos',
       'societeId': 'so1',
       'agenceId': 'ag1',
       'status': 'Active',
@@ -84,10 +84,10 @@ void main() {
     await store.initialLoad;
     await _settle();
 
-    expect(store.societes.single.raisonSociale, 'WastePro Douala Ltd');
+    expect(store.societes.single.raisonSociale, 'WastePro Yaoundé SARL');
     expect(store.agences.single.id, 'ag1');
     expect(store.utilisateurs.single.id, 'us1');
-    expect(store.societeNom, 'WastePro Douala Ltd');
+    expect(store.societeNom, 'WastePro Yaoundé SARL');
 
     store.dispose();
   });
@@ -96,10 +96,10 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
+      'raisonSociale': 'WastePro Yaoundé SARL',
       'adresse': 'Bonanjo',
       'telephone': '+237 233 42 10 10',
-      'email': 'contact@douala.cm',
+      'email': 'contact@yde.cm',
       'status': 'Active',
     });
     final backend = FakeAuthBackend();
@@ -113,7 +113,7 @@ void main() {
 
     // L'entreprise crée une agence puis y nomme un chef.
     await store.addAgence(
-      ville: 'Douala — Akwa',
+      ville: 'Yaoundé — Mokolo',
       responsable: 'Paul Biya Jr',
       telephone: '+237 688 11 22 33',
       status: 'Active',
@@ -153,10 +153,10 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('societes').doc('so1').set({
       'id': 'so1',
-      'raisonSociale': 'WastePro Douala Ltd',
+      'raisonSociale': 'WastePro Yaoundé SARL',
       'adresse': 'Bonanjo',
       'telephone': '+237 233 42 10 10',
-      'email': 'contact@douala.cm',
+      'email': 'contact@yde.cm',
       'status': 'Active',
     });
     final store = FirestoreCompanyStore(
@@ -168,7 +168,7 @@ void main() {
     await _settle();
 
     await store.addAgence(
-      ville: 'Douala — Akwa',
+      ville: 'Yaoundé — Mokolo',
       responsable: 'Paul Biya Jr',
       telephone: '+237 688 11 22 33',
       status: 'Active',

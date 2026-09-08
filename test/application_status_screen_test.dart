@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/auth/screens/application_status_screen.dart';
 import 'package:waste_pro/features/auth/screens/pre_register_screen.dart';
 
-/// Écran « Application status » : le client suit sa candidature en direct
-/// (pending → approved/rejected) et peut resoumettre après un rejet.
+/// "Application status" screen: the client tracks their application live
+/// (pending → approved/rejected) and can resubmit after a rejection.
 void main() {
   Future<FakeFirebaseFirestore> seedDb({String status = 'pending'}) async {
     final db = FakeFirebaseFirestore();
@@ -15,7 +15,7 @@ void main() {
       'phone': '+237698224466',
       'zone': 'Bonanjo',
       'agenceId': 'ag1',
-      'agenceName': 'Douala — Bonanjo',
+      'agenceName': 'Yaoundé — Bastos',
       'societeId': 'so1',
       'status': status,
       'collecteurId': '',
@@ -41,7 +41,7 @@ void main() {
   Future<void> checkStatus(WidgetTester tester, String phone) async {
     await tester.enterText(find.byType(TextField), phone);
     await tester.tap(find.text('Check status'));
-    // Le délai de 150 ms du bouton + le stream.
+    // The 150 ms button delay + the stream.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
@@ -57,7 +57,7 @@ void main() {
     expect(find.text('Approved! 🎉'), findsNothing);
   });
 
-  testWidgets('candidature approuvée → carte verte + bouton login', (
+  testWidgets('approved application → green card + login button', (
     tester,
   ) async {
     final db = await seedDb(status: 'approved');
@@ -65,11 +65,11 @@ void main() {
     await checkStatus(tester, '698 22 44 66');
 
     expect(find.text('Approved! 🎉'), findsOneWidget);
-    expect(find.text('Go to my dashboard'), findsOneWidget);
+    expect(find.text('Log in'), findsOneWidget);
     expect(find.text('Re-apply'), findsNothing);
   });
 
-  testWidgets('candidature rejetée → carte rouge + bouton Re-apply', (
+  testWidgets('rejected application → red card + Re-apply button', (
     tester,
   ) async {
     final db = await seedDb(status: 'rejected');
@@ -93,14 +93,14 @@ void main() {
   });
 
   testWidgets(
-    'la carte se met à jour EN DIRECT quand le chef d agence décide',
+    'the card updates LIVE when the agency manager decides',
     (tester) async {
       final db = await seedDb(status: 'pending');
       await pumpStatus(tester, db);
       await checkStatus(tester, '698 22 44 66');
       expect(find.text('Under review'), findsOneWidget);
 
-      // Le chef d'agence approuve → l'écran bascule tout seul (stream).
+      // The agency manager approves → the screen switches on its own (stream).
       await db.collection('registrations').doc('reg1').update({
         'status': 'approved',
         'collecteurId': 'co1',
@@ -114,7 +114,7 @@ void main() {
   );
 
   testWidgets(
-    'Re-apply après rejet → formulaire pré-rempli avec les infos conservées',
+    'Re-apply after rejection → form pre-filled with preserved info',
     (tester) async {
       final db = await seedDb(status: 'rejected');
       await pumpStatus(tester, db);
@@ -126,8 +126,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(PreRegisterScreen), findsOneWidget);
-      // Le formulaire est pré-rempli avec le nom / téléphone / zone de la
-      // candidature rejetée.
+      // The form is pre-filled with the name / phone / zone of the
+      // rejected application.
       final fields = find.byType(TextFormField);
       expect(fields, findsWidgets);
       final nameField = tester.widget<TextFormField>(fields.at(0));
@@ -139,7 +139,7 @@ void main() {
     },
   );
 
-  testWidgets('numéro vide → toast au lieu de la recherche', (tester) async {
+  testWidgets('empty number → toast instead of searching', (tester) async {
     final db = FakeFirebaseFirestore();
     await pumpStatus(tester, db);
 

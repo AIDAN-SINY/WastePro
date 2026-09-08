@@ -5,11 +5,15 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 // Providers
 import 'providers/user_provider.dart';
 import 'providers/navigation_provider.dart';
+import 'providers/notification_provider.dart';
+import 'services/notification_service.dart';
+import 'services/offline_sync_service.dart';
 
 // Screens
 import 'features/auth/screens/welcome_screen.dart';
@@ -21,16 +25,26 @@ import 'features/home/collector_dashboard.dart';
 import 'features/backoffice/backoffice_screen.dart';
 import 'features/backoffice/data/backoffice_store.dart';
 import 'features/company/company_console.dart';
+import 'features/auth/screens/two_factor_screen.dart';
 import 'features/superadmin/data/firestore_platform_store.dart';
 import 'features/superadmin/data/platform_store.dart';
 import 'features/superadmin/super_admin_console.dart';
+import 'services/two_factor_service.dart';
 import 'routing.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Load environment variables from .env file.
+  await dotenv.load(fileName: ".env");
+
+  // Initialize Firebase — wrapped in try-catch so the app launches offline.
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+        .timeout(const Duration(seconds: 10));
+  } catch (e) {
+    debugPrint('Firebase init skipped (offline or unavailable): $e');
+  }
 
   // App Check : prouve que les requêtes viennent de la vraie app (et non
   // d'un client qui aurait extrait les clés API publiques). En debug, le
@@ -57,11 +71,18 @@ void main() async {
     }
   }
 
-  // Inside your main() or where you initialize Firebase
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true, // Allows app to work while "unavailable"
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  // Configure Firestore offline persistence — skip if Firebase init failed.
+  try {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+    // Initialize offline sync service for collector mobile app.
+    await OfflineSyncService.instance.init();
+  } catch (e) {
+    debugPrint('Firestore/OfflineSync init skipped: $e');
+  }
+
   // Initialize Provider and Check for existing session
   final userProvider = UserProvider();
   await userProvider.tryAutoLogin();
@@ -71,15 +92,20 @@ void main() async {
       providers: [
         ChangeNotifierProvider.value(value: userProvider),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(
+          create: (_) => NotificationProvider(
+            service: NotificationService(),
+          ),
+        ),
       ],
       child: const WasteProApp(),
     ),
   );
 }
 
-/// Donne accès au store Firestore de la console super admin (créé
-/// paresseusement, partagé entre toutes les instances de la console afin de
-/// ne pas dupliquer les abonnements Firestore).
+/// Provides access to the super admin console Firestore store (created
+/// lazily, shared across all console instances to avoid duplicating
+/// Firestore subscriptions).
 class ConsoleStoreScope extends InheritedWidget {
   const ConsoleStoreScope({
     super.key,
@@ -100,15 +126,21 @@ class ConsoleStoreScope extends InheritedWidget {
 }
 
 class WasteProApp extends StatefulWidget {
-  const WasteProApp({super.key, this.consoleStore, this.backofficeStore});
+  const WasteProApp({super.key, this.consoleStore, this.backofficeStore, this.db, this.skip2FA = false});
 
-  /// Store de la console injecté par les tests (mock) — sinon un
-  /// [FirestorePlatformStore] est créé paresseusement.
+  /// Console store injected by tests (mock) — otherwise a
+  /// [FirestorePlatformStore] is created lazily.
   final PlatformStore? consoleStore;
 
-  /// Store du backoffice injecté par les tests (mock) — sinon un
-  /// [FirestoreBackofficeStore] est créé par l'écran.
+  /// Backoffice store injected by tests (mock) — otherwise a
+  /// [FirestoreBackofficeStore] is created by the screen.
   final BackofficeStore? backofficeStore;
+
+  /// Optional Firestore instance for dependency injection in tests.
+  final FirebaseFirestore? db;
+
+  /// When true, skip the 2FA gate in AuthWrapper (for tests).
+  final bool skip2FA;
 
   @override
   State<WasteProApp> createState() => _WasteProAppState();
@@ -142,15 +174,15 @@ class _WasteProAppState extends State<WasteProApp> {
         GoRoute(
           path: '/',
           builder: (context, state) =>
-              AuthWrapper(backofficeStore: widget.backofficeStore),
+              AuthWrapper(backofficeStore: widget.backofficeStore, db: widget.db, skip2FA: widget.skip2FA),
         ),
         GoRoute(
           path: '/login',
           builder: (context, state) => const LoginScreen(),
         ),
         GoRoute(
-          // Pré-inscription client (candidature) : le compte réel n'est créé
-          // qu'après approbation par le chef d'agence.
+          // Client pre-registration (application): the real account is only created
+          // after approval by the agency manager.
           path: '/register',
           builder: (context, state) => const PreRegisterScreen(),
         ),
@@ -165,6 +197,7 @@ class _WasteProAppState extends State<WasteProApp> {
               store: useMock ? null : ConsoleStoreScope.storeOf(context),
               page: state.pathParameters['page'],
               autoCreate: state.uri.queryParameters['create'],
+              db: widget.db,
             );
           },
         ),
@@ -213,24 +246,30 @@ class _WasteProAppState extends State<WasteProApp> {
 }
 
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key, this.backofficeStore});
+  const AuthWrapper({super.key, this.backofficeStore, this.db, this.skip2FA = false});
 
-  /// Store du backoffice injecté par les tests (mock) — sinon l'écran crée
-  /// son [FirestoreBackofficeStore].
+  /// Backoffice store injected by tests (mock) — otherwise the screen creates
+  /// its own [FirestoreBackofficeStore].
   final BackofficeStore? backofficeStore;
+
+  /// Optional Firestore instance for dependency injection in tests.
+  final FirebaseFirestore? db;
+
+  /// When true, skip the 2FA gate (for tests that don't exercise 2FA).
+  final bool skip2FA;
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
-/// Écran affiché à un Agency Manager dont le compte n'a pas encore
-/// d'agence assignée (Phase 3).
+/// Screen shown to an Agency Manager whose account does not yet
+/// have an assigned agency (Phase 3).
 ///
-/// Sans agence, le backoffice n'aurait aucun périmètre : plutôt que de
-/// laisser l'utilisateur voir les données de toutes les agences, on lui
-/// demande de contacter son administrateur. L'entreprise (General
-/// Administrator) ou le super admin doit assigner le chef d'agence à une
-/// agence dans la console ; la prochaine connexion lui donnera accès.
+/// Without an agency, the backoffice would have no scope: rather than
+/// letting the user see data from all agencies, we ask them to contact
+/// their administrator. The company (General Administrator) or super admin
+/// must assign the agency manager to an agency in the console; the next
+/// login will grant access.
 class UnassignedManagerScreen extends StatelessWidget {
   const UnassignedManagerScreen({super.key});
 
@@ -300,6 +339,44 @@ class UnassignedManagerScreen extends StatelessWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  String? _lastPhone;
+  bool _twoFactorVerified = false;
+  bool _showingTwoFactor = false;
+
+  // En debug (développement/test avec numéros de démo), le SMS de 2FA
+  // n'est jamais réellement reçu → le service accepte n'importe quel code
+  // à 6 chiffres (voir TwoFactorService.devBypass). Jamais en release.
+  final TwoFactorService _twoFactorService = TwoFactorService(
+    devBypass: kDebugMode,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final user = context.read<UserProvider>().user;
+    final currentPhone = user?.phoneNumber;
+
+    // User just logged in → initialize FCM.
+    if (currentPhone != null && currentPhone != _lastPhone) {
+      _lastPhone = currentPhone;
+      context.read<NotificationProvider>().initialize(currentPhone);
+    }
+
+    // User just logged out → clear FCM token and reset 2FA.
+    if (currentPhone == null && _lastPhone != null) {
+      context.read<NotificationProvider>().clearOnLogout(_lastPhone!);
+      _lastPhone = null;
+      _twoFactorVerified = false;
+      _showingTwoFactor = false;
+    }
+
+    // New user logged in → reset 2FA state.
+    if (currentPhone != null && currentPhone != _lastPhone) {
+      _twoFactorVerified = false;
+      _showingTwoFactor = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
@@ -316,15 +393,36 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // 2. If user is logged in, direct to their specific Dashboard
     final user = userProvider.user!;
     final role = user.role.trim().toLowerCase();
+
+    // 2FA check for General Admin and Super Admin.
+    if (!widget.skip2FA && TwoFactorService.requires2FA(role) && !_twoFactorVerified) {
+      // Show 2FA screen on first load; skip if already verified this session.
+      if (!_showingTwoFactor) {
+        _showingTwoFactor = true;
+        // Defer to avoid setState during build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
+      return TwoFactorScreen(
+        user: user,
+        service: _twoFactorService,
+        devBypass: kDebugMode,
+        onVerified: () {
+          setState(() {
+            _twoFactorVerified = true;
+            _showingTwoFactor = false;
+          });
+        },
+      );
+    }
+
     if (role == 'super_admin') {
-      // Normalement redirigé vers /console/overview par le routeur ; ce
-      // fallback garde la console accessible même si le routeur ne passe pas.
-      return SuperAdminConsole(store: ConsoleStoreScope.storeOf(context));
+      return SuperAdminConsole(store: ConsoleStoreScope.storeOf(context), db: widget.db);
     } else if (role == 'general_admin') {
-      // General Administrator → console de SON entreprise.
       return CompanyConsole(societeId: user.societeId);
     } else if (role == 'collector') {
-      return const CollectorDashboard();
+      return CollectorDashboard(db: widget.db);
     } else if (role == 'pending_client') {
       // Candidature en attente (pré-inscription) : le compte existe déjà
       // (créé à la soumission), mais le client n'est pas encore approuvé —

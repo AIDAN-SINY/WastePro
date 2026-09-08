@@ -48,7 +48,7 @@ void main() {
   }
 
   testWidgets('client dashboard bottom nav does not overflow', (tester) async {
-    // Taille téléphone + barre de navigation système simulée en bas.
+    // Phone size + simulated system navigation bar at the bottom.
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     tester.view.padding = const FakeViewPadding(bottom: 24);
@@ -56,7 +56,7 @@ void main() {
 
     await pumpDashboard(tester, FakeFirebaseFirestore());
 
-    // Un « bottom overflow » déclencherait une FlutterError ici.
+    // A "bottom overflow" would trigger a FlutterError here.
     expect(tester.takeException(), isNull);
 
     // La navbar est bien rendue avec ses 4 onglets.
@@ -100,7 +100,7 @@ void main() {
     expect(find.text('9+'), findsNothing);
   });
 
-  testWidgets('le collecteur assigné est affiché sur le dashboard client', (
+  testWidgets('the assigned collector is displayed on the client dashboard', (
     tester,
   ) async {
     final db = FakeFirebaseFirestore();
@@ -127,18 +127,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
-    // Le nom du collecteur assigné (et sa note) remplacent le mock.
+    // The assigned collector's name (and rating) replace the mock.
     expect(find.text('Vincent Onana'), findsOneWidget);
     expect(find.textContaining('4.5'), findsOneWidget);
   });
 
-  testWidgets('pas de collecteur assigné → message dédié', (tester) async {
+  testWidgets('no assigned collector → dedicated message', (tester) async {
     await pumpDashboard(tester, FakeFirebaseFirestore());
 
     expect(find.text('No collector assigned yet'), findsOneWidget);
   });
 
-  testWidgets('le tap sur la cloche ouvre l écran Notifications', (
+  testWidgets('tapping the bell opens the Notifications screen', (
     tester,
   ) async {
     final db = FakeFirebaseFirestore();
@@ -160,5 +160,43 @@ void main() {
 
     expect(find.byType(NotificationsScreen), findsOneWidget);
     expect(find.text('Application rejected'), findsOneWidget);
+  });
+
+  testWidgets('weekly schedule shows the client\'s own collection days', (
+    tester,
+  ) async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('users').doc('+237699999999').set({
+      'phoneNumber': '+237699999999',
+      'role': 'client',
+      'collection_days': ['Tuesday', 'Friday'],
+      'pickup_time': '07:00',
+      'isSubscribed': true,
+    });
+
+    await pumpDashboard(tester, db);
+
+    expect(find.text('Weekly Schedule'), findsOneWidget);
+    expect(find.text('Your collection days'), findsOneWidget);
+    // The pickup window is displayed on the card.
+    expect(find.text('07:00'), findsOneWidget);
+    // The strip shows the 7 days of the week.
+    expect(find.text('Mon'), findsOneWidget);
+    expect(find.text('Sun'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('weekly schedule shows an empty state without collection days', (
+    tester,
+  ) async {
+    await pumpDashboard(tester, FakeFirebaseFirestore());
+
+    expect(find.text('Weekly Schedule'), findsOneWidget);
+    expect(find.text('No collection days yet'), findsOneWidget);
+    expect(
+      find.text('Subscribe to a plan to get scheduled pickups.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

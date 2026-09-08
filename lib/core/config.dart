@@ -1,20 +1,20 @@
-/// Configuration centrale de l'app.
+/// Central app configuration.
 ///
-/// La clé d'API CamPay est un jeton d'accès PERMANENT de l'application
-/// CamPay (visible sous APP KEYS dans le dashboard demo.campay.net). Il est
-/// injecté au build via `--dart-define` ; en l'absence de variable
-/// d'environnement, on retombe sur la valeur de secours (clé de test).
+/// The CamPay API key is a PERMANENT access token for the CamPay application
+/// (visible under APP KEYS in the demo.campay.net dashboard). It is
+/// injected at build time via `--dart-define`; when no environment variable
+/// is present, the fallback value (test key) is used.
 class AppConfig {
   AppConfig._();
 
-  /// Jeton d'accès permanent CamPay (test/demo).
+  /// Permanent CamPay access token (test/demo).
   ///
-  /// Injecté au build :
+  /// Injected at build time:
   /// ```
   /// flutter run --dart-define=CAMPAY_TOKEN=ts8iA9l6iFonQ0afyCYmRr1FKhCIdrnJ9C.1nvsb
   /// ```
-  /// Sinon la valeur de secours (clé de démo fournie par l'utilisateur)
-  /// est utilisée.
+  /// Otherwise the fallback value (demo key provided by the user)
+  /// is used.
   static const String campayToken = String.fromEnvironment(
     'CAMPAY_TOKEN',
     defaultValue: 'ts8iA9l6iFonQ0afyCYmRr1FKhCIdrnJ9C.1nvsb',
@@ -22,21 +22,21 @@ class AppConfig {
 
   static bool get hasCampayToken => campayToken.isNotEmpty;
 
-  /// Hôte de l'API CamPay. `demo.campay.net` = environnement de test ;
+  /// CamPay API host. `demo.campay.net` = test environment;
   /// `www.campay.net` = production.
   static const String campayBaseUrl = String.fromEnvironment(
     'CAMPAY_BASE_URL',
     defaultValue: 'https://demo.campay.net',
   );
 
-  /// Vrai quand l'app tourne contre le bac à sable CamPay (demo).
+  /// True when the app is running against the CamPay sandbox (demo).
   static bool get isCampayDemo => campayBaseUrl.contains('demo');
 
-  /// Plafond du bac à sable CamPay : chaque transaction est limitée à
-  /// 25 XAF (réponse serveur `ER201` au-delà). En production
-  /// (`www.campay.net`) il n'y a pas de plafond.
+  /// CamPay sandbox ceiling: each transaction is limited to
+  /// 25 XAF (server response `ER201` beyond that). In production
+  /// (`www.campay.net`) there is no ceiling.
   static const double campayDemoMaxAmount = 25;
 
-  /// Devise par défaut (Cameroun).
+  /// Default currency (Cameroon).
   static const String currency = 'XAF';
 }

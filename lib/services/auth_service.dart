@@ -3,21 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import 'auth_backend.dart';
 
-/// Service d'authentification — mode « numéro + mot de passe » sur
-/// **Firebase Auth** (email dérivé du numéro), profil dans `users/{téléphone}`.
+/// Authentication service — "phone + password" mode on
+/// **Firebase Auth** (email derived from phone), profile in `users/{phone}`.
 ///
-/// ⚠️ MIGRATION SÉCURITÉ : avant ce commit, le login lisait `users/{téléphone}`
-/// et comparait le mot de passe EN CLAIR stocké dans Firestore. Depuis :
-///   1. le mot de passe n'est plus JAMAIS écrit dans Firestore — il vit dans
-///      Firebase Auth (haché côté Google) ;
-///   2. le login passe par `signInWithEmailAndPassword` (email dérivé :
-///      `2376XXXXXXX@wastepro.cm`) ;
-///   3. chaque compte de connexion possède un `auth_profiles/{uid}` (rôle +
-///      scope) que les règles Firestore consultent pour verrouiller l'accès.
+/// SECURITY MIGRATION: before this commit, login read `users/{phone}`
+/// and compared the PLAINTEXT password stored in Firestore. Since:
+///   1. the password is NEVER written to Firestore — it lives in
+///      Firebase Auth (hashed by Google);
+///   2. login goes through `signInWithEmailAndPassword` (derived email:
+///      `2376XXXXXXX@wastepro.cm`);
+///   3. each login account has an `auth_profiles/{uid}` (role +
+///      scope) that Firestore rules consult to lock down access.
 ///
-/// Un script de migration (`tool/migrate_auth.mjs`) crée les comptes Auth
-/// des utilisateurs existants à partir de leur mot de passe actuel — aucune
-/// donnée de connexion n'est perdue.
+/// A migration script (`tool/migrate_auth.mjs`) creates Auth accounts
+/// for existing users from their current password — no login data is lost.
 class AuthService {
   AuthService({FirebaseFirestore? db, AuthBackend? backend})
       : _db = db ?? FirebaseFirestore.instance,
@@ -26,8 +25,8 @@ class AuthService {
   final FirebaseFirestore _db;
   final AuthBackend _backend;
 
-  /// Normalise un numéro de téléphone : sans espaces ni tirets, préfixe +237
-  /// (gère aussi le « 237... » saisi sans le +).
+  /// Normalizes a phone number: strips spaces and dashes, adds +237
+  /// prefix (also handles '237...' entered without the +).
   static String canonicalPhone(String raw) {
     final cleaned = raw.trim().replaceAll(RegExp(r'[\s-]'), '');
     if (cleaned.isEmpty) return '';
@@ -36,13 +35,13 @@ class AuthService {
     return '+237$cleaned';
   }
 
-  /// Clés de doc `users` à essayer pour un numéro :
-  ///   1. la forme canonique (+237…) ;
-  ///   2. le numéro tel que saisi ;
-  ///   3. le numéro sans le préfixe +237 (un compte créé à la main dans la
-  ///      console Firebase peut utiliser la clé brute, ex. `'653645807'` au
-  ///      lieu de `'+237653645807'`).
-  /// Le premier doc trouvé fait foi.
+  /// `users` doc keys to try for a given number:
+  ///   1. the canonical form (+237…);
+  ///   2. the number as entered;
+  ///   3. the number without the +237 prefix (an account created manually in
+  ///      the Firebase console may use the bare key, e.g. `'653645807'`
+  ///      instead of `'+237653645807'`).
+  /// The first doc found is authoritative.
   static Set<String> canonicalKeys(String raw) {
     final canonical = canonicalPhone(raw);
     final trimmed = raw.trim();
@@ -50,10 +49,10 @@ class AuthService {
     return {canonical, trimmed, bare};
   }
 
-  /// Email Firebase Auth dérivé d'un numéro (identifiant de connexion).
+  /// Firebase Auth email derived from a phone number (login identifier).
   ///
-  /// Même règle que la migration `tool/migrate_auth.mjs` : le numéro
-  /// canonique sans le `+`, suivi du domaine de la plateforme.
+  /// Same rule as the `tool/migrate_auth.mjs` migration: the canonical
+  /// number without the `+`, followed by the platform domain.
   static String emailFor(String phone) {
     final canonical = canonicalPhone(phone);
     if (canonical.isEmpty) return '';
@@ -79,8 +78,8 @@ class AuthService {
           throw 'The database service is temporarily unavailable. Please check your internet connection and try again.';
         }
 
-        // `permission-denied` = les règles Firestore DÉPLOYÉES sur Firebase
-        // refusent l'opération. On traduit en action concrète.
+        // `permission-denied` = the Firestore rules DEPLOYED on Firebase
+        // reject the operation. We translate into an actionable message.
         if (e.code == 'permission-denied') {
           throw 'Access denied: the Firestore rules deployed on Firebase are '
               'out of date. Deploy the latest rules with: firebase deploy '
@@ -100,19 +99,18 @@ class AuthService {
     throw 'Unable to complete the request right now.';
   }
 
-  /// Connecte un numéro + mot de passe via Firebase Auth, puis charge le
-  /// profil `users/{téléphone}`.
+  /// Logs in a phone + password via Firebase Auth, then loads the
+  /// `users/{phone}` profile.
   ///
-  /// - `null` : aucun compte pour ce numéro.
-  /// - `UserModel` : connexion réussie (le rôle peut être `pending_client`
-  ///   pour une candidature pas encore approuvée).
-  /// - Sinon, une erreur est levée (mot de passe incorrect, compte
-  ///   désactivé…).
+  /// - `null`: no account for this number.
+  /// - `UserModel`: successful login (role may be `pending_client`
+  ///   for an application not yet approved).
+  /// - Otherwise, an error is thrown (wrong password, disabled account…).
   ///
-  /// ⚠️ Avec la protection anti-énumération activée sur le projet, le
-  /// backend Auth renvoie `invalid-credentials` (indécidable) : on consulte
-  /// alors `users/{téléphone}` pour savoir si le compte existe réellement
-  /// et produire « Incorrect Password » au lieu de « User not found ».
+  /// With enumeration protection enabled on the project, the Auth backend
+  /// returns `invalid-credentials` (indistinguishable): we then consult
+  /// `users/{phone}` to determine whether the account actually exists
+  /// and produce "Incorrect Password" instead of "User not found".
   Future<UserModel?> login(String phone, String password) async {
     final canonical = canonicalPhone(phone);
     if (canonical.isEmpty) return null;
@@ -125,10 +123,10 @@ class AuthService {
       if (e.code == 'user-not-found') return null;
       if (e.code == 'wrong-password') throw 'Incorrect Password';
       if (e.code == 'invalid-credentials') {
-        // L'API Auth ne départage pas « aucun compte » de « mauvais mot de
-        // passe » (protection anti-énumération) : la collection `users`
-        // fait foi. Un doc `users/{téléphone}` présent → le compte existe,
-        // c'est le mot de passe qui est faux. Sinon → aucun compte.
+        // The Auth API cannot distinguish "no account" from "wrong password"
+        // (enumeration protection): the `users` collection is authoritative.
+        // A present `users/{phone}` doc → the account exists, the password
+        // is wrong. Otherwise → no account.
         final exists = await _runWithRetry<bool>(() async {
           for (final key in canonicalKeys(canonical)) {
             if (key.isEmpty) continue;
@@ -152,18 +150,18 @@ class AuthService {
       throw e.message.isEmpty ? 'Authentication failed.' : e.message;
     }
 
-    // Profil : essaie la clé canonique puis les variantes legacy (compte créé
-    // à la main dans la console, clé brute sans +237).
+    // Profile: try the canonical key then the legacy variants (account created
+    // manually in the console, bare key without +237).
     return _runWithRetry<UserModel?>(() async {
       for (final key in canonicalKeys(canonical)) {
         if (key.isEmpty) continue;
         final doc = await _db.collection('users').doc(key).get();
         if (!doc.exists) continue;
         final user = UserModel.fromMap(doc.data()!);
-        // Un doc legacy (créé à la main dans la console, avant la migration)
-        // peut ne pas porter de `uid` — on le laisse passer. S'il en porte
-        // un, il doit correspondre au compte Auth qui vient de se connecter
-        // (sinon c'est une clé de secours d'un autre compte).
+        // A legacy doc (created manually in the console, before migration)
+        // may not carry a `uid` — we let it through. If it does carry one,
+        // it must match the Auth account that just signed in
+        // (otherwise it's a fallback key for a different account).
         final userUid = user.uid;
         if (userUid != null && userUid.isNotEmpty && userUid != uid) {
           continue;
@@ -174,9 +172,9 @@ class AuthService {
     });
   }
 
-  /// Statut de la candidature (pré-inscription) la plus récente pour
-  /// [phone] : `'pending'` | `'approved'` | `'rejected'`, ou null si ce
-  /// numéro n'a aucune candidature.
+  /// Status of the most recent registration application for
+  /// [phone]: `'pending'` | `'approved'` | `'rejected'`, or null if this
+  /// number has no application.
   Future<String?> registrationStatus(String phone) async {
     return _runWithRetry<String?>(() async {
       final canonical = canonicalPhone(phone);
@@ -191,26 +189,26 @@ class AuthService {
     });
   }
 
-  /// Soumet une candidature client (pré-inscription) — et **crée le compte**
-  /// de connexion sur Firebase Auth dès maintenant.
+  /// Submits a client pre-registration application — and **creates the login**
+  /// account on Firebase Auth right away.
   ///
-  /// Nouveau modèle « compte dès l'inscription » :
-  ///   - un compte Auth est créé (email dérivé + mot de passe choisi) ;
-  ///   - `users/{téléphone}` porte le profil avec le rôle `pending_client`
-  ///     et le `uid` Auth (PAS de mot de passe en clair) ;
-  ///   - `auth_profiles/{uid}` porte rôle + scope pour les règles Firestore ;
-  ///   - `registrations/{id}` est la candidature vue par le backoffice.
+  /// "Account from registration" model:
+  ///   - an Auth account is created (derived email + chosen password);
+  ///   - `users/{phone}` carries the profile with role `pending_client`
+  ///     and the Auth `uid` (NO plaintext password);
+  ///   - `auth_profiles/{uid}` carries role + scope for Firestore rules;
+  ///   - `registrations/{id}` is the application visible to the backoffice.
   ///
-  /// Le client peut donc se connecter immédiatement : l'app le dirige vers
-  /// l'écran de suivi jusqu'à ce que le chef d'agence approuve (le rôle
-  /// passe alors à `client`).
+  /// The client can log in immediately: the app routes them to the
+  /// tracking screen until the agency manager approves (the role then
+  /// becomes `client`).
   ///
-  /// - Un numéro déjà lié à un compte réel (client/collecteur/console) est
-  ///   refusé (il faut se connecter à la place).
-  /// - Une candidature déjà en attente pour ce numéro est refusée.
-  /// - Une candidature REJETÉE autorise une nouvelle demande (re-apply) :
-  ///   le compte existant est conservé (même uid), les champs du profil sont
-  ///   mis à jour et une nouvelle candidature `pending` est écrite.
+  /// - A number already linked to a real account (client/collector/console)
+  ///   is rejected (they should log in instead).
+  /// - A pending application for this number is rejected.
+  /// - A REJECTED application allows a new submission (re-apply):
+  ///   the existing account is kept (same uid), profile fields are
+  ///   updated, and a new `pending` application is written.
   Future<void> submitPreRegistration({
     required String fullName,
     required String phone,
@@ -231,7 +229,7 @@ class AuthService {
     }
 
     await _runWithRetry(() async {
-      // --- Compte existant ? ---
+      // --- Existing account? ---
       final existing = await _db.collection('users').doc(canonical).get();
       var uid = '';
       var isReapply = false;
@@ -242,7 +240,7 @@ class AuthService {
         if (role != 'pending_client') {
           throw 'This number already has an account. Please log in instead.';
         }
-        // pending_client : seule une candidature REJETÉE autorise un re-apply.
+        // pending_client: only a REJECTED application allows a re-apply.
         final status = await registrationStatus(canonical);
         if (status != 'rejected') {
           throw 'You already have a pending application. The agency will '
@@ -252,7 +250,7 @@ class AuthService {
         isReapply = true;
       }
 
-      // --- Création du compte Auth (une seule fois par numéro) ---
+      // --- Auth account creation (once per number) ---
       if (uid.isEmpty) {
         try {
           uid = await _backend.createAccount(
@@ -272,7 +270,7 @@ class AuthService {
         }
       }
 
-      // --- Résolution du nom d'agence (taper librement vs sélection) ---
+      // --- Agency name resolution (free typing vs selection) ---
       var finalAgenceId = agenceId;
       var finalSocieteId = societeId;
       var finalAgenceName = agenceName.trim();
@@ -316,7 +314,7 @@ class AuthService {
 
       try {
         final batch = _db.batch();
-        // Profil de connexion (sans mot de passe — il vit dans Firebase Auth).
+        // Login profile (no password — it lives in Firebase Auth).
         batch.set(_db.collection('users').doc(canonical), {
           'phoneNumber': canonical,
           'fullName': fullName.trim(),
@@ -328,7 +326,7 @@ class AuthService {
           'collecteurId': '',
           'isSubscribed': false,
         }, SetOptions(merge: isReapply));
-        // Profil de règles (rôle + scope), consulté par firestore.rules.
+        // Rules profile (role + scope), consulted by firestore.rules.
         batch.set(_db.collection('auth_profiles').doc(uid), {
           'uid': uid,
           'phone': canonical,
@@ -337,7 +335,7 @@ class AuthService {
           'societeId': finalSocieteId,
           'agenceId': finalAgenceId,
         }, SetOptions(merge: isReapply));
-        // Candidature vue par le backoffice.
+        // Application as seen by the backoffice.
         batch.set(_db.collection('registrations').doc(id), {
           'id': id,
           'fullName': fullName.trim(),
@@ -352,8 +350,8 @@ class AuthService {
         });
         await batch.commit();
       } catch (_) {
-        // Rollback : on ne laisse jamais un compte Auth orphelin si la
-        // candidature n'a pas pu être écrite.
+        // Rollback: we never leave an orphaned Auth account if the
+        // application could not be written.
         if (!isReapply && uid.isNotEmpty) {
           try {
             await _backend.deleteAccount(
@@ -365,14 +363,14 @@ class AuthService {
         rethrow;
       }
 
-      // Vérification serveur (HORS du try/catch de rollback : une
-      // candidature mise en file locale doit pouvoir se synchroniser plus
-      // tard, sans détruire le compte Auth déjà créé). Avec la persistance
-      // hors-ligne, un `batch.commit()` qui ne peut pas joindre Firestore se
-      // résout quand même (écriture dans le cache local) — l'écran de succès
-      // affiché alors est un MENSONGE : la candidature n'arrivera jamais au
-      // backoffice du chef d'agence. On relit le doc depuis le serveur pour
-      // confirmer que la soumission est réellement partie.
+      // Server-side verification (OUTSIDE the rollback try/catch: a locally
+      // queued application must be able to sync later, without destroying
+      // the Auth account already created). With offline persistence, a
+      // `batch.commit()` that cannot reach Firestore resolves anyway
+      // (write to local cache) — the success screen shown then is a LIE:
+      // the application will never reach the agency manager's backoffice.
+      // We re-read the doc from the server to confirm the submission
+      // actually left.
       bool confirmed = false;
       try {
         confirmed = await _db
@@ -390,9 +388,9 @@ class AuthService {
     });
   }
 
-  /// Uid de la session active (null si déconnecté).
+  /// Uid of the active session (null if signed out).
   String? get currentUid => _backend.currentUid;
 
-  /// Déconnecte la session Firebase Auth.
+  /// Signs out the Firebase Auth session.
   Future<void> signOut() => _backend.signOut();
 }

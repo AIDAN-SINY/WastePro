@@ -5,14 +5,14 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// AuthService branché sur un backend Auth en mémoire (pas de Firebase).
+/// AuthService wired to an in-memory Auth backend (no Firebase).
 AuthService makeAuth(FakeFirebaseFirestore db) =>
     AuthService(db: db, backend: FakeAuthBackend());
 
-/// Backend qui reproduit la protection anti-énumération du projet :
-/// l'API Auth ne permet pas de savoir si le compte existe — toute tentative
-/// de connexion échoue avec `invalid-credentials` (comme le vrai backend
-/// avec l'erreur `invalid-credential` fusionnée des SDK récents).
+/// Backend that replicates the project's enumeration protection:
+/// the Auth API cannot tell whether the account exists — every login
+/// attempt fails with `invalid-credentials` (like the real backend
+/// with the merged `invalid-credential` error from recent SDKs).
 class _EnumerationProtectedBackend extends FakeAuthBackend {
   @override
   Future<String> signIn({
@@ -25,7 +25,7 @@ class _EnumerationProtectedBackend extends FakeAuthBackend {
 
 void main() {
   group('AuthService.canonicalPhone', () {
-    test('normalise les numéros saisis librement', () {
+    test('normalizes freely entered numbers', () {
       expect(AuthService.canonicalPhone('677123456'), '+237677123456');
       expect(AuthService.canonicalPhone('237677123456'), '+237677123456');
       expect(AuthService.canonicalPhone('+237 677 12 34 56'), '+237677123456');
@@ -33,16 +33,16 @@ void main() {
       expect(AuthService.canonicalPhone('+237677123456'), '+237677123456');
     });
 
-    test('retourne une chaîne vide pour un numéro vide', () {
+    test('returns empty string for empty number', () {
       expect(AuthService.canonicalPhone(''), '');
       expect(AuthService.canonicalPhone('   '), '');
     });
   });
 
   group('AuthService.canonicalKeys', () {
-    test('ajoute la clé brute sans +237 (docs créés à la main)', () {
-      // Un compte créé à la main peut utiliser la clé brute '653645807'
-      // au lieu de '+237653645807' : le login doit essayer les deux.
+    test('adds the bare key without +237 (manually created docs)', () {
+      // An account created manually may use the bare key '653645807'
+      // instead of '+237653645807': login must try both.
       expect(AuthService.canonicalKeys('653645807'), {
         '+237653645807',
         '653645807',
@@ -53,17 +53,17 @@ void main() {
       });
     });
 
-    test('ignore les clés vides', () {
+    test('ignores empty keys', () {
       expect(AuthService.canonicalKeys(''), {''});
     });
   });
 
-  group('AuthService.login avec protection anti-énumération', () {
-    test('signale un mauvais mot de passe quand le doc users existe',
+  group('AuthService.login with enumeration protection', () {
+    test('reports wrong password when the users doc exists',
         () async {
       final db = FakeFirebaseFirestore();
-      // Compte migré : doc users présent (avec uid), mais l'API Auth
-      // refuse de dire si l'email existe (protection anti-énumération).
+      // Migrated account: users doc present (with uid), but the Auth API
+      // refuses to say whether the email exists (enumeration protection).
       await db.collection('users').doc('+237640996787').set({
         'phoneNumber': '+237640996787',
         'fullName': 'Super Admin',
@@ -81,7 +81,7 @@ void main() {
       );
     });
 
-    test('retourne null (user not found) quand aucun doc users', () async {
+    test('returns null (user not found) when no users doc', () async {
       final db = FakeFirebaseFirestore();
       final auth = AuthService(
         db: db,
@@ -91,9 +91,9 @@ void main() {
       expect(await auth.login('+237600000000', 'x'), isNull);
     });
 
-    test('retrouve le doc users via une clé brute (canonicalKeys)', () async {
+    test('finds the users doc via a bare key (canonicalKeys)', () async {
       final db = FakeFirebaseFirestore();
-      // Compte créé à la main dans la console avec une clé NON canonique.
+      // Account created manually in the console with a NON-canonical key.
       await db.collection('users').doc('640996787').set({
         'phoneNumber': '640996787',
         'fullName': 'Admin legacy',
@@ -112,13 +112,13 @@ void main() {
   });
 
   group('AuthService.registrationStatus', () {
-    test('retourne null quand le numéro n a aucune candidature', () async {
+    test('returns null when the number has no application', () async {
       final db = FakeFirebaseFirestore();
       final auth = makeAuth(db);
       expect(await auth.registrationStatus('698 22 44 66'), isNull);
     });
 
-    test('retourne le statut de la candidature (pending)', () async {
+    test('returns the application status (pending)', () async {
       final db = FakeFirebaseFirestore();
       await db.collection('registrations').doc('reg1').set({
         'id': 'reg1',
@@ -131,10 +131,10 @@ void main() {
       expect(await auth.registrationStatus('698 22 44 66'), 'pending');
     });
 
-    test('retourne le statut de la candidature la PLUS RÉCENTE', () async {
+    test('returns the MOST RECENT application status', () async {
       final db = FakeFirebaseFirestore();
-      // Deux candidatures pour le même numéro (ex. rejetée puis renvoyée) :
-      // la plus récente fait foi (ids triés par timestamp).
+      // Two applications for the same number (e.g. rejected then resubmitted):
+      // the most recent one is authoritative (ids sorted by timestamp).
       await db.collection('registrations').doc('reg1').set({
         'id': 'reg1',
         'phone': '+237698224466',
@@ -157,13 +157,13 @@ void main() {
         phone: phone,
         zone: 'Bonanjo',
         agenceId: 'ag1',
-        agenceName: 'Douala — Bonanjo',
+        agenceName: 'Yaoundé — Bastos',
         societeId: 'so1',
         password: 'secret123',
       );
     }
 
-    test('écrit une candidature pending avec le numéro canonique', () async {
+    test('writes a pending application with the canonical number', () async {
       final db = FakeFirebaseFirestore();
       final auth = makeAuth(db);
       await submit(auth);
@@ -176,7 +176,7 @@ void main() {
       expect(docs.docs.single.data()['collecteurId'], '');
     });
 
-    test('refuse un numéro qui a déjà un compte', () async {
+    test('rejects a number that already has an account', () async {
       final db = FakeFirebaseFirestore();
       await db.collection('users').doc('+237698224466').set({
         'phoneNumber': '+237698224466',
@@ -192,7 +192,7 @@ void main() {
       expect((await db.collection('registrations').get()).docs, isEmpty);
     });
 
-    test('refuse une candidature déjà en attente pour le même numéro', () async {
+    test('rejects a pending application for the same number', () async {
       final db = FakeFirebaseFirestore();
       final auth = makeAuth(db);
       await submit(auth);
@@ -203,7 +203,7 @@ void main() {
       expect((await db.collection('registrations').get()).docs, hasLength(1));
     });
 
-    test('refuse sans numéro valide', () async {
+    test('rejects without a valid number', () async {
       final db = FakeFirebaseFirestore();
       final auth = makeAuth(db);
       expect(
@@ -213,14 +213,14 @@ void main() {
     });
 
 
-    test('résout un nom d agence tapé vers son agenceId (insensible à la casse)',
+    test('resolves a typed agency name to its agenceId (case-insensitive)',
         () async {
       final db = FakeFirebaseFirestore();
       await db.collection('agences').doc('ag1').set({
         'id': 'ag1',
-        'societe': 'WastePro Douala Ltd',
+        'societe': 'WastePro Yaoundé SARL',
         'societeId': 'so1',
-        'ville': 'Douala — Bonanjo',
+        'ville': 'Yaoundé — Bastos',
         'responsable': 'Jean Dooh',
         'telephone': '+237 677 12 34 56',
         'status': 'Active',
@@ -231,24 +231,24 @@ void main() {
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
         zone: 'Bonanjo',
-        agenceId: '', // nom tapé, pas de sélection
-        agenceName: 'DOUALA — BONANJO',
+        agenceId: '', // typed name, no selection
+        agenceName: 'YAOUNDÉ — BASTOS',
         societeId: '',
         password: 'secret123',
       );
 
-      // La candidature est rattachée à l'agence (sinon invisible au chef).
+      // The application is linked to the agency (otherwise invisible to the manager).
       final docs = await db.collection('registrations').get();
       expect(docs.docs.single.data()['agenceId'], 'ag1');
       expect(docs.docs.single.data()['societeId'], 'so1');
     });
 
-    test('refuse un nom d agence qui ne correspond à aucune agence', () async {
+    test('rejects an agency name that matches no agency', () async {
       final db = FakeFirebaseFirestore();
       final auth = makeAuth(db);
-      // Aucune agence en base : taper un nom inconnu ne doit PAS créer une
-      // candidature « orpheline » (agenceId vide) qu'aucun chef d'agence ne
-      // pourrait voir ni traiter — le client choisit une agence existante.
+      // No agencies in the database: typing an unknown name must NOT create
+      // an "orphaned" application (empty agenceId) that no agency manager
+      // could see or process — the client must choose an existing agency.
       await expectLater(
         auth.submitPreRegistration(
           fullName: 'Carine Mbappe',

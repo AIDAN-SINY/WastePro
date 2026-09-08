@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../../models/assignment_model.dart';
 import '../../../services/auth_backend.dart';
 import '../../../services/auth_service.dart';
 import '../models.dart';
@@ -40,6 +41,13 @@ class FirestoreBackofficeStore extends BackofficeStore {
     clients.clear();
     collecteurs.clear();
     registrations.clear();
+    zones.clear();
+    contrats.clear();
+    collectes.clear();
+    factures.clear();
+    frequences.clear();
+    vehicles.clear();
+    maintenanceLogs.clear();
     load();
   }
 
@@ -91,6 +99,12 @@ class FirestoreBackofficeStore extends BackofficeStore {
   int _pending = 0;
   bool _seededClients = false;
   bool _seededCollecteurs = false;
+  bool _seededContrats = false;
+  bool _seededCollectes = false;
+  bool _seededFactures = false;
+  bool _seededFrequences = false;
+  bool _seededVehicles = false;
+  bool _seededMaintenance = false;
 
   /// Completes once the first snapshot of every collection has been applied
   /// (or an error occurred). Used by tests to await the initial load.
@@ -105,9 +119,15 @@ class FirestoreBackofficeStore extends BackofficeStore {
     _cancelSubscriptions();
     setLoading(true);
     setErrorValue(null);
-    _pending = 3;
+    _pending = 12;
     _seededClients = false;
     _seededCollecteurs = false;
+    _seededContrats = false;
+    _seededCollectes = false;
+    _seededFactures = false;
+    _seededFrequences = false;
+    _seededVehicles = false;
+    _seededMaintenance = false;
     _regsById.clear();
     _regsByName.clear();
     _loadCompleter = Completer<void>();
@@ -171,6 +191,82 @@ class FirestoreBackofficeStore extends BackofficeStore {
           .listen(_onRegistrations, onError: handleStreamError),
     );
 
+    // Issues reported by clients.
+    final issuesQuery = _isScoped
+        ? _db.collection('issues')
+        : _db.collection('issues');
+    _subs.add(
+      issuesQuery.snapshots().listen(_onIssues, onError: handleStreamError),
+    );
+
+    // Zones (collection calendars).
+    final zonesQuery = _isScoped
+        ? _db.collection('zones').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('zones');
+    _subs.add(
+      zonesQuery.snapshots().listen(_onZones, onError: handleStreamError),
+    );
+
+    // Assignments (collector → zone + time).
+    final assignmentsQuery = _isScoped
+        ? _db.collection('assignments').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('assignments');
+    _subs.add(
+      assignmentsQuery.snapshots().listen(_onAssignments, onError: handleStreamError),
+    );
+
+    // Contracts (contrats).
+    final contratsQuery = _isScoped
+        ? _db.collection('contrats').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('contrats');
+    _subs.add(
+      contratsQuery.snapshots().listen(_onContrats, onError: handleStreamError),
+    );
+
+    // Collections (collectes).
+    final collectesQuery = _isScoped
+        ? _db.collection('collectes').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('collectes');
+    _subs.add(
+      collectesQuery.snapshots().listen(_onCollectes, onError: handleStreamError),
+    );
+
+    // Invoices (factures).
+    final facturesQuery = _isScoped
+        ? _db.collection('factures').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('factures');
+    _subs.add(
+      facturesQuery.snapshots().listen(_onFactures, onError: handleStreamError),
+    );
+
+    // Frequency reference data — shared by all agencies (not scoped).
+    _subs.add(
+      _db
+          .collection('frequences')
+          .snapshots()
+          .listen(_onFrequences, onError: handleStreamError),
+    );
+
+    // Vehicles (fleet) — loaded from Firestore like the other entities.
+    final vehiclesQuery = _isScoped
+        ? _db.collection('vehicles').where('agenceId', isEqualTo: agenceId)
+        : _db.collection('vehicles');
+    _subs.add(
+      vehiclesQuery.snapshots().listen(_onVehicles, onError: handleStreamError),
+    );
+
+    // Vehicle maintenance logs.
+    final maintenanceQuery = _isScoped
+        ? _db
+              .collection('vehicle_maintenance')
+              .where('agenceId', isEqualTo: agenceId)
+        : _db.collection('vehicle_maintenance');
+    _subs.add(
+      maintenanceQuery
+          .snapshots()
+          .listen(_onMaintenance, onError: handleStreamError),
+    );
+
     await _loadCompleter!.future;
   }
 
@@ -228,6 +324,171 @@ class FirestoreBackofficeStore extends BackofficeStore {
         ),
       );
     _rebuildRegistrations();
+    _markLoaded();
+  }
+
+  void _onIssues(QuerySnapshot<Map<String, dynamic>> qs) {
+    issues
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return IssueModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<IssueModel>(),
+      );
+    _markLoaded();
+  }
+
+  void _onZones(QuerySnapshot<Map<String, dynamic>> qs) {
+    zones
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return ZoneModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<ZoneModel>(),
+      );
+    _markLoaded();
+  }
+
+  void _onAssignments(QuerySnapshot<Map<String, dynamic>> qs) {
+    assignments
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return AssignmentModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<AssignmentModel>(),
+      );
+    _markLoaded();
+  }
+
+  void _onContrats(QuerySnapshot<Map<String, dynamic>> qs) {
+    contrats
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return ContratModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<ContratModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededContrats) {
+      _seededContrats = true;
+      _seedCollection('contrats', seedContrats.map((c) => c.toMap()).toList());
+    }
+    _markLoaded();
+  }
+
+  void _onCollectes(QuerySnapshot<Map<String, dynamic>> qs) {
+    collectes
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return CollecteModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<CollecteModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededCollectes) {
+      _seededCollectes = true;
+      _seedCollection('collectes', seedCollectes.map((c) => c.toMap()).toList());
+    }
+    _markLoaded();
+  }
+
+  void _onFactures(QuerySnapshot<Map<String, dynamic>> qs) {
+    factures
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return FactureModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<FactureModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededFactures) {
+      _seededFactures = true;
+      _seedCollection('factures', seedFactures.map((c) => c.toMap()).toList());
+    }
+    _markLoaded();
+  }
+
+  void _onFrequences(QuerySnapshot<Map<String, dynamic>> qs) {
+    frequences
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return FrequenceModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<FrequenceModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededFrequences) {
+      _seededFrequences = true;
+      _seedCollection(
+        'frequences',
+        seedFrequences.map((c) => c.toMap()).toList(),
+      );
+    }
+    _markLoaded();
+  }
+
+  void _onVehicles(QuerySnapshot<Map<String, dynamic>> qs) {
+    vehicles
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return VehicleModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<VehicleModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededVehicles) {
+      _seededVehicles = true;
+      _seedCollection('vehicles', seedVehicles.map((c) => c.toMap()).toList());
+    }
+    _markLoaded();
+  }
+
+  void _onMaintenance(QuerySnapshot<Map<String, dynamic>> qs) {
+    maintenanceLogs
+      ..clear()
+      ..addAll(
+        qs.docs.map((d) {
+          try {
+            return VehicleMaintenanceModel.fromMap(d.data());
+          } catch (_) {
+            return null;
+          }
+        }).whereType<VehicleMaintenanceModel>(),
+      );
+    if (_seedEnabled && qs.docs.isEmpty && !_seededMaintenance) {
+      _seededMaintenance = true;
+      _seedCollection(
+        'vehicle_maintenance',
+        seedMaintenanceLogs.map((c) => c.toMap()).toList(),
+      );
+    }
     _markLoaded();
   }
 
@@ -338,6 +599,264 @@ class FirestoreBackofficeStore extends BackofficeStore {
   /// (les données viennent de l'entreprise, pas du seed).
   bool get _seedEnabled => seedIfEmpty && !_isScoped;
 
+  // --- Issues ---
+
+  @override
+  Future<void> resolveIssue(IssueModel issue) async {
+    try {
+      await _db.collection('issues').doc(issue.id).update({
+        'status': 'resolved',
+      });
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = issues.indexWhere((i) => i.id == issue.id);
+    if (index != -1) {
+      issues[index] = issue.copyWith(status: 'resolved');
+    }
+    notifyListeners();
+  }
+
+  // --- Assignments ---
+
+  @override
+  Future<void> addAssignment({
+    required String collecteurId,
+    required String collecteurName,
+    required String zoneId,
+    required String zoneName,
+    required String startTime,
+    required String endTime,
+    required String date,
+    String status = 'Active',
+  }) async {
+    final finalAgenceId = agenceId;
+    final finalSocieteId = societeId;
+    final id = nextId();
+    final assignment = AssignmentModel(
+      id: id,
+      collecteurId: collecteurId,
+      collecteurName: collecteurName,
+      zoneId: zoneId,
+      zoneName: zoneName,
+      startTime: startTime,
+      endTime: endTime,
+      date: date,
+      status: status,
+      agenceId: finalAgenceId,
+      societeId: finalSocieteId,
+    );
+    try {
+      await _db.collection('assignments').doc(id).set(assignment.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+  }
+
+  @override
+  Future<void> updateAssignment(AssignmentModel updated) async {
+    try {
+      await _db.collection('assignments').doc(updated.id).update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = assignments.indexWhere((a) => a.id == updated.id);
+    if (index != -1) assignments[index] = updated;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteAssignment(String id) async {
+    try {
+      await _db.collection('assignments').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    assignments.removeWhere((a) => a.id == id);
+    notifyListeners();
+  }
+
+  // --- Zones ---
+
+  @override
+  Future<void> addZone({
+    required String name,
+    required List<String> collectionDays,
+    required String standardPickupTime,
+  }) async {
+    final id = nextId();
+    final zone = ZoneModel(
+      id: id,
+      name: name,
+      collectionDays: collectionDays,
+      standardPickupTime: standardPickupTime,
+      agenceId: agenceId,
+      societeId: societeId,
+    );
+    try {
+      await _db.collection('zones').doc(id).set(zone.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+  }
+
+  @override
+  Future<void> updateZone(ZoneModel updated) async {
+    try {
+      await _db.collection('zones').doc(updated.id).update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = zones.indexWhere((z) => z.id == updated.id);
+    if (index != -1) zones[index] = updated;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteZone(String id) async {
+    try {
+      await _db.collection('zones').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    zones.removeWhere((z) => z.id == id);
+    notifyListeners();
+  }
+
+  // --- Vehicles ---
+
+  @override
+  Future<void> addVehicle({
+    required String plateNumber,
+    required String type,
+    String brand = '',
+    String model = '',
+    int year = 0,
+    String status = 'Active',
+    String assignedCollecteurId = '',
+    String assignedCollecteurName = '',
+    int mileage = 0,
+    String lastMaintenanceDate = '',
+    String notes = '',
+  }) async {
+    final id = nextId();
+    final vehicle = VehicleModel(
+      id: id,
+      plateNumber: plateNumber,
+      type: type,
+      brand: brand,
+      model: model,
+      year: year,
+      status: status,
+      agenceId: agenceId,
+      societeId: societeId,
+      assignedCollecteurId: assignedCollecteurId,
+      assignedCollecteurName: assignedCollecteurName,
+      mileage: mileage,
+      lastMaintenanceDate: lastMaintenanceDate,
+      notes: notes,
+    );
+    try {
+      await _db.collection('vehicles').doc(id).set(vehicle.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+  }
+
+  @override
+  Future<void> updateVehicle(VehicleModel updated) async {
+    try {
+      await _db.collection('vehicles').doc(updated.id).update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = vehicles.indexWhere((v) => v.id == updated.id);
+    if (index != -1) vehicles[index] = updated;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteVehicle(String id) async {
+    try {
+      await _db.collection('vehicles').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    vehicles.removeWhere((v) => v.id == id);
+    notifyListeners();
+  }
+
+  // --- Vehicle Maintenance ---
+
+  @override
+  Future<void> addMaintenanceLog({
+    required String vehicleId,
+    required String vehiclePlate,
+    required String type,
+    String description = '',
+    int mileageAtService = 0,
+    required String serviceDate,
+    int cost = 0,
+    String mechanicName = '',
+    String nextServiceDate = '',
+    int nextServiceMileage = 0,
+    String status = 'Completed',
+  }) async {
+    final id = nextId();
+    final log = VehicleMaintenanceModel(
+      id: id,
+      vehicleId: vehicleId,
+      vehiclePlate: vehiclePlate,
+      type: type,
+      description: description,
+      mileageAtService: mileageAtService,
+      serviceDate: serviceDate,
+      cost: cost,
+      mechanicName: mechanicName,
+      nextServiceDate: nextServiceDate,
+      nextServiceMileage: nextServiceMileage,
+      status: status,
+      agenceId: agenceId,
+      societeId: societeId,
+    );
+    try {
+      await _db.collection('vehicle_maintenance').doc(id).set(log.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    // Update vehicle's last maintenance date.
+    final vi = vehicles.indexWhere((v) => v.id == vehicleId);
+    if (vi != -1) {
+      vehicles[vi] = vehicles[vi].copyWith(
+        lastMaintenanceDate: serviceDate,
+        mileage: mileageAtService > vehicles[vi].mileage ? mileageAtService : vehicles[vi].mileage,
+      );
+    }
+  }
+
+  @override
+  Future<void> updateMaintenanceLog(VehicleMaintenanceModel updated) async {
+    try {
+      await _db.collection('vehicle_maintenance').doc(updated.id).update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = maintenanceLogs.indexWhere((m) => m.id == updated.id);
+    if (index != -1) maintenanceLogs[index] = updated;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteMaintenanceLog(String id) async {
+    try {
+      await _db.collection('vehicle_maintenance').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    maintenanceLogs.removeWhere((m) => m.id == id);
+    notifyListeners();
+  }
+
   // --- Candidatures (pré-inscriptions clients) ---
 
   @override
@@ -356,12 +875,22 @@ class FirestoreBackofficeStore extends BackofficeStore {
       agenceId: reg.agenceId,
       societeId: reg.societeId,
       collecteurId: collecteurId,
+      // L'approbation = l'abonnement : le client entre dans le mois courant.
+      subscribedAt: backofficeTodayIso(),
     );
     final canonical = _canonicalPhone(reg.phone);
     // Garde anti-doublon : une candidature déjà traitée (ou supprimée) ne
     // doit jamais créer un second client. Vérifiée AVANT l'écriture —
     // l'approbation est atomique ou rien.
-    final regDoc = await _db.collection('registrations').doc(reg.id).get();
+    // Parallelise les lectures Firestore (candidature + compte existant).
+    final regDocFuture = _db.collection('registrations').doc(reg.id).get();
+    final userDocFuture = canonical.isEmpty
+        ? Future.value(null)
+        : _db.collection('users').doc(canonical).get();
+    final regDocResults = await Future.wait([regDocFuture, userDocFuture]);
+    final regDoc = regDocResults[0] as DocumentSnapshot<Map<String, dynamic>>;
+    final userDoc = regDocResults[1];
+
     if (!regDoc.exists) {
       throw _SyncError('This application no longer exists.');
     }
@@ -369,16 +898,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       throw _SyncError('This application has already been reviewed.');
     }
 
-    // Le compte de connexion du client existe DÉJÀ (créé à la soumission,
-    // rôle `pending_client`) : l'approbation bascule son rôle vers
-    // `client`. Fallback legacy : une candidature soumise AVANT la
-    // migration Auth peut n'avoir aucun compte — on le crée alors (avec le
-    // mot de passe choisi par le client, encore stocké sur la candidature).
     var uid = '';
     var authEmail = '';
-    final userDoc = canonical.isEmpty
-        ? null
-        : await _db.collection('users').doc(canonical).get();
     if (userDoc != null && userDoc.exists) {
       uid = userDoc.data()?['uid'] as String? ?? '';
     } else if (reg.password.isNotEmpty && canonical.isNotEmpty) {
@@ -584,23 +1105,27 @@ class FirestoreBackofficeStore extends BackofficeStore {
         {'collecteurId': collecteurId},
         SetOptions(merge: true),
       );
-      // 2. Le compte de connexion est mis à jour s'il existe.
-      if (canonical.isNotEmpty) {
-        final login = await _db.collection('users').doc(canonical).get();
-        if (login.exists) {
-          batch.update(login.reference, {'collecteurId': collecteurId});
-        }
+      // 2 & 3. Parallélise les lectures Firestore (login + collectes).
+      final loginFuture = canonical.isNotEmpty
+          ? _db.collection('users').doc(canonical).get()
+          : Future.value(null);
+      final collectesFuture = (newName.isNotEmpty && oldName.isNotEmpty)
+          ? _db
+              .collection('collectes')
+              .where('client', isEqualTo: client.name)
+              .get()
+          : Future.value(null);
+      final parallelResults =
+          await Future.wait([loginFuture, collectesFuture]);
+      final login = parallelResults[0]
+          as DocumentSnapshot<Map<String, dynamic>>?;
+      final upcoming = parallelResults[1]
+          as QuerySnapshot<Map<String, dynamic>>?;
+
+      if (login != null && login.exists) {
+        batch.update(login.reference, {'collecteurId': collecteurId});
       }
-      // 3. Les collectes à venir de ce client portant l'ancien collecteur.
-      //    ⚠️ CollecteModel n'a pas encore d'agenceId : la correspondance se
-      //    fait par NOM de client. Tant que deux agences ne partagent pas le
-      //    même nom de client, c'est sans risque — à réviser quand `collectes`
-      //    portera agenceId (multi-tenant).
-      if (newName.isNotEmpty && oldName.isNotEmpty) {
-        final upcoming = await _db
-            .collection('collectes')
-            .where('client', isEqualTo: client.name)
-            .get();
+      if (upcoming != null) {
         for (final doc in upcoming.docs) {
           final data = doc.data();
           final status = data['status'] as String? ?? '';
@@ -644,6 +1169,15 @@ class FirestoreBackofficeStore extends BackofficeStore {
     String password = '',
     String agenceId = '',
     String societeId = '',
+    String adresse = '',
+    String quartier = '',
+    double? latitude,
+    double? longitude,
+    String photoUrl = '',
+    String housingType = '',
+    List<String> collectionDays = const [],
+    String pickupTime = '',
+    String subscribedAt = '',
   }) async {
     final finalAgenceId = agenceId.isNotEmpty ? agenceId : this.agenceId;
     final finalSocieteId = societeId.isNotEmpty ? societeId : this.societeId;
@@ -656,6 +1190,13 @@ class FirestoreBackofficeStore extends BackofficeStore {
       status: status,
       agenceId: finalAgenceId,
       societeId: finalSocieteId,
+      adresse: adresse,
+      quartier: quartier,
+      latitude: latitude,
+      longitude: longitude,
+      photoUrl: photoUrl,
+      housingType: housingType,
+      subscribedAt: subscribedAt.isNotEmpty ? subscribedAt : backofficeTodayIso(),
     );
     await _saveWithLogin(
       collection: 'clients',
@@ -669,6 +1210,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       subscriptionPlan: plan,
       isSubscribed: _isActive(status),
       collecteurId: model.collecteurId,
+      collectionDays: collectionDays,
+      pickupTime: pickupTime,
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
     final index = clients.indexWhere((c) => c.id == model.id);
@@ -681,7 +1224,11 @@ class FirestoreBackofficeStore extends BackofficeStore {
   }
 
   @override
-  Future<void> updateClient(ClientModel updated, {String password = ''}) async {
+  Future<void> updateClient(ClientModel updated, {
+    String password = '',
+    List<String> collectionDays = const [],
+    String pickupTime = '',
+  }) async {
     ClientModel? old;
     for (final c in clients) {
       if (c.id == updated.id) {
@@ -708,6 +1255,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
       subscriptionPlan: updated.plan,
       isSubscribed: _isActive(updated.status),
       collecteurId: updated.collecteurId,
+      collectionDays: collectionDays,
+      pickupTime: pickupTime,
       oldPhone: old != null && old.phone != updated.phone ? old.phone : null,
     );
     final index = clients.indexWhere((c) => c.id == updated.id);
@@ -752,6 +1301,10 @@ class FirestoreBackofficeStore extends BackofficeStore {
     String password = '',
     String agenceId = '',
     String societeId = '',
+    String cni = '',
+    String photoUrl = '',
+    String vehicle = '',
+    int salary = 0,
   }) async {
     final finalAgenceId = agenceId.isNotEmpty ? agenceId : this.agenceId;
     final finalSocieteId = societeId.isNotEmpty ? societeId : this.societeId;
@@ -764,6 +1317,10 @@ class FirestoreBackofficeStore extends BackofficeStore {
       status: status,
       agenceId: finalAgenceId,
       societeId: finalSocieteId,
+      cni: cni,
+      photoUrl: photoUrl,
+      vehicle: vehicle,
+      salary: salary,
     );
     await _saveWithLogin(
       collection: 'collecteurs',
@@ -775,6 +1332,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
       password: password,
       active: _isActive(status),
       whitelist: true,
+      collecteurId: model.id,
     );
     // Upsert : le snapshot peut déjà avoir appliqué ce document.
     final index = collecteurs.indexWhere((c) => c.id == model.id);
@@ -851,6 +1409,246 @@ class FirestoreBackofficeStore extends BackofficeStore {
     notifyListeners();
   }
 
+  // --- Contrats CRUD (persistés dans Firestore) ---
+
+  @override
+  Future<void> addContrat({
+    required String client,
+    required String frequence,
+    required int prix,
+    required String status,
+  }) async {
+    final model = ContratModel(
+      id: nextId(),
+      client: client,
+      frequence: frequence,
+      prix: prix,
+      status: status,
+      agenceId: agenceId,
+      societeId: societeId,
+    );
+    try {
+      await _db.collection('contrats').doc(model.id).set(model.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = contrats.indexWhere((c) => c.id == model.id);
+    if (index == -1) {
+      contrats.add(model);
+    } else {
+      contrats[index] = model;
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> updateContrat(ContratModel updated) async {
+    try {
+      await _db
+          .collection('contrats')
+          .doc(updated.id)
+          .update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = contrats.indexWhere((c) => c.id == updated.id);
+    if (index != -1) {
+      contrats[index] = updated;
+    } else {
+      contrats.add(updated);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteContrat(String id) async {
+    try {
+      await _db.collection('contrats').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    contrats.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  // --- Collectes CRUD (persistées dans Firestore) ---
+
+  @override
+  Future<void> addCollecte({
+    required String client,
+    required String collecteur,
+    required String date,
+    required double poids,
+    required String status,
+  }) async {
+    final model = CollecteModel(
+      id: nextId(),
+      client: client,
+      collecteur: collecteur,
+      date: date,
+      poids: poids,
+      status: status,
+      agenceId: agenceId,
+      societeId: societeId,
+    );
+    try {
+      await _db.collection('collectes').doc(model.id).set(model.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = collectes.indexWhere((c) => c.id == model.id);
+    if (index == -1) {
+      collectes.add(model);
+    } else {
+      collectes[index] = model;
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> updateCollecte(CollecteModel updated) async {
+    try {
+      await _db
+          .collection('collectes')
+          .doc(updated.id)
+          .update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = collectes.indexWhere((c) => c.id == updated.id);
+    if (index != -1) {
+      collectes[index] = updated;
+    } else {
+      collectes.add(updated);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteCollecte(String id) async {
+    try {
+      await _db.collection('collectes').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    collectes.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  // --- Factures CRUD (persistées dans Firestore) ---
+
+  @override
+  Future<void> addFacture({
+    required String client,
+    required int montant,
+    required String echeance,
+    required String status,
+  }) async {
+    final model = FactureModel(
+      id: nextId(),
+      client: client,
+      montant: montant,
+      echeance: echeance,
+      status: status,
+      agenceId: agenceId,
+      societeId: societeId,
+    );
+    try {
+      await _db.collection('factures').doc(model.id).set(model.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = factures.indexWhere((c) => c.id == model.id);
+    if (index == -1) {
+      factures.add(model);
+    } else {
+      factures[index] = model;
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> updateFacture(FactureModel updated) async {
+    try {
+      await _db
+          .collection('factures')
+          .doc(updated.id)
+          .update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = factures.indexWhere((c) => c.id == updated.id);
+    if (index != -1) {
+      factures[index] = updated;
+    } else {
+      factures.add(updated);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteFacture(String id) async {
+    try {
+      await _db.collection('factures').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    factures.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  // --- Frequences CRUD (persistées dans Firestore) ---
+
+  @override
+  Future<void> addFrequence({
+    required String libelle,
+    required int jours,
+  }) async {
+    final model = FrequenceModel(id: nextId(), libelle: libelle, jours: jours);
+    try {
+      await _db.collection('frequences').doc(model.id).set(model.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = frequences.indexWhere((c) => c.id == model.id);
+    if (index == -1) {
+      frequences.add(model);
+    } else {
+      frequences[index] = model;
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> updateFrequence(FrequenceModel updated) async {
+    try {
+      await _db
+          .collection('frequences')
+          .doc(updated.id)
+          .update(updated.toMap());
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    final index = frequences.indexWhere((c) => c.id == updated.id);
+    if (index != -1) {
+      frequences[index] = updated;
+    } else {
+      frequences.add(updated);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> deleteFrequence(String id) async {
+    try {
+      await _db.collection('frequences').doc(id).delete();
+    } catch (error) {
+      throw _SyncError(_friendlyError(error));
+    }
+    frequences.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
   // --- Comptes de connexion ---
 
   /// Écrit l'entité + synchronise son compte de connexion `users/{téléphone}`
@@ -886,6 +1684,8 @@ class FirestoreBackofficeStore extends BackofficeStore {
     bool whitelist = false,
     String? oldPhone,
     String collecteurId = '',
+    List<String> collectionDays = const [],
+    String pickupTime = '',
   }) async {
     final canonical = _canonicalPhone(phone);
     final oldCanonical = oldPhone == null ? '' : _canonicalPhone(oldPhone);
@@ -893,8 +1693,20 @@ class FirestoreBackofficeStore extends BackofficeStore {
         ? null
         : _db.collection('users').doc(canonical);
 
+    // Parallelise les deux lectures Firestore pour réduire la latence.
+    final futures = <Future<DocumentSnapshot<Map<String, dynamic>>>>[];
+    if (loginRef != null) futures.add(loginRef.get());
+    futures.add(_db.collection(collection).doc(id).get());
+    final results = await Future.wait(futures);
+
     DocumentSnapshot<Map<String, dynamic>>? existing;
-    if (loginRef != null) existing = await loginRef.get();
+    int idx = 0;
+    if (loginRef != null) {
+      existing = results[idx++];
+    }
+    final oldEntityDoc = results[idx];
+    final oldEntityPassword =
+        oldEntityDoc.data()?['password'] as String? ?? '';
 
     if (active && loginRef != null && existing!.exists) {
       final isConsole = existing.data()?['consoleCreated'] == true;
@@ -905,11 +1717,6 @@ class FirestoreBackofficeStore extends BackofficeStore {
         );
       }
     }
-
-    // Ancien mot de passe de l'entité (pour détecter un changement).
-    final oldEntityDoc = await _db.collection(collection).doc(id).get();
-    final oldEntityPassword =
-        oldEntityDoc.data()?['password'] as String? ?? '';
 
     // Compte Firebase Auth (créé/recréé AVANT le batch).
     String authUid = '';
@@ -954,7 +1761,7 @@ class FirestoreBackofficeStore extends BackofficeStore {
     if (loginRef != null) {
       if (active) {
         if (authUid.isNotEmpty) {
-          batch.set(loginRef, {
+          final loginData = <String, dynamic>{
             'phoneNumber': canonical,
             'fullName': fullName,
             'role': role,
@@ -967,7 +1774,17 @@ class FirestoreBackofficeStore extends BackofficeStore {
             // Marqueur : compte créé/géré par le backoffice admin — seul ce
             // type de compte peut être écrasé ou supprimé proprement.
             'consoleCreated': true,
-          });
+          };
+          // Clients created from the backoffice receive the manager's
+          // selected collection_days so tournee_service shows them on the
+          // collector dashboard immediately.
+          if (role == 'client' && collectionDays.isNotEmpty) {
+            loginData['collection_days'] = collectionDays;
+          }
+          if (role == 'client' && pickupTime.isNotEmpty) {
+            loginData['pickup_time'] = pickupTime;
+          }
+          batch.set(loginRef, loginData);
           batch.set(_db.collection('auth_profiles').doc(authUid), {
             'uid': authUid,
             'phone': canonical,

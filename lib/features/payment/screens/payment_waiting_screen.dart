@@ -122,7 +122,7 @@ class _PaymentWaitingScreenState extends State<PaymentWaitingScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: dGold.withOpacity(0.15),
+                color: dGold.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -183,7 +183,7 @@ class _PaymentWaitingScreenState extends State<PaymentWaitingScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: dGold.withOpacity(0.12),
+                  color: dGold.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(

@@ -10,30 +10,30 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('agences').doc('ag1').set({
       'id': 'ag1',
-      'societe': 'WastePro Douala Ltd',
+      'societe': 'WastePro Yaoundé SARL',
       'societeId': 'so1',
-      'ville': 'Douala — Bonanjo',
+      'ville': 'Yaoundé — Bastos',
       'responsable': 'Jean Dooh',
       'telephone': '+237 677 12 34 56',
       'status': 'Active',
     });
     await db.collection('agences').doc('ag2').set({
       'id': 'ag2',
-      'societe': 'WastePro Douala Ltd',
+      'societe': 'WastePro Yaoundé SARL',
       'societeId': 'so1',
-      'ville': 'Douala — Bassa',
+      'ville': 'Yaoundé — Nlongkak',
       'responsable': 'Aïcha Bello',
       'telephone': '+237 699 33 67 41',
       'status': 'Active',
     });
-    // Les chefs d'agence (comptes console) : seules les agences couvertes
-    // par un chef actif sont proposées aux clients.
+    // Agency managers (console accounts): only agencies covered by
+    // an active manager are offered to clients.
     await db.collection('utilisateurs').doc('u1').set({
       'id': 'u1',
       'nom': 'Jean Dooh',
       'telephone': '+237 677 12 34 56',
       'role': 'Agency Manager',
-      'agence': 'Douala — Bonanjo',
+      'agence': 'Yaoundé — Bastos',
       'societeId': 'so1',
       'agenceId': 'ag1',
       'status': 'Active',
@@ -44,7 +44,7 @@ void main() {
       'nom': 'Aïcha Bello',
       'telephone': '+237 699 33 67 41',
       'role': 'Agency Manager',
-      'agence': 'Douala — Bassa',
+      'agence': 'Yaoundé — Nlongkak',
       'societeId': 'so1',
       'agenceId': 'ag2',
       'status': 'Active',
@@ -64,34 +64,34 @@ void main() {
   }
 
   testWidgets(
-    'suggestions d agences selon la zone saisie, sélection + soumission',
+    'agency suggestions based on entered zone, selection + submission',
     (tester) async {
       final db = await seededDb();
       await pumpPreRegister(tester, db);
 
-      // Champs du formulaire.
+      // Form fields.
       expect(find.text('Apply as a client'), findsOneWidget);
 
-      // Remplir les infos (ordre : nom, téléphone, zone, pass, confirm).
+      // Fill in the info (order: name, phone, zone, password, confirm).
       await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
       await tester.enterText(
-        find.byType(TextFormField).at(1), // téléphone (sans +237)
+        find.byType(TextFormField).at(1), // phone (without +237)
         '698 22 44 66',
       );
-      // Zone « Douala: Akwa » → suggère les agences de Douala.
+      // Zone "Yaoundé: Bastos" → suggests agencies in Yaoundé.
       await tester.enterText(
         find.byType(TextFormField).at(2),
-        'Douala: Akwa',
+        'Yaoundé: Bastos',
       );
       await tester.pumpAndSettle();
 
-      // Les 2 agences de Douala sont proposées comme chips.
-      expect(find.text('Agencies near douala'), findsOneWidget);
-      expect(find.text('Douala — Bonanjo'), findsWidgets);
-      expect(find.text('Douala — Bassa'), findsWidgets);
+      // The 2 Yaoundé agencies are offered as chips.
+      expect(find.text('Agencies near yaoundé'), findsOneWidget);
+      expect(find.text('Yaoundé — Bastos'), findsWidgets);
+      expect(find.text('Yaoundé — Nlongkak'), findsWidgets);
 
       // Choisir l'agence via la recherche libre.
-      await tester.tap(find.text('Douala — Bonanjo').last);
+      await tester.tap(find.text('Yaoundé — Bastos').last);
       await tester.pumpAndSettle();
       expect(find.text('Selected agency'), findsOneWidget);
 
@@ -174,12 +174,12 @@ void main() {
 
     await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
     await tester.enterText(find.byType(TextFormField).at(1), '698 22 44 66');
-    await tester.enterText(find.byType(TextFormField).at(2), 'Bonanjo');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Bastos');
     await tester.pumpAndSettle();
     // La zone « Bonanjo » correspond à UNE seule agence : elle est déjà
     // auto-sélectionnée — la puce peut être hors écran, le tap est optionnel.
-    await tester.ensureVisible(find.text('Douala — Bonanjo').last);
-    await tester.tap(find.text('Douala — Bonanjo').last);
+    await tester.ensureVisible(find.text('Yaoundé — Bastos').last);
+    await tester.tap(find.text('Yaoundé — Bastos').last);
     await tester.pumpAndSettle();
 
     final passFields = find.byType(TextFormField);
@@ -200,7 +200,7 @@ void main() {
 
     // La recherche d'agence explique qu'il n'y a pas encore d'agence.
     await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
-    await tester.enterText(find.byType(TextFormField).at(2), 'Bonanjo');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Bastos');
     await tester.pumpAndSettle();
     expect(find.text('No agency available yet'), findsOneWidget);
   });
@@ -213,9 +213,9 @@ void main() {
       // Une agence existe (ag1) mais AUCUN chef d'agence ne la gère.
       await db.collection('agences').doc('ag1').set({
         'id': 'ag1',
-        'societe': 'WastePro Douala Ltd',
+        'societe': 'WastePro Yaoundé SARL',
         'societeId': 'so1',
-        'ville': 'Douala — Bonanjo',
+        'ville': 'Yaoundé — Bastos',
         'responsable': 'Jean Dooh',
         'telephone': '+237 677 12 34 56',
         'status': 'Active',
@@ -224,12 +224,12 @@ void main() {
 
       await tester.enterText(find.byType(TextFormField).at(0), 'Carine Mbappe');
       await tester.enterText(find.byType(TextFormField).at(1), '698 22 44 66');
-      await tester.enterText(find.byType(TextFormField).at(2), 'Bonanjo');
+      await tester.enterText(find.byType(TextFormField).at(2), 'Bastos');
       await tester.pumpAndSettle();
 
       // L'agence existe mais n'est PAS proposée (aucun chef pour la
       // traiter) — message dédié au lieu de la liste.
-      expect(find.text('Douala — Bonanjo'), findsNothing);
+      expect(find.text('Yaoundé — Bastos'), findsNothing);
       expect(find.textContaining('No agency has a manager yet'), findsOneWidget);
 
       // Taper le nom de l'agence ne la sélectionne pas (pas de chef)…
@@ -239,7 +239,7 @@ void main() {
               w is TextField &&
               (w.decoration?.hintText ?? '').contains('type your agency'),
         ),
-        'Douala — Bonanjo',
+        'Yaoundé — Bastos',
       );
       await tester.pumpAndSettle();
       final passFields = find.byType(TextFormField);
@@ -257,4 +257,20 @@ void main() {
       expect((await db.collection('registrations').get()).docs, isEmpty);
     },
   );
+
+  testWidgets('le champ zone offre un bouton « choisir sur la carte »',
+      (tester) async {
+    final db = await seededDb();
+    await pumpPreRegister(tester, db);
+
+    // Le bouton carte (MapPickerScreen) est présent à côté du champ zone.
+    final mapButton = find.byKey(const Key('zone_pick_map'));
+    expect(mapButton, findsOneWidget);
+
+    // Il ouvre bien MapPickerScreen.
+    await tester.tap(mapButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Set Collection Point'), findsOneWidget);
+  });
 }

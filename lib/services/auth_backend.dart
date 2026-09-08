@@ -3,22 +3,22 @@ import 'package:firebase_core/firebase_core.dart';
 
 import '../firebase_options.dart';
 
-/// Erreur métier du backend d'authentification.
+/// Business error from the authentication backend.
 ///
-/// [code] est stable et indépendant des codes SDK (qui varient selon les
-/// plateformes et les versions) — l'écran de login s'appuie dessus pour
-/// traduire en message utilisateur :
-///   - `user-not-found` : aucun compte pour cet email ;
-///   - `wrong-password` : le compte existe mais le mot de passe est faux ;
-///   - `invalid-credentials` : l'API Auth ne permet PAS de départager
-///     « aucun compte » de « mauvais mot de passe » (erreur fusionnée
-///     `invalid-credential` + protection contre l'énumération d'emails
-///     activée sur le projet) — AuthService consulte la collection
-///     `users` pour trancher ;
-///   - `user-disabled` : le compte a été désactivé (rejet, suspension) ;
-///   - `email-already-in-use` : création impossible, compte existant ;
-///   - `network` : problème de connexion (retry côté AuthService) ;
-///   - `unknown` : toute autre erreur.
+/// [code] is stable and independent of SDK codes (which vary across
+/// platforms and versions) — the login screen uses it to translate
+/// into user-facing messages:
+///   - `user-not-found`: no account for this email;
+///   - `wrong-password`: the account exists but the password is wrong;
+///   - `invalid-credentials`: the Auth API CANNOT distinguish
+///     "no account" from "wrong password" (merged
+///     `invalid-credential` + email enumeration protection
+///     enabled on the project) — AuthService consults the `users`
+///     collection to decide;
+///   - `user-disabled`: the account has been disabled (rejected, suspended);
+///   - `email-already-in-use`: creation impossible, existing account;
+///   - `network`: connection problem (retry on AuthService side);
+///   - `unknown`: any other error.
 class AuthBackendException implements Exception {
   AuthBackendException(this.code, [this.message = '']);
 
@@ -29,18 +29,18 @@ class AuthBackendException implements Exception {
   String toString() => message.isEmpty ? code : message;
 }
 
-/// Port d'authentification par-dessus Firebase Auth.
+/// Authentication port over Firebase Auth.
 ///
-/// L'app ne parle jamais à `FirebaseAuth` directement : elle passe par ce
-/// port, ce qui permet
-///   - aux tests d'injecter un backend en mémoire (pas de plugin requis) ;
-///   - de garder une seule traduction des erreurs (voir [AuthService]).
+/// The app never talks to `FirebaseAuth` directly: it goes through this
+/// port, which allows
+///   - tests to inject an in-memory backend (no plugin required);
+///   - keeping a single error translation (see [AuthService]).
 ///
-/// ⚠️ Gestion de session : les opérations « pour un autre compte »
-/// ([createAccount], [updatePassword], [deleteAccount]) passent par une
-/// **instance Firebase temporaire** — elles ne touchent JAMAIS la session
-/// courante. Sans ça, `createUserWithEmailAndPassword` remplacerait la
-/// session de l'admin console par le nouveau compte créé.
+/// SESSION MANAGEMENT: operations "for another account"
+/// ([createAccount], [updatePassword], [deleteAccount]) go through a
+/// **temporary Firebase instance** — they NEVER touch the current session.
+/// Without this, `createUserWithEmailAndPassword` would replace the
+/// admin console session with the newly created account.
 abstract class AuthBackend {
   /// Connecte un compte email + mot de passe sur l'app principale et
   /// renvoie son `uid` (la session est persistée par Firebase Auth).
@@ -86,10 +86,10 @@ abstract class AuthBackend {
 class FirebaseAuthBackend implements AuthBackend {
   FirebaseAuthBackend({FirebaseAuth? auth}) : _auth = auth;
 
-  /// Résolu paresseusement : la construction ne touche jamais à
-  /// `FirebaseAuth.instance` (injecté par les tests ou résolu au premier
-  /// usage — un backend construit avant `Firebase.initializeApp` ne doit
-  /// pas crasher).
+  /// Lazily resolved: construction never touches
+  /// `FirebaseAuth.instance` (injected by tests or resolved on first
+  /// use — a backend built before `Firebase.initializeApp` must not
+  /// crash).
   FirebaseAuth? _auth;
 
   FirebaseAuth get _firebaseAuth => _auth ??= FirebaseAuth.instance;
@@ -193,8 +193,8 @@ class FirebaseAuthBackend implements AuthBackend {
   @override
   Future<void> signOut() => _firebaseAuth.signOut();
 
-  /// Exécute [action] dans une instance Firebase temporaire (auth isolée),
-  /// puis détruit l'instance — la session de l'app principale reste intacte.
+/// Runs [action] in a temporary Firebase instance (isolated auth),
+  /// then destroys the instance — the main app session remains intact.
   Future<T> _runInTempApp<T>(Future<T> Function(FirebaseAuth auth) action) async {
     final app = await Firebase.initializeApp(
       name: 'auth-ops-${DateTime.now().microsecondsSinceEpoch}',

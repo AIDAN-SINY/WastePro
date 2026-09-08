@@ -19,7 +19,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'console admin E2E : création d\'une société persistée dans Firestore',
+    'admin console E2E: creating a company persisted in Firestore',
     (tester) async {
       // Desktop viewport so the console renders the table layout.
       tester.view.physicalSize = const Size(1440, 900);
@@ -38,7 +38,7 @@ void main() {
       expect(
         store.error,
         isNull,
-        reason: 'Règles Firestore — ${store.error ?? 'ok'}',
+        reason: 'Firestore rules — ${store.error ?? 'ok'}',
       );
 
       await tester.pumpWidget(
@@ -55,7 +55,7 @@ void main() {
       await _settle(tester, 10);
       expect(find.text('Company name'), findsOneWidget);
 
-      // 3) Remplir le formulaire (nom unique pour ce run).
+      // 3) Fill in the form (unique name for this run).
       final name = 'Test E2E ${DateTime.now().millisecondsSinceEpoch}';
       await tester.enterText(find.byType(TextFormField).at(0), name);
       await tester.enterText(find.byType(TextFormField).at(1), 'Yaoundé E2E');
@@ -68,10 +68,10 @@ void main() {
       expect(
         find.text(name),
         findsOneWidget,
-        reason: 'La société doit apparaître dans le tableau de la console',
+        reason: 'The company must appear in the console table',
       );
 
-      // 5) Preuve de persistance : lire directement dans Firestore.
+      // 5) Proof of persistence: read directly from Firestore.
       final snapshot = await FirebaseFirestore.instance
           .collection('societes')
           .where('raisonSociale', isEqualTo: name)
@@ -79,10 +79,10 @@ void main() {
       expect(
         snapshot.docs,
         isNotEmpty,
-        reason: 'La société doit être réellement persistée dans Firestore',
+        reason: 'The company must be actually persisted in Firestore',
       );
 
-      // 6) Nettoyage : supprimer la société de test et vérifier la sync temps réel.
+      // 6) Cleanup: delete the test company and verify real-time sync.
       for (final doc in snapshot.docs) {
         await doc.reference.delete();
       }
@@ -90,7 +90,7 @@ void main() {
       expect(
         find.text(name),
         findsNothing,
-        reason: 'Après suppression Firestore, la ligne doit disparaître',
+        reason: 'After Firestore deletion, the row must disappear',
       );
 
       // Flush les toasts automatiques.

@@ -5,19 +5,12 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config.dart';
 import '../../../providers/user_provider.dart';
-import '../../../services/auth_service.dart';
-import '../../../services/payment_service.dart';
+import 'checkout_screen.dart';
 
 /// Collecte supplémentaire à la demande — payée via CamPay (Mobile Money).
-///
-/// L'utilisateur paie un forfait (1 000 XAF) pour une collecte en plus du
-/// contrat : une transaction est enregistrée (`transactions`) et une
-/// demande de collecte est créée (`pickups`) avec `needsPickup` sur le
-/// profil client.
 class ExtraPickupScreen extends StatefulWidget {
   const ExtraPickupScreen({super.key, FirebaseFirestore? db}) : _db = db;
 
-  /// Base injectée par les tests ; sinon l'instance par défaut.
   final FirebaseFirestore? _db;
 
   /// Prix du forfait collecte supplémentaire (XAF).
@@ -28,15 +21,15 @@ class ExtraPickupScreen extends StatefulWidget {
 }
 
 class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
-  bool _isProcessing = false;
-
   // Design System Colors
-  final Color dBg = const Color(0xFFF5F7F6);
+  final Color dBg = const Color(0xFFF6F4EE);
   final Color dSurface = const Color(0xFFFFFFFF);
   final Color dGreen = const Color(0xFF0F3D2E);
-  final Color dGold = const Color(0xFFD4A853);
+  final Color dGold = const Color(0xFFE8A33D);
   final Color dMuted = const Color(0xFF7C8A80);
-  final Color dBorder = const Color(0xFFE8EBE9);
+  final Color dBorder = const Color(0xFFEAE5D8);
+  final Color dText = const Color(0xFF182620);
+  final Color dGoldSoft = const Color(0xFFFBEDD6);
 
   FirebaseFirestore get _db => widget._db ?? FirebaseFirestore.instance;
 
@@ -45,54 +38,48 @@ class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
     final user = userProvider.user;
     if (user == null) return;
 
-    setState(() => _isProcessing = true);
-    try {
-      final result = await PaymentService(db: _db).charge(
-        context: context,
-        amount: ExtraPickupScreen.price,
-        currency: AppConfig.currency,
-        email: AuthService.emailFor(user.phoneNumber),
-        phone: user.phoneNumber,
-        name: user.fullName,
-        title: 'Extra pickup',
-        type: 'pickup',
-        description: 'On-demand waste collection (1 bag)',
-        txRefPrefix: 'PICKUP',
-      );
+    // Navigate to the CheckoutScreen — handles Campay Mobile Money flow.
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(
+          amount: ExtraPickupScreen.price,
+          description: 'Extra pickup',
+          txRefPrefix: 'PICKUP',
+          onPaymentSuccess: () => _finalizePickup(
+            phone: user.phoneNumber,
+            collecteurId: user.collecteurId,
+          ),
+        ),
+      ),
+    );
+  }
 
+  /// Creates the pickup request after a confirmed payment.
+  Future<void> _finalizePickup({
+    required String phone,
+    required String collecteurId,
+  }) async {
+    try {
+      await _createPickupRequest(phone, collecteurId);
       if (!mounted) return;
-      if (result.success) {
-        await _createPickupRequest(user.phoneNumber, user.collecteurId);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Payment confirmed! Your extra pickup has been requested.',
-            ),
-            backgroundColor: dGreen,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Payment confirmed! Your extra pickup has been requested.',
           ),
-        );
-        Navigator.of(context).pop();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment not completed — no charge was made.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+          backgroundColor: dGreen,
+        ),
+      );
+      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
-  /// Crée la demande de collecte supplémentaire et marque le client comme
-  /// ayant besoin d'une collecte (visible côté collecteur/backoffice).
   Future<void> _createPickupRequest(String phone, String collecteurId) async {
     final id = 'PKP-${DateTime.now().millisecondsSinceEpoch}';
     await _db.collection('pickups').doc(id).set({
@@ -107,9 +94,7 @@ class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
     });
     try {
       await _db.collection('users').doc(phone).update({'needsPickup': true});
-    } catch (_) {
-      // Profil absent (legacy) : la demande de collecte suffit.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -118,69 +103,82 @@ class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
       backgroundColor: dBg,
       appBar: AppBar(
         title: Text(
-          'Extra Pickup',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
+          'Request Pickup',
+          style: GoogleFonts.sora(
+            fontWeight: FontWeight.w600,
             color: dGreen,
+            fontSize: 16,
           ),
         ),
         backgroundColor: dSurface,
         elevation: 0,
         foregroundColor: dGreen,
+        centerTitle: false,
       ),
-      body: _isProcessing
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF0F3D2E)),
-            )
-          : SingleChildScrollView(
+      body: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Need an extra collection?',
-                    style: GoogleFonts.sora(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: dGreen,
+                  // Hero icon + title
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: dGoldSoft,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.local_shipping_rounded,
+                      color: dGold,
+                      size: 26,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Text(
-                    'Request a one-time pickup outside your regular schedule. '
-                    'Pay securely with MTN MoMo or Orange Money.',
-                    style: GoogleFonts.inter(fontSize: 14, color: dMuted),
+                    'Need an extra pickup?',
+                    style: GoogleFonts.sora(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: dText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Request a one-time collection outside your regular schedule.',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: dMuted,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 24),
+
+                  // Price card
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
                       color: dSurface,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: dBorder),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
-                            color: dGold.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(16),
+                            color: dGoldSoft,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
-                            Icons.local_shipping_rounded,
-                            color: Color(0xFFD4A853),
-                            size: 24,
+                          child: Icon(
+                            Icons.inventory_2_outlined,
+                            color: dGold,
+                            size: 22,
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,17 +186,17 @@ class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
                               Text(
                                 'Extra pickup (1 bag)',
                                 style: GoogleFonts.sora(
-                                  color: dGreen,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  color: dText,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 2),
                               Text(
-                                'One-time collection, on demand',
-                                style: GoogleFonts.inter(
+                                'One-time on-demand collection',
+                                style: TextStyle(
                                   color: dMuted,
-                                  fontSize: 13,
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -208,70 +206,102 @@ class _ExtraPickupScreenState extends State<ExtraPickupScreen> {
                           '${ExtraPickupScreen.price.toStringAsFixed(0)} XAF',
                           style: GoogleFonts.sora(
                             color: dGreen,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // What's included
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: dSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: dBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'What\'s included',
+                          style: GoogleFonts.sora(
+                            color: dText,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _includedItem(Icons.check_circle_outline, '1 bag collected within 24 hours'),
+                        const SizedBox(height: 8),
+                        _includedItem(Icons.check_circle_outline, 'Assigned to your regular collector'),
+                        const SizedBox(height: 8),
+                        _includedItem(Icons.check_circle_outline, 'Secure payment via Mobile Money'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Pay button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isProcessing ? null : _handlePay,
+                      onPressed: _handlePay,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: dGreen,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 0,
                       ),
                       child: Text(
-                        'PAY AND REQUEST',
-                        style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                        'PAY & REQUEST PICKUP',
+                        style: GoogleFonts.sora(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Center(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.lock, size: 14, color: dMuted),
-                        const SizedBox(width: 6),
+                        Icon(Icons.lock_outline, size: 13, color: dMuted),
+                        const SizedBox(width: 5),
                         Text(
-                          'Secure checkout via CamPay (MTN MoMo / Orange Money)',
-                          style: GoogleFonts.inter(
-                            color: dMuted,
-                            fontSize: 12,
-                          ),
+                          'Secure payment via CamPay',
+                          style: TextStyle(color: dMuted, fontSize: 11),
                         ),
                       ],
                     ),
                   ),
-                  if (AppConfig.isCampayDemo) ...[ 
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: dGold.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        'Demo mode — CamPay sandbox caps payments at '
-                        '${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF. '
-                        'Real price applies in production.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(color: dMuted, fontSize: 11, height: 1.4),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _includedItem(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, color: dGreen, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: dText, fontSize: 12.5),
+          ),
+        ),
+      ],
     );
   }
 }

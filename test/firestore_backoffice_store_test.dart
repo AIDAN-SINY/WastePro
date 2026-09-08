@@ -32,13 +32,13 @@ void main() {
       expect(store.clients.length, seedClients.length);
       expect(store.collecteurs.length, seedCollecteurs.length);
 
-      // Le seed est bien écrit dans Firestore (ids déterministes 'cl1'...).
+      // The seed is correctly written to Firestore (deterministic ids 'cl1'...).
       final clients = await db.collection('clients').get();
       expect(clients.docs.length, seedClients.length);
       final collecteurs = await db.collection('collecteurs').get();
       expect(collecteurs.docs.length, seedCollecteurs.length);
 
-      // Les collecteurs seedés actifs sont pré-approuvés (liste blanche).
+      // Active seeded collectors are pre-approved (whitelist).
       final whitelist = await db.collection('collectors').get();
       final active = seedCollecteurs.where((c) => c.status == 'Active').length;
       expect(whitelist.docs.length, active);
@@ -65,9 +65,9 @@ void main() {
     await store.initialLoad;
     await _settle();
 
-    // Le document existant est conservé, pas écrasé par le seed.
+    // The existing document is preserved, not overwritten by the seed.
     expect(store.clients.single.name, 'Client Existant');
-    // La collection collecteurs, vide, est seedée.
+    // The empty collectors collection is seeded.
     expect(store.collecteurs.length, seedCollecteurs.length);
 
     store.dispose();
@@ -98,9 +98,9 @@ void main() {
       final clientDoc = await db.collection('clients').get();
       expect(clientDoc.docs.single.data()['name'], 'Claude Nguema');
 
-      // Le compte de connexion existe : rôle client + uid Auth (le mot de
-      // passe vit dans Firebase Auth, jamais dans le doc), pour que la
-      // personne puisse se connecter à son interface client.
+      // The login account exists: client role + Auth uid (the password lives
+      // in Firebase Auth, never in the doc), so the person can log in to
+      // their client interface.
       final login = await db.collection('users').doc('+237612345678').get();
       expect(login.exists, isTrue);
       expect(login.data()?['role'], 'client');
@@ -171,7 +171,7 @@ void main() {
     expect(login.data()?['password'], isNull);
     expect(login.data()?['fullName'], 'Boris Ndongo');
 
-    // Le numéro est pré-approuvé pour l'auto-inscription.
+    // The number is pre-approved for self-registration.
     final whitelist = await db
         .collection('collectors')
         .doc('+237655000000')
@@ -365,8 +365,8 @@ void main() {
     'never deletes a real account when removing an entity sharing its phone',
     () async {
       final db = FakeFirebaseFirestore();
-      // Un compte client réel existe déjà avec ce numéro (pas de marqueur
-      // console) — et un collecteur du backoffice référence le même numéro.
+      // A real client account already exists for this number (no console marker)
+      // — and a backoffice collector references the same number.
       await db.collection('users').doc('+237655000000').set({
         'phoneNumber': '+237655000000',
         'fullName': 'Client Réel',
@@ -438,11 +438,11 @@ void main() {
     store.dispose();
   });
 
-  test('permission-denied après déconnexion ne déclenche pas de bannière',
+  test('permission-denied after logout does not trigger a banner',
       () async {
     final db = FakeFirebaseFirestore();
-    // Simule une session Firebase Auth révoquée (logout) : les listeners
-    // encore actifs sont rejetés par les règles → pas d'erreur affichée.
+    // Simulates a revoked Firebase Auth session (logout): still-active listeners
+    // are rejected by rules → no error displayed.
     final store = FirestoreBackofficeStore(
       db: db,
       backend: FakeAuthBackend(),
@@ -573,7 +573,7 @@ void main() {
         'phone': '+237 698 22 44 66',
         'zone': 'Bonanjo',
         'agenceId': 'ag1',
-        'agenceName': 'Douala — Bonanjo',
+        'agenceName': 'Yaoundé — Bastos',
         'societeId': 'so1',
         'status': 'pending',
         'collecteurId': '',
@@ -642,7 +642,7 @@ void main() {
       'phone': '+237 698 22 44 66',
       'zone': 'Bonanjo',
       'agenceId': 'ag1',
-      'agenceName': 'Douala — Bonanjo',
+      'agenceName': 'Yaoundé — Bastos',
       'societeId': 'so1',
       'status': 'pending',
       'collecteurId': '',

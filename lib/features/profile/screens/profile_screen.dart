@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../auth/screens/welcome_screen.dart';
+import '../../payment/screens/bills_screen.dart';
+import '../../subscription/screens/history_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -147,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 15,
             offset: const Offset(0, -3),
           ),
@@ -176,7 +178,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 index: 1,
                 onTap: () {
                   navProvider.setIndex(1);
-                  Navigator.pushReplacementNamed(context, '/history');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const HistoryScreen()),
+                  );
                 },
               ),
               _buildNavItem(
@@ -186,7 +192,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 index: 2,
                 onTap: () {
                   navProvider.setIndex(2);
-                  Navigator.pushReplacementNamed(context, '/subscription');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BillsScreen()),
+                  );
                 },
               ),
               _buildNavItem(
@@ -218,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      splashColor: dGreen.withOpacity(0.1),
+      splashColor: dGreen.withValues(alpha: 0.1),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
@@ -228,10 +237,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
+                color: isSelected ? dGreen.withValues(alpha: 0.15) : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: isSelected 
-                    ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
+                    ? Border.all(color: dGreen.withValues(alpha: 0.3), width: 1.5)
                     : null,
               ),
               child: Icon(

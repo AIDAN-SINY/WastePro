@@ -1,3 +1,4 @@
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,11 @@ import 'package:waste_pro/features/company/company_console.dart';
 import 'package:waste_pro/features/superadmin/data/platform_store.dart';
 import 'package:waste_pro/features/superadmin/super_admin_console.dart';
 import 'package:waste_pro/routing.dart';
+import 'package:waste_pro/providers/notification_provider.dart';
+
+import 'fakes/fake_notification_provider.dart';
+
+import 'helpers/setup_firebase.dart';
 
 class FakeUserProvider extends UserProvider {
   FakeUserProvider({this.fakeUser, this.fakeIsLoading = false});
@@ -54,11 +60,13 @@ UserModel _user(String role, {String agenceId = '', String societeId = ''}) =>
       fullName: 'Test',
       role: role,
       password: 'x',
+      uid: 'test-uid',
       agenceId: agenceId,
       societeId: societeId,
     );
 
 void main() {
+  setUpAll(() => setupFirebaseMocks());
   setUp(BoToastService.resetForTesting);
 
   group('consolePageIndex', () {
@@ -80,7 +88,7 @@ void main() {
       expect(consoleRedirect(user: null, path: '/console/societes'), '/');
     });
 
-    test('autorise la prévisualisation debug sans session', () {
+    test('allows debug preview without a session', () {
       expect(
         consoleRedirect(
           user: null,
@@ -144,7 +152,7 @@ void main() {
       expect(consoleRedirect(user: _user('agency_manager'), path: '/'), isNull);
     });
 
-    test('interdit les écrans d auth une fois connecté', () {
+    test('blocks auth screens once logged in', () {
       expect(consoleRedirect(user: _user('client'), path: '/login'), '/');
       expect(consoleRedirect(user: _user('client'), path: '/register'), '/');
       expect(consoleRedirect(user: null, path: '/login'), isNull);
@@ -158,13 +166,16 @@ void main() {
   });
 
   group('WasteProApp router', () {
-    testWidgets('super admin loggé → redirigé vers la console', (
+    testWidgets('logged-in super admin → redirected to console', (
       tester,
     ) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: _user('super_admin')),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -174,11 +185,14 @@ void main() {
       expect(find.text('Overview'), findsWidgets);
     });
 
-    testWidgets('general admin loggé → console entreprise', (tester) async {
+    testWidgets('logged-in general admin → company console', (tester) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: _user('general_admin')),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -187,9 +201,12 @@ void main() {
       expect(find.byType(SuperAdminConsole), findsNothing);
     });
 
-    testWidgets('agency manager loggé → backoffice de son agence', (
+    testWidgets('logged-in agency manager → their agency backoffice', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       // Phase 3 : le chef d'agence avec une agence assignée arrive au
       // backoffice scopé à son agence (agenceId transmis à l'écran).
       await tester.pumpWidget(
@@ -197,9 +214,14 @@ void main() {
           value: FakeUserProvider(
             fakeUser: _user('agency_manager', agenceId: 'ag1'),
           ),
-          child: WasteProApp(
-            consoleStore: PlatformStore(),
-            backofficeStore: BackofficeStore(),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(
+              consoleStore: PlatformStore(),
+              backofficeStore: BackofficeStore(),
+              db: FakeFirebaseFirestore(),
+              skip2FA: true,
+            ),
           ),
         ),
       );
@@ -210,7 +232,7 @@ void main() {
       expect(find.byType(CompanyConsole), findsNothing);
     });
 
-    testWidgets('agency manager SANS agence → écran « No agency assigned »', (
+    testWidgets('agency manager WITHOUT agency → "No agency assigned" screen', (
       tester,
     ) async {
       // Phase 3 (défense) : jamais de backoffice non scopé pour un chef
@@ -218,9 +240,14 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: _user('agency_manager')),
-          child: WasteProApp(
-            consoleStore: PlatformStore(),
-            backofficeStore: BackofficeStore(),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(
+              consoleStore: PlatformStore(),
+              backofficeStore: BackofficeStore(),
+              db: FakeFirebaseFirestore(),
+              skip2FA: true,
+            ),
           ),
         ),
       );
@@ -230,18 +257,26 @@ void main() {
       expect(find.text('No agency assigned yet'), findsOneWidget);
     });
 
-    testWidgets('legacy rôle admin loggé → backoffice (pré-Phase 1)', (
+    testWidgets('legacy admin role logged in → backoffice (pre-Phase 1)', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       // Comptes créés avant la Phase 1 : leur doc users porte encore le
       // rôle générique 'admin' — ils doivent continuer d'arriver au
       // backoffice (régression guard).
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: _user('admin')),
-          child: WasteProApp(
-            consoleStore: PlatformStore(),
-            backofficeStore: BackofficeStore(),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(
+              consoleStore: PlatformStore(),
+              backofficeStore: BackofficeStore(),
+              db: FakeFirebaseFirestore(),
+              skip2FA: true,
+            ),
           ),
         ),
       );
@@ -251,11 +286,14 @@ void main() {
       expect(find.byType(CompanyConsole), findsNothing);
     });
 
-    testWidgets('non connecté → écran d accueil', (tester) async {
+    testWidgets('not logged in → home screen', (tester) async {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: null),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -265,7 +303,7 @@ void main() {
       expect(find.text('Log In'), findsOneWidget);
     });
 
-    testWidgets('la navigation par la barre latérale change de page sans rechargement', (
+    testWidgets('sidebar navigation changes page without reloading', (
       tester,
     ) async {
       // Viewport desktop (la console passe en layout bureau → table).
@@ -277,7 +315,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: _user('super_admin')),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -292,10 +333,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('New company'), findsOneWidget);
-      expect(find.text('WastePro Douala Ltd'), findsWidgets);
+      expect(find.text('WastePro Yaoundé SARL'), findsWidgets);
     });
 
-    testWidgets('deep link /console/societes restaure la page Sociétés', (
+    testWidgets('deep link /console/societes restores the Companies page', (
       tester,
     ) async {
       // Viewport desktop (la console passe en layout bureau → table).
@@ -314,7 +355,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: null),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -323,7 +367,7 @@ void main() {
       // The Companies page (toolbar "New company") must be shown, not the
       // overview.
       expect(find.text('New company'), findsOneWidget);
-      expect(find.text('WastePro Douala Ltd'), findsWidgets);
+      expect(find.text('WastePro Yaoundé SARL'), findsWidgets);
     });
 
     testWidgets('Log In depuis l accueil navigue via le routeur (/login)', (
@@ -339,7 +383,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: FakeUserProvider(fakeUser: null),
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -365,7 +412,7 @@ void main() {
       );
     });
 
-    testWidgets('logout depuis la console revient à l écran d accueil', (
+    testWidgets('logout from console returns to home screen', (
       tester,
     ) async {
       // Desktop viewport so the console renders the sidebar with the logout
@@ -380,7 +427,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: provider,
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: ChangeNotifierProvider<NotificationProvider>.value(
+            value: FakeNotificationProvider(),
+            child: WasteProApp(consoleStore: PlatformStore(), db: FakeFirebaseFirestore(), skip2FA: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();

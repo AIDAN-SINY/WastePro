@@ -1,67 +1,45 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/user_provider.dart';
+import '../../services/navigation_service.dart';
+import '../../services/offline_sync_service.dart';
+import '../../services/live_tracking_service.dart';
+import '../../services/tournee_service.dart';
+import '../../services/notification_service.dart';
 import '../backoffice/theme.dart';
+import 'qr_scanner_screen.dart';
 
-/// App mobile du collecteur — porté 1:1 du design `collecteur-mobile.html`
-/// (Propre237 — Collecteur), en réutilisant la palette de [BackofficeTheme].
+/// Collector mobile app — ported 1:1 from the `collecteur-mobile.html`
+/// design (Propre237 — Collector), reusing the [BackofficeTheme] palette.
 ///
-/// Sur écran large (web), l'app s'affiche dans le cadre « téléphone » du
-/// design (centré sur le fond coquille #DEDBD1) ; sur mobile elle est
-/// plein écran. L'écran propose trois onglets :
-///  - **Tournée** : la tournée du jour, filtrable (À faire / Terminés /
-///    Manqués), avec le détail client et le flow de collecte complet
-///    (QR/OTP → photo → poids/commentaire → validation).
-///  - **Historique** : les collectes passées par jour.
-///  - **Profil** : stats du collecteur + coordonnées + déconnexion.
+/// On wide screens (web) the app displays inside the phone frame from the
+/// design (centered on shell background #DEDBD1); on mobile it fills the
+/// screen. The screen has three tabs:
+///  - **Route**: today's route, filterable (To Do / Done / Missed), with
+///    client detail and full collection flow (QR/OTP → photo → weight/comment
+///    → validation).
+///  - **History**: past collections by day.
+///  - **Profile**: collector stats + contact info + logout.
 class CollectorDashboard extends StatefulWidget {
-  const CollectorDashboard({super.key});
+  const CollectorDashboard({super.key, this.db});
+
+  /// Optional Firestore instance for dependency injection in tests.
+  final FirebaseFirestore? db;
 
   @override
   State<CollectorDashboard> createState() => _CollectorDashboardState();
 }
 
-// ====================================================================
-// Mock data (same as collecteur-mobile.html)
-// ====================================================================
-
-/// Un point de la tournée du jour.
-class _TourneeClient {
-  _TourneeClient({
-    required this.id,
-    required this.num,
-    required this.name,
-    required this.address,
-    required this.time,
-    required this.phone,
-    required this.formule,
-    required this.status,
-    this.missReason,
-    this.heureArrivee = '',
-    this.heureDepart = '',
-    this.poids = 0,
-  }) : commentaire = '';
-
-  final String id;
-  final int num;
-  final String name;
-  final String address;
-  final String time;
-  final String phone;
-  final String formule;
-  String status; // 'À faire' | 'En cours' | 'Terminé' | 'Manqué'
-  String? missReason;
-  String heureArrivee;
-  String heureDepart;
-  double poids;
-  String commentaire;
-}
-
-/// Une entrée de l'historique.
+/// A history entry.
 class _HistoryEntry {
   _HistoryEntry({
     required this.name,
@@ -71,12 +49,12 @@ class _HistoryEntry {
   });
 
   final String name;
-  final String heure; // '—' quand non visité
+  final String heure; // '—' when not visited
   final double poids;
-  final String status; // 'Effectué' | 'Manqué'
+  final String status; // 'Completed' | 'Missed'
 }
 
-/// Un jour d'historique.
+/// A day of history.
 class _HistoryDay {
   _HistoryDay({required this.date, required this.entries});
 
@@ -84,7 +62,7 @@ class _HistoryDay {
   final List<_HistoryEntry> entries;
 }
 
-/// Un toast affiché en haut de l'écran.
+/// A toast displayed at the top of the screen.
 class _ToastMsg {
   _ToastMsg(this.message, {this.error = false});
   final String message;
@@ -96,55 +74,44 @@ class _ToastMsg {
 // ====================================================================
 
 class _CollectorDashboardState extends State<CollectorDashboard>
-    with SingleTickerProviderStateMixin {
-  // --- Données mockées (portées du design) ---
-  late List<_TourneeClient> _tournee;
-  static final List<_HistoryDay> _historique = [
-    _HistoryDay(
-      date: DateTime(2026, 8, 5),
-      entries: [
-        _HistoryEntry(
-            name: 'Jean Dooh', heure: '07:03', poids: 4.0, status: 'Effectué'),
-        _HistoryEntry(
-            name: 'Marie Ekwalla',
-            heure: '07:41',
-            poids: 5.2,
-            status: 'Effectué'),
-        _HistoryEntry(
-            name: 'Sarah Mbida',
-            heure: '08:10',
-            poids: 3.3,
-            status: 'Effectué'),
-      ],
-    ),
-    _HistoryDay(
-      date: DateTime(2026, 8, 4),
-      entries: [
-        _HistoryEntry(
-            name: 'Robert Essomba',
-            heure: '07:15',
-            poids: 3.8,
-            status: 'Effectué'),
-        _HistoryEntry(
-            name: 'Brice Talla', heure: '—', poids: 0, status: 'Manqué'),
-        _HistoryEntry(
-            name: 'Chantal Ngo', heure: '08:02', poids: 4.1, status: 'Effectué'),
-      ],
-    ),
-  ];
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  // --- Tour data (loaded from Firestore) ---
+  late List<TourneeStop> _tournee;
+  List<_HistoryDay> _historique = [];
+  bool _tourLoading = true;
+  String? _collectorId;
+  String _collectorName = '';
+  late final TourneeService _tourneeService;
+  final OfflineSyncService _offlineService = OfflineSyncService.instance;
+  final LiveTrackingService _trackingService = LiveTrackingService();
+  final NotificationService _notificationService = NotificationService();
+  bool _isOnline = true;
+  int _pendingSyncCount = 0;
+  bool _locationPermissionDenied = false;
+  StreamSubscription<bool>? _onlineSub;
+  StreamSubscription<int>? _pendingSub;
+
+  // --- Live client-validation feedback ---
+  // Watches today's pickups so that when a client scans the QR code and
+  // validates, the stop flips to Done (tick) and the collector sees
+  // “Pickup validated from client …” immediately.
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _validationsSub;
+  final Set<String> _validatedPickupIds = <String>{};
 
   // --- Navigation ---
-  int _tab = 0; // 0 Tournée · 1 Historique · 2 Profil
-  String _filter = 'all'; // 'all' | 'À faire' | 'Terminé' | 'Manqué'
+  int _tab = 0; // 0 Route · 1 History · 2 Profile
+  String _filter = 'all'; // 'all' | 'To Do' | 'Done' | 'Missed'
 
-  // --- Sheet client ---
+  // --- Client sheet ---
   String? _sheetId;
   bool _sheetOpen = false;
   String _flow = 'detail'; // 'detail' | 'miss' | 'step1' | 'step2' | 'step3'
 
-  // --- Flow collecte ---
-  String _method = 'qr'; // 'qr' | 'otp'
+  // --- Collection flow ---
+  String _method = 'qr'; // 'qr' | 'otp' | 'signature'
   bool _qrValidated = false;
+  bool _signatureValidated = false;
+  final List<Offset?> _signaturePoints = [];
   late final List<TextEditingController> _otp;
   late final List<FocusNode> _otpFocus;
   bool _photoTaken = false;
@@ -161,25 +128,98 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 
   static const List<(String, IconData)> _missReasons = [
     ('Client absent', Icons.person_off_outlined),
-    ('Bac cassé', Icons.delete_outline),
-    ('Accès bloqué', Icons.lock_outline),
-    ('Autre', Icons.more_horiz),
+    ('Bin damaged', Icons.delete_outline),
+    ('Access blocked', Icons.lock_outline),
+    ('Other', Icons.more_horiz),
   ];
+
+  FirebaseFirestore get _db => widget.db ?? FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    _tournee = _seedTournee();
+    WidgetsBinding.instance.addObserver(this);
+    _tourneeService = TourneeService(db: widget.db);
+    _tournee = [];
     _otp = List.generate(4, (_) => TextEditingController());
     _otpFocus = List.generate(4, (_) => FocusNode());
     _scanCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     );
+    _loadTourFromFirestore();
+    _initOfflineListeners();
+    _initLiveTracking();
+  }
+
+  void _initOfflineListeners() {
+    _onlineSub = _offlineService.onlineStream.listen((online) {
+      if (mounted) setState(() => _isOnline = online);
+    });
+    _pendingSub = _offlineService.pendingCountStream.listen((count) {
+      if (mounted) setState(() => _pendingSyncCount = count);
+    });
+    _isOnline = _offlineService.isOnline;
+    _pendingSyncCount = _offlineService.pendingCount;
+  }
+
+  /// Start uploading GPS position to Firestore for real-time tracking.
+  void _initLiveTracking() {
+    // Use a post-frame callback to ensure the user provider is available.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // Check location permission first.
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _locationPermissionDenied = true);
+        return;
+      }
+      final user = Provider.of<UserProvider>(context, listen: false).user;
+      if (user == null) return;
+      final collectorId = user.collecteurId.isNotEmpty
+          ? user.collecteurId
+          : user.phoneNumber;
+      _trackingService.startTracking(
+        collectorId: collectorId,
+        collectorName: user.fullName,
+      );
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _locationPermissionDenied) {
+      _recheckLocationPermission();
+    }
+  }
+
+  /// Re-check location permission when the user returns from app settings.
+  Future<void> _recheckLocationPermission() async {
+    if (!mounted) return;
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      if (!mounted) return;
+      setState(() => _locationPermissionDenied = false);
+      // Start live tracking now that permission is granted.
+      final user = Provider.of<UserProvider>(context, listen: false).user;
+      if (user == null) return;
+      final collectorId = user.collecteurId.isNotEmpty
+          ? user.collecteurId
+          : user.phoneNumber;
+      _trackingService.startTracking(
+        collectorId: collectorId,
+        collectorName: user.fullName,
+      );
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scanCtrl.dispose();
     for (final c in _otp) {
       c.dispose();
@@ -192,110 +232,142 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     for (final t in _toastTimers) {
       t.cancel();
     }
+    _onlineSub?.cancel();
+    _pendingSub?.cancel();
+    _validationsSub?.cancel();
+    _trackingService.dispose();
     super.dispose();
   }
 
-  List<_TourneeClient> _seedTournee() {
-    return [
-      _TourneeClient(
-        id: 't1',
-        num: 1,
-        name: 'Jean Dooh',
-        address: 'Rue 1.234, Bonanjo',
-        time: '07:00–07:30',
-        phone: '+237 677 12 34 56',
-        formule: 'Standard · 2x/semaine',
-        status: 'Terminé',
-        heureArrivee: '07:04',
-        heureDepart: '07:12',
-        poids: 4.2,
-      ),
-      _TourneeClient(
-        id: 't2',
-        num: 2,
-        name: 'Sarah Mbida',
-        address: 'Rue 1.240, Bonanjo',
-        time: '07:15–07:45',
-        phone: '+237 691 77 04 22',
-        formule: 'Essentiel · 1x/semaine',
-        status: 'Terminé',
-        heureArrivee: '07:20',
-        heureDepart: '07:27',
-        poids: 3.1,
-      ),
-      _TourneeClient(
-        id: 't3',
-        num: 3,
-        name: 'Marie Ekwalla',
-        address: 'Avenue de Gaulle, Akwa',
-        time: '08:00–08:30',
-        phone: '+237 690 45 12 78',
-        formule: 'Premium · 2x/semaine',
-        status: 'En cours',
-      ),
-      _TourneeClient(
-        id: 't4',
-        num: 4,
-        name: 'Robert Essomba',
-        address: 'Rue Joss, Akwa',
-        time: '08:15–08:45',
-        phone: '+237 655 22 11 09',
-        formule: 'Standard · 2x/semaine',
-        status: 'À faire',
-      ),
-      _TourneeClient(
-        id: 't5',
-        num: 5,
-        name: 'Chantal Ngo',
-        address: 'Rue Congo, Akwa',
-        time: '08:45–09:15',
-        phone: '+237 699 88 44 12',
-        formule: 'Essentiel · 1x/semaine',
-        status: 'À faire',
-      ),
-      _TourneeClient(
-        id: 't6',
-        num: 6,
-        name: 'Emmanuel Owona',
-        address: 'Rue Njo-Njo, Akwa',
-        time: '09:15–09:45',
-        phone: '+237 674 33 20 18',
-        formule: 'Standard · 2x/semaine',
-        status: 'À faire',
-      ),
-      _TourneeClient(
-        id: 't7',
-        num: 7,
-        name: 'Brice Talla',
-        address: 'Rue de la Gare, Bonanjo',
-        time: '07:45–08:15',
-        phone: '+237 656 40 88 15',
-        formule: 'Standard · 2x/semaine',
-        status: 'Manqué',
-        missReason: 'Client absent',
-      ),
-      _TourneeClient(
-        id: 't8',
-        num: 8,
-        name: 'Larissa Fouda',
-        address: 'Rue Ivy, Akwa',
-        time: '09:45–10:15',
-        phone: '+237 693 15 60 24',
-        formule: 'Premium · 2x/semaine',
-        status: 'À faire',
-      ),
-    ];
+  /// Loads today's tour from Firestore (clients assigned to this collector
+  /// with active contracts and today as a collection day).
+  Future<void> _loadTourFromFirestore() async {
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    if (user == null) {
+      setState(() => _tourLoading = false);
+      return;
+    }
+
+    _collectorId = user.collecteurId.isNotEmpty
+        ? user.collecteurId
+        : user.phoneNumber;
+    _collectorName = user.fullName;
+
+    _watchPickupValidations();
+
+    try {
+      final stops = await _tourneeService.generateTodayTour(_collectorId!);
+      final historyData = await _tourneeService.fetchHistory(_collectorId!);
+
+      if (!mounted) return;
+      setState(() {
+        _tournee = stops;
+        _tourLoading = false;
+        _historique = _buildHistoryFromPickups(historyData);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _tourLoading = false);
+    }
   }
 
-  _TourneeClient? get _currentClient {
+  /// Listens to this collector's pickups. When a pickup that is still
+  /// awaiting client validation (stop In Progress / To Do) becomes
+  /// `verified`, the client has scanned the QR code and validated it — mark
+  /// the stop Done (tick) and show the in-app notification with the client's
+  /// name.
+  void _watchPickupValidations() {
+    final collectorId = _collectorId;
+    if (collectorId == null || collectorId.isEmpty) return;
+    if (_validationsSub != null) return;
+    final todayDate = DateTime.now().toString().split(' ').first;
+
+    _validationsSub = _db
+        .collection('pickups')
+        .where('collector_id', isEqualTo: collectorId)
+        .snapshots()
+        .listen((snap) {
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['status'] != 'verified') continue;
+        if (data['date'] != todayDate) continue;
+        if (!_validatedPickupIds.add(doc.id)) continue;
+
+        final clientPhone = data['client_id'] as String? ?? '';
+        TourneeStop? stop;
+        for (final t in _tournee) {
+          if (t.clientPhone == clientPhone) {
+            stop = t;
+            break;
+          }
+        }
+        // Stops already shown as Done (seeded before the dashboard opened)
+        // are ignored: we only announce pickups that get validated while the
+        // collector is looking at today's route.
+        if (stop == null || stop.status == 'Done') continue;
+        final s = stop;
+
+        if (!mounted) return;
+        setState(() {
+          s.status = 'Done';
+          s.poids = (data['poids'] as num?)?.toDouble() ?? s.poids;
+          s.heureArrivee =
+              data['heure_arrivee'] as String? ?? s.heureArrivee;
+          s.heureDepart =
+              data['heure_depart'] as String? ?? s.heureDepart;
+          s.commentaire =
+              data['commentaire'] as String? ?? s.commentaire;
+        });
+        _showToast('Pickup validated from client ${s.clientName} ✓');
+      }
+    }, onError: (e) {
+      debugPrint('[CollectorDashboard] Pickup validation watch failed: $e');
+    });
+  }
+
+  /// Converts raw pickup documents into grouped history days.
+  List<_HistoryDay> _buildHistoryFromPickups(List<Map<String, dynamic>> pickups) {
+    final map = <String, List<_HistoryEntry>>{};
+    for (final p in pickups) {
+      final date = p['date'] as String? ?? '';
+      if (date.isEmpty) continue;
+      final name = p['client_id'] as String? ?? '';
+      final heure = p['heure_arrivee'] as String? ?? '—';
+      final poids = (p['poids'] as num?)?.toDouble() ?? 0;
+      final status = p['status'] as String? ?? 'completed';
+      map.putIfAbsent(date, () => []).add(_HistoryEntry(
+        name: name,
+        heure: heure,
+        poids: poids,
+        status: status == 'completed' ? 'Completed' : 'Missed',
+      ));
+    }
+    final days = map.entries.map((e) {
+      final parts = e.key.split('-');
+      final date = parts.length == 3
+          ? DateTime(
+              int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]))
+          : DateTime.now();
+      return _HistoryDay(date: date, entries: e.value);
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return days;
+  }
+
+  TourneeStop? get _currentClient {
     if (_sheetId == null) return null;
     for (final t in _tournee) {
-      if (t.id == _sheetId) return t;
+      if (t.clientId == _sheetId) return t;
     }
     return null;
   }
 
-  int get _doneCount => _tournee.where((t) => t.status == 'Terminé').length;
+  int get _doneCount => _tournee.where((t) => t.status == 'Done').length;
+
+  String _now() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
 
   // ====================================================================
   // Build
@@ -303,15 +375,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 
   @override
   Widget build(BuildContext context) {
-    // Cadre « téléphone » sur écran large (web), plein écran sur mobile.
     return Scaffold(
       backgroundColor: BackofficeTheme.shell,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth > 520;
           if (!wide) return _buildPhoneScreen(context);
-          // Hauteur adaptative : le cadre suit l'écran quand la fenêtre est
-          // plus courte que le téléphone du design (844 px).
           final frameHeight = math.min(844.0, constraints.maxHeight);
           return Center(
             child: Container(
@@ -356,7 +425,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                 Expanded(child: _buildContent(context)),
               ],
             ),
-            // Tab bar (Positioned directement dans le Stack)
+            // Tab bar
             Positioned(
               left: 0,
               right: 0,
@@ -375,7 +444,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                   ),
                 ),
               ),
-            // Sheet client
+            // Client sheet
             AnimatedPositioned(
               duration: const Duration(milliseconds: 380),
               curve: Curves.easeOutCubic,
@@ -439,7 +508,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        'Zone Bonanjo / Akwa',
+                        'Bastos / Nlongkak Zone',
                         style: BackofficeTheme.inter(
                           10.5,
                           color: BackofficeTheme.cream.withValues(alpha: 0.6),
@@ -457,28 +526,39 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: BackofficeTheme.cream.withValues(alpha: 0.08),
+                        color: _isOnline
+                            ? BackofficeTheme.cream.withValues(alpha: 0.08)
+                            : BackofficeTheme.red.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color:
-                              BackofficeTheme.cream.withValues(alpha: 0.12),
+                          color: _isOnline
+                              ? BackofficeTheme.cream.withValues(alpha: 0.12)
+                              : BackofficeTheme.red.withValues(alpha: 0.4),
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons.circle,
-                            size: 7,
-                            color: Color(0xFF8FD9AE),
+                            _isOnline ? Icons.cloud_done : Icons.cloud_off,
+                            size: 12,
+                            color: _isOnline
+                                ? const Color(0xFF8FD9AE)
+                                : BackofficeTheme.red,
                           ),
-                          SizedBox(width: 5),
+                          const SizedBox(width: 5),
                           Text(
-                            'Synchronisé',
+                            _isOnline
+                                ? (_pendingSyncCount > 0
+                                    ? 'Syncing ($_pendingSyncCount)'
+                                    : 'Synced')
+                                : 'Offline',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF8FD9AE),
+                              color: _isOnline
+                                  ? const Color(0xFF8FD9AE)
+                                  : BackofficeTheme.red,
                             ),
                           ),
                         ],
@@ -487,7 +567,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                     const SizedBox(width: 8),
                     _IconBtn(
                       icon: Icons.notifications_none,
-                      onTap: () => _showToast('Nouvelle notification'),
+                      onTap: () => _showToast('New notification'),
                     ),
                   ],
                 ),
@@ -512,6 +592,21 @@ class _CollectorDashboardState extends State<CollectorDashboard>
   }
 
   Widget _buildTourneePage() {
+    if (_tourLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: 60),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: BackofficeTheme.green),
+              SizedBox(height: 12),
+              Text('Loading today\'s route...', style: TextStyle(color: BackofficeTheme.muted)),
+            ],
+          ),
+        ),
+      );
+    }
     final rows = _filter == 'all'
         ? _tournee
         : _tournee.where((t) => t.status == _filter).toList();
@@ -520,13 +615,101 @@ class _CollectorDashboardState extends State<CollectorDashboard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Location permission banner
+          if (_locationPermissionDenied) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: BackofficeTheme.redSoft,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: BackofficeTheme.red.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_off_outlined, color: BackofficeTheme.red, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Location access denied',
+                          style: BackofficeTheme.sora(12.5, weight: FontWeight.w600, color: BackofficeTheme.red),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Enable location in settings to track your route',
+                          style: BackofficeTheme.inter(10.5, color: BackofficeTheme.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      await Geolocator.openAppSettings();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: BackofficeTheme.red,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Settings',
+                        style: BackofficeTheme.inter(11, weight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           _buildFilterChips(),
           const SizedBox(height: 14),
+          // View full route on map
+          if (_tournee.isNotEmpty) ...[
+            GestureDetector(
+              onTap: _openItineraryMap,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.green,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.map_outlined, color: BackofficeTheme.cream, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'View Route on Map',
+                            style: BackofficeTheme.sora(13, weight: FontWeight.w600, color: BackofficeTheme.cream),
+                          ),
+                          Text(
+                            '${_tournee.length} stops · $_doneCount completed',
+                            style: BackofficeTheme.inter(10.5, color: BackofficeTheme.cream.withValues(alpha: 0.6)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: BackofficeTheme.cream, size: 20),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           if (rows.isEmpty)
-            const _EmptyState(text: 'Aucun client dans ce filtre')
+            _tournee.isEmpty
+                ? const _EmptyState(text: 'No collections scheduled today')
+                : const _EmptyState(text: 'No clients in this filter')
           else
             for (final t in rows) ...[
-              _ClientCard(client: t, onTap: () => _openClient(t.id)),
+              _ClientCard(client: t, onTap: () => _openClient(t.clientId), index: rows.indexOf(t)),
               const SizedBox(height: 10),
             ],
         ],
@@ -536,10 +719,10 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 
   Widget _buildFilterChips() {
     const chips = [
-      ('all', 'Tous'),
-      ('À faire', 'À faire'),
-      ('Terminé', 'Terminés'),
-      ('Manqué', 'Manqués'),
+      ('all', 'All'),
+      ('To Do', 'To Do'),
+      ('Done', 'Done'),
+      ('Missed', 'Missed'),
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -566,7 +749,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
         children: [
           for (final day in _historique) ...[
             Text(
-              _frDayLabel(day.date),
+              _dayLabel(day.date),
               style: BackofficeTheme.inter(
                 11,
                 weight: FontWeight.w700,
@@ -610,7 +793,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Collecteur · Zone Bonanjo / Akwa',
+                  'Collector · Bastos / Nlongkak Zone',
                   style: BackofficeTheme.inter(
                     11.5,
                     color: BackofficeTheme.muted,
@@ -623,12 +806,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           const Row(
             children: [
               Expanded(
-                child: _StatBox(value: '312', label: 'Collectes totales'),
+                child: _StatBox(value: '312', label: 'Total Collections'),
               ),
               SizedBox(width: 10),
-              Expanded(child: _StatBox(value: '4.8', label: 'Note moyenne')),
+              Expanded(child: _StatBox(value: '4.8', label: 'Avg. Rating')),
               SizedBox(width: 10),
-              Expanded(child: _StatBox(value: '96%', label: 'Taux réussite')),
+              Expanded(child: _StatBox(value: '96%', label: 'Success Rate')),
             ],
           ),
           const SizedBox(height: 14),
@@ -639,11 +822,11 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           ),
           const _ProfileRow(
             icon: Icons.business_outlined,
-            text: 'Propre237 Douala SARL — Agence Bonanjo',
+            text: 'Propre237 Yaoundé SARL — Bastos Branch',
           ),
           const _ProfileRow(
             icon: Icons.info_outline,
-            text: 'Version app 1.0.0',
+            text: 'App version 1.0.0',
           ),
           const SizedBox(height: 6),
           Material(
@@ -666,7 +849,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Se déconnecter',
+                      'Log Out',
                       style: BackofficeTheme.inter(
                         12.5,
                         weight: FontWeight.w700,
@@ -689,9 +872,9 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 
   Widget _buildTabBar() {
     const tabs = [
-      (0, Icons.checklist, 'Tournée'),
-      (1, Icons.history, 'Historique'),
-      (2, Icons.person_outline, 'Profil'),
+      (0, Icons.checklist, 'Route'),
+      (1, Icons.history, 'History'),
+      (2, Icons.person_outline, 'Profile'),
     ];
     return Container(
       decoration: const BoxDecoration(
@@ -741,12 +924,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
   }
 
   // ------------------------------------------------------------------
-  // Sheet client
+  // Client sheet
   // ------------------------------------------------------------------
 
-  void _openClient(String id) {
+  void _openClient(String clientId) {
     setState(() {
-      _sheetId = id;
+      _sheetId = clientId;
       _sheetOpen = true;
       _flow = 'detail';
     });
@@ -758,8 +941,6 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     _syncScanAnimation();
   }
 
-  /// La ligne de scan n'anime que pendant l'étape QR (sinon le contrôleur
-  /// tournerait pour rien toute la session, et casserait pumpAndSettle).
   void _syncScanAnimation() {
     final shouldRun = _sheetOpen && _flow == 'step1' && _method == 'qr';
     if (shouldRun && !_scanCtrl.isAnimating) {
@@ -807,11 +988,11 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     );
   }
 
-  // ---- Detail client ----
+  // ---- Client detail ----
 
-  Widget _buildDetail(_TourneeClient client) {
-    if (client.status == 'Terminé') return _buildDone(client);
-    if (client.status == 'Manqué') return _buildMissed(client);
+  Widget _buildDetail(TourneeStop client) {
+    if (client.status == 'Done') return _buildDone(client);
+    if (client.status == 'Missed') return _buildMissed(client);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -823,23 +1004,23 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             Expanded(
               child: _ActionTile(
                 icon: Icons.phone_outlined,
-                label: 'Appeler',
-                onTap: () => _showToast('Ouverture de l\'appel…'),
+                label: 'Call',
+                onTap: () => _showToast('Opening call...'),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ActionTile(
-                icon: Icons.directions_outlined,
-                label: 'Itinéraire',
-                onTap: () => _showToast('Ouverture de l\'itinéraire…'),
+                icon: Icons.map_outlined,
+                label: 'Start Route',
+                onTap: () => _openRouteMap(client),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ActionTile(
                 icon: Icons.flag_outlined,
-                label: 'Signaler',
+                label: 'Report',
                 onTap: () => setState(() => _flow = 'miss'),
               ),
             ),
@@ -854,24 +1035,24 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           ),
           child: Column(
             children: [
-              _InfoRow(label: 'Formule', value: client.formule),
-              _InfoRow(label: 'Téléphone', value: client.phone),
+              _InfoRow(label: 'Plan', value: client.plan),
+              _InfoRow(label: 'Phone', value: client.clientPhone),
             ],
           ),
         ),
         const SizedBox(height: 16),
         _PrimaryBtn(
           icon: Icons.play_arrow,
-          label: client.status == 'En cours'
-              ? 'Reprendre la collecte'
-              : 'Démarrer la collecte',
+          label: client.status == 'In Progress'
+              ? 'Resume Collection'
+              : 'Start Collection',
           onTap: () => _startCollecte(client),
         ),
       ],
     );
   }
 
-  Widget _buildDone(_TourneeClient client) {
+  Widget _buildDone(TourneeStop client) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -892,12 +1073,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
               ),
               const SizedBox(height: 8),
               Text(
-                'Collecte validée',
+                'Collection Completed',
                 style: BackofficeTheme.sora(14, weight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
-                'Enregistrée avec succès',
+                'Recorded successfully',
                 style: BackofficeTheme.inter(
                   11.5,
                   color: BackofficeTheme.muted,
@@ -908,7 +1089,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                 children: [
                   Expanded(
                     child: _DoneCell(
-                      label: 'Arrivée',
+                      label: 'Arrival',
                       value: client.heureArrivee.isEmpty
                           ? '—'
                           : client.heureArrivee,
@@ -917,7 +1098,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                   const SizedBox(width: 8),
                   Expanded(
                     child: _DoneCell(
-                      label: 'Départ',
+                      label: 'Departure',
                       value: client.heureDepart.isEmpty
                           ? '—'
                           : client.heureDepart,
@@ -930,16 +1111,16 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                 children: [
                   Expanded(
                     child: _DoneCell(
-                      label: 'Poids',
+                      label: 'Weight',
                       value: client.poids > 0 ? '${client.poids} kg' : '—',
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _DoneCell(
-                      label: 'Commentaire',
+                      label: 'Comment',
                       value: client.commentaire.isEmpty
-                          ? 'Aucun'
+                          ? 'None'
                           : client.commentaire,
                     ),
                   ),
@@ -952,7 +1133,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     );
   }
 
-  Widget _buildMissed(_TourneeClient client) {
+  Widget _buildMissed(TourneeStop client) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -973,12 +1154,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
               ),
               const SizedBox(height: 8),
               Text(
-                'Ramassage manqué',
+                'Collection Missed',
                 style: BackofficeTheme.sora(14, weight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
-                'Motif : ${client.missReason ?? 'Non précisé'}',
+                'Reason: ${client.missReason ?? 'Not specified'}',
                 style: BackofficeTheme.inter(
                   11.5,
                   color: BackofficeTheme.muted,
@@ -990,9 +1171,9 @@ class _CollectorDashboardState extends State<CollectorDashboard>
         const SizedBox(height: 14),
         _PrimaryBtn(
           icon: Icons.refresh,
-          label: 'Réessayer maintenant',
+          label: 'Retry Now',
           onTap: () => setState(() {
-            client.status = 'À faire';
+            client.status = 'To Do';
             client.missReason = null;
             _flow = 'detail';
           }),
@@ -1001,20 +1182,20 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     );
   }
 
-  // ---- Flow « manqué » ----
+  // ---- "Missed" flow ----
 
   Widget _buildMissFlow() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Signaler un problème',
+          'Report a Problem',
           textAlign: TextAlign.center,
           style: BackofficeTheme.sora(14.5, weight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(
-          'Pourquoi ce ramassage ne peut pas être effectué ?',
+          'Why can\'t this collection be made?',
           textAlign: TextAlign.center,
           style: BackofficeTheme.inter(11.5, color: BackofficeTheme.muted),
         ),
@@ -1048,7 +1229,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             const SizedBox(width: 10),
             Expanded(
               child: _NextBtn(
-                label: 'Confirmer',
+                label: 'Confirm',
                 enabled: _missSelected != null,
                 onTap: _confirmMiss,
               ),
@@ -1062,25 +1243,37 @@ class _CollectorDashboardState extends State<CollectorDashboard>
   void _confirmMiss() {
     final client = _currentClient;
     if (client == null || _missSelected == null) return;
+    final reason = _missSelected!;
     setState(() {
-      client.status = 'Manqué';
-      client.missReason = _missSelected;
+      client.status = 'Missed';
+      client.missReason = reason;
       _sheetOpen = false;
       _flow = 'detail';
       _missSelected = null;
     });
     _syncScanAnimation();
-    _showToast('Ramassage marqué comme manqué.', error: true);
+    // Persist to Firestore (fire-and-forget).
+    _tourneeService.recordMissed(
+      collectorId: _collectorId ?? '',
+      collectorName: _collectorName,
+      stop: client,
+      reason: reason,
+    ).catchError((e) {
+      debugPrint('[CollectorDashboard] Failed to record miss: $e');
+    });
+    _showToast('Collection marked as missed.', error: true);
   }
 
-  // ---- Flow collecte (3 étapes) ----
+  // ---- Collection flow (3 steps) ----
 
-  void _startCollecte(_TourneeClient client) {
+  void _startCollecte(TourneeStop client) {
     setState(() {
-      if (client.status == 'À faire') client.status = 'En cours';
+      if (client.status == 'To Do') client.status = 'In Progress';
       _flow = 'step1';
       _method = 'qr';
       _qrValidated = false;
+      _signatureValidated = false;
+      _signaturePoints.clear();
       _photoTaken = false;
       _poidsCtrl.clear();
       _commentCtrl.clear();
@@ -1141,13 +1334,14 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 
   Widget _buildStep1() {
     final canNext = (_method == 'qr' && _qrValidated) ||
-        (_method == 'otp' && _otp.every((c) => c.text.isNotEmpty));
+        (_method == 'otp' && _otp.every((c) => c.text.isNotEmpty)) ||
+        (_method == 'signature' && _signatureValidated);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _stepHeader(
-          'Valider votre présence',
-          'Scannez le QR code du client ou saisissez son code',
+          'Verify Your Presence',
+          'Choose a verification method below',
         ),
         Container(
           padding: const EdgeInsets.all(4),
@@ -1159,7 +1353,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             children: [
               Expanded(
                 child: _MethodTab(
-                  label: 'Code QR',
+                  label: 'QR Code',
                   active: _method == 'qr',
                   onTap: () {
                     setState(() {
@@ -1170,12 +1364,24 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                   },
                 ),
               ),
+              const SizedBox(width: 4),
               Expanded(
                 child: _MethodTab(
-                  label: 'Code OTP',
+                  label: 'OTP',
                   active: _method == 'otp',
                   onTap: () {
                     setState(() => _method = 'otp');
+                    _syncScanAnimation();
+                  },
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _MethodTab(
+                  label: 'Sign',
+                  active: _method == 'signature',
+                  onTap: () {
+                    setState(() => _method = 'signature');
                     _syncScanAnimation();
                   },
                 ),
@@ -1184,7 +1390,12 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           ),
         ),
         const SizedBox(height: 20),
-        if (_method == 'qr') _buildQrBody() else _buildOtpBody(),
+        if (_method == 'qr')
+          _buildQrBody()
+        else if (_method == 'otp')
+          _buildOtpBody()
+        else
+          _buildSignatureBody(),
         const SizedBox(height: 14),
         Row(
           children: [
@@ -1197,7 +1408,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             const SizedBox(width: 10),
             Expanded(
               child: _NextBtn(
-                label: 'Suivant',
+                label: 'Next',
                 enabled: canNext,
                 onTap: () {
                   setState(() => _flow = 'step2');
@@ -1223,7 +1434,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           ),
           child: Stack(
             children: [
-              // Coins
+              // Corners
               for (final align in [
                 Alignment.topLeft,
                 Alignment.topRight,
@@ -1244,7 +1455,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                     ),
                   ),
                 ),
-              // Ligne de scan animée
+              // Animated scan line
               AnimatedBuilder(
                 animation: _scanCtrl,
                 builder: (context, _) {
@@ -1272,7 +1483,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                 right: 0,
                 bottom: 14,
                 child: Text(
-                  'Cadrez le QR code du client',
+                  'Frame the client\'s QR code',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 10, color: Color(0xB3F5F1E8)),
                 ),
@@ -1282,11 +1493,18 @@ class _CollectorDashboardState extends State<CollectorDashboard>
         ),
         const SizedBox(height: 18),
         _PrimaryBtn(
-          icon: Icons.qr_code_2,
-          label: 'Simuler la lecture du QR',
+          icon: Icons.qr_code_scanner_rounded,
+          label: 'Scan QR Code',
+          onTap: _scanQrCode,
+        ),
+        const SizedBox(height: 10),
+        // Fallback de démo/développement (le design original ne simulait
+        // que la lecture — la caméra réelle s'y ajoute).
+        _SecondaryBtn(
+          label: 'Simulate QR Scan',
           onTap: () {
             setState(() => _qrValidated = true);
-            _showToast('QR code validé.');
+            _showToast('QR code validated.');
           },
         ),
         const SizedBox(height: 18),
@@ -1353,13 +1571,124 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     );
   }
 
+  Widget _buildSignatureBody() {
+    final hasPoints = _signaturePoints.any((p) => p != null);
+    return Column(
+      children: [
+        if (_signatureValidated)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: BackofficeTheme.greenSoft,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  size: 26,
+                  color: BackofficeTheme.success,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Signature Captured',
+                  style: BackofficeTheme.sora(14, weight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'The client has signed electronically',
+                  style: BackofficeTheme.inter(
+                    11.5,
+                    color: BackofficeTheme.muted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PrimaryBtn(
+                  icon: Icons.refresh,
+                  label: 'Redo Signature',
+                  onTap: () => setState(() {
+                    _signatureValidated = false;
+                    _signaturePoints.clear();
+                  }),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          Text(
+            'Ask the client to sign below',
+            textAlign: TextAlign.center,
+            style: BackofficeTheme.inter(
+              12,
+              color: BackofficeTheme.muted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 200,
+            decoration: BoxDecoration(
+              color: BackofficeTheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: BackofficeTheme.border, width: 2),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: GestureDetector(
+              onPanStart: (details) {
+                setState(() {
+                  _signaturePoints.add(details.localPosition);
+                });
+              },
+              onPanUpdate: (details) {
+                setState(() {
+                  _signaturePoints.add(details.localPosition);
+                });
+              },
+              onPanEnd: (details) {
+                setState(() {
+                  _signaturePoints.add(null); // null = break between strokes
+                });
+              },
+              child: CustomPaint(
+                painter: _SignaturePainter(points: _signaturePoints),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _SecondaryBtn(
+                  label: 'Clear',
+                  onTap: hasPoints
+                      ? () => setState(() => _signaturePoints.clear())
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PrimaryBtn(
+                  icon: Icons.check,
+                  label: 'Accept Signature',
+                  onTap: hasPoints
+                      ? () => setState(() => _signatureValidated = true)
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildStep2() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _stepHeader(
-          'Prendre une photo',
-          'Photo du dépôt comme preuve de passage',
+          'Take a Photo',
+          'Photo of the deposit as proof of visit',
         ),
         GestureDetector(
           onTap: () => setState(() => _photoTaken = true),
@@ -1389,7 +1718,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Photo du dépôt prise',
+                              'Deposit photo taken',
                               style: BackofficeTheme.inter(
                                 12,
                                 weight: FontWeight.w600,
@@ -1420,7 +1749,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                                       size: 12, color: Colors.white),
                                   SizedBox(width: 5),
                                   Text(
-                                    'Reprendre',
+                                    'Retake',
                                     style: TextStyle(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w600,
@@ -1445,7 +1774,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Touchez pour prendre la photo',
+                        'Tap to take photo',
                         style: BackofficeTheme.inter(
                           12,
                           weight: FontWeight.w600,
@@ -1468,7 +1797,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             const SizedBox(width: 10),
             Expanded(
               child: _NextBtn(
-                label: 'Suivant',
+                label: 'Next',
                 enabled: _photoTaken,
                 onTap: () {
                   setState(() => _flow = 'step3');
@@ -1487,11 +1816,11 @@ class _CollectorDashboardState extends State<CollectorDashboard>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _stepHeader(
-          'Détails de la collecte',
-          'Dernière étape avant validation',
+          'Collection Details',
+          'Final step before validation',
         ),
         Text(
-          'Poids estimé (kg)',
+          'Estimated weight (kg)',
           style: BackofficeTheme.inter(
             11,
             weight: FontWeight.w600,
@@ -1503,11 +1832,11 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           controller: _poidsCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: BackofficeTheme.inter(14),
-          decoration: _fieldDecoration('Ex. 4.5'),
+          decoration: _fieldDecoration('e.g. 4.5'),
         ),
         const SizedBox(height: 15),
         Text(
-          'Commentaire (optionnel)',
+          'Comment (optional)',
           style: BackofficeTheme.inter(
             11,
             weight: FontWeight.w600,
@@ -1519,7 +1848,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           controller: _commentCtrl,
           maxLines: 3,
           style: BackofficeTheme.inter(14),
-          decoration: _fieldDecoration('Ajoutez une note...'),
+          decoration: _fieldDecoration('Add a note...'),
         ),
         const SizedBox(height: 18),
         Row(
@@ -1533,7 +1862,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
             const SizedBox(width: 10),
             Expanded(
               child: _NextBtn(
-                label: 'Valider la collecte',
+                label: 'Validate &\nConfirm',
                 icon: Icons.check,
                 enabled: true,
                 onTap: _validateCollecte,
@@ -1567,18 +1896,113 @@ class _CollectorDashboardState extends State<CollectorDashboard>
     final client = _currentClient;
     if (client == null) return;
     final poids = double.tryParse(_poidsCtrl.text.trim()) ?? 0;
+    final commentaire = _commentCtrl.text.trim();
+    final now = _now();
+    final heureArrivee = client.heureArrivee.isEmpty ? now : client.heureArrivee;
+    final todayDate = DateTime.now()
+        .toString()
+        .split(' ')
+        .first;
     setState(() {
-      client.status = 'Terminé';
-      client.heureArrivee =
-          client.heureArrivee.isEmpty ? _now() : client.heureArrivee;
-      client.heureDepart = _now();
+      client.status = 'In Progress';
+      client.heureArrivee = heureArrivee;
+      client.heureDepart = now;
       client.poids = poids;
-      client.commentaire = _commentCtrl.text.trim();
+      client.commentaire = commentaire;
       _sheetOpen = false;
       _flow = 'detail';
     });
     _syncScanAnimation();
-    _showToast('Collecte enregistrée — ${client.name}');
+    _showToast('Collection sent for client confirmation — ${client.clientName}');
+
+    // Persist to Firestore (fire-and-forget) then, once the pickup id is
+    // known, send the client the QR-code validation request.
+    _tourneeService
+        .recordPickup(
+          collectorId: _collectorId ?? '',
+          collectorName: _collectorName,
+          stop: client,
+          poids: poids,
+          commentaire: commentaire,
+          heureArrivee: heureArrivee,
+          heureDepart: now,
+        )
+        .then((pickupId) {
+          return _notificationService.sendPickupConfirmationRequest(
+            phone: client.clientPhone,
+            clientName: client.clientName,
+            collectorName: _collectorName,
+            poids: poids,
+            date: todayDate,
+            pickupId: pickupId,
+          );
+        })
+        .catchError((e) {
+          debugPrint('[CollectorDashboard] Failed to send confirmation request: $e');
+        });
+  }
+
+  // ------------------------------------------------------------------
+  // QR scan (real camera)
+  // ------------------------------------------------------------------
+
+  /// Ouvre [QRScannerScreen] (caméra) et valide le QR scanné : il doit
+  /// correspondre au téléphone du client en cours de collecte. En cas de
+  /// doute (code absent ou différent), la collecte n'est pas validée.
+  Future<void> _scanQrCode() async {
+    final code = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+    );
+    if (code == null || code.trim().isEmpty || !mounted) return;
+    final client = _currentClient;
+    final expected = client?.clientPhone ?? '';
+    // Comparaison tolérante (espaces, tirets, +237…).
+    digits(s) => s.replaceAll(RegExp(r'[^0-9]'), '');
+    if (expected.isNotEmpty && digits(code) != digits(expected)) {
+      _showToast(
+        'This QR code is not for ${client?.clientName ?? 'this client'}.',
+        error: true,
+      );
+      return;
+    }
+    setState(() => _qrValidated = true);
+    _showToast('QR code validated.');
+  }
+
+  // ------------------------------------------------------------------
+  // Route Map
+  // ------------------------------------------------------------------
+
+  void _openRouteMap(TourneeStop client) {
+    if (client.latitude == null || client.longitude == null) {
+      _showToast('No location data for this client.', error: true);
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _RouteMapScreen(
+          clientName: client.clientName,
+          clientAddress: client.address,
+          clientLatitude: client.latitude!,
+          clientLongitude: client.longitude!,
+        ),
+      ),
+    );
+  }
+
+  void _openItineraryMap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ItineraryMapScreen(
+          tournee: _tournee,
+          collectorId: _collectorId ?? '',
+          collectorName: _collectorName,
+        ),
+      ),
+    );
   }
 
   // ------------------------------------------------------------------
@@ -1598,23 +2022,1047 @@ class _CollectorDashboardState extends State<CollectorDashboard>
 }
 
 // ====================================================================
-// Helpers
+// Route Map Screen
 // ====================================================================
 
-String _now() {
-  final d = DateTime.now();
-  final h = d.hour.toString().padLeft(2, '0');
-  final m = d.minute.toString().padLeft(2, '0');
-  return '$h:$m';
+class _RouteMapScreen extends StatefulWidget {
+  const _RouteMapScreen({
+    required this.clientName,
+    required this.clientAddress,
+    required this.clientLatitude,
+    required this.clientLongitude,
+  });
+
+  final String clientName;
+  final String clientAddress;
+  final double clientLatitude;
+  final double clientLongitude;
+
+  @override
+  State<_RouteMapScreen> createState() => _RouteMapScreenState();
 }
 
-String _frDayLabel(DateTime d) {
+class _RouteMapScreenState extends State<_RouteMapScreen> {
+  LatLng? _collectorPosition;
+  StreamSubscription<Position>? _positionSubscription;
+  bool _loading = true;
+  bool _routeLoading = true;
+  bool _permissionDenied = false;
+  final NavigationService _navService = NavigationService();
+  RouteResult? _routeResult;
+
+  // Default to Yaoundé center if GPS unavailable
+  static const LatLng _defaultYaounde = LatLng(3.8480, 11.5021);
+
+  @override
+  void initState() {
+    super.initState();
+    _initLocation();
+  }  Future<void> _initLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _useDefaultPosition();
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _permissionDenied = true);
+        _useDefaultPosition();
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (!mounted) return;
+      setState(() {
+        _collectorPosition = LatLng(position.latitude, position.longitude);
+        _loading = false;
+      });
+
+      // Fetch the real road-based route.
+      _fetchRoute();
+
+      // Stream live updates
+      _positionSubscription = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10, // Update every 10 meters
+        ),
+      ).listen((pos) {
+        if (mounted) {
+          setState(() {
+            _collectorPosition = LatLng(pos.latitude, pos.longitude);
+          });
+          // Re-fetch route when position changes significantly.
+          _fetchRoute();
+        }
+      });
+    } catch (_) {
+      _useDefaultPosition();
+    }
+  }
+
+  /// Fetches the real road-based route from OSRM.
+  Future<void> _fetchRoute() async {
+    if (_collectorPosition == null) return;
+    setState(() => _routeLoading = true);
+
+    try {
+      final result = await _navService.getRoute(
+        origin: _collectorPosition!,
+        destination: _clientPos,
+      );
+      if (mounted) {
+        setState(() {
+          _routeResult = result;
+          _routeLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _routeLoading = false);
+      }
+    }
+  }
+
+  void _useDefaultPosition() {
+    if (!mounted) return;
+    setState(() {
+      _collectorPosition = _defaultYaounde;
+      _loading = false;
+    });
+  }
+
+  /// Open device settings so the collector can enable location permission.
+  Future<void> _openSettings() async {
+    await Geolocator.openAppSettings();
+  }
+
+  Widget _buildPermissionDeniedView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: BackofficeTheme.redSoft,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.location_off_outlined,
+                size: 40,
+                color: BackofficeTheme.red,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Location Permission Required',
+              textAlign: TextAlign.center,
+              style: BackofficeTheme.sora(16, weight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This app needs access to your location to show your route and track collections. Please enable location access in your device settings.',
+              textAlign: TextAlign.center,
+              style: BackofficeTheme.inter(12.5, color: BackofficeTheme.muted),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings, size: 18),
+                label: Text(
+                  'Open Settings',
+                  style: BackofficeTheme.inter(13, weight: FontWeight.w700, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: BackofficeTheme.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                setState(() => _permissionDenied = false);
+                _initLocation();
+              },
+              child: Text(
+                'Try Again',
+                style: BackofficeTheme.inter(12.5, weight: FontWeight.w600, color: BackofficeTheme.green),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _positionSubscription?.cancel();
+    super.dispose();
+  }
+
+  LatLng get _clientPos =>
+      LatLng(widget.clientLatitude, widget.clientLongitude);
+
+  LatLng get _startPos => _collectorPosition ?? _defaultYaounde;
+
+  /// Distance and duration from real road route (or fallback to straight-line).
+  double get _distanceKm {
+    if (_routeResult != null) {
+      return _routeResult!.distanceMeters / 1000;
+    }
+    return const Distance().as(LengthUnit.Kilometer, _startPos, _clientPos);
+  }
+
+  double get _durationMinutes {
+    if (_routeResult != null) {
+      return _routeResult!.durationSeconds / 60;
+    }
+    return _distanceKm * 3; // Fallback: ~20 km/h
+  }
+
+  List<LatLng> get _routePoints {
+    if (_routeResult != null && _routeResult!.points.isNotEmpty) {
+      return _routeResult!.points;
+    }
+    return [_startPos, _clientPos];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clientMarker = _clientPos;
+    final startMarker = _startPos;
+
+    // Compute bounds to fit both markers
+    final bounds = LatLngBounds.fromPoints([startMarker, clientMarker]);
+    final center = bounds.center;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: BackofficeTheme.green,
+        foregroundColor: BackofficeTheme.cream,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.clientName,
+              style: BackofficeTheme.sora(15, weight: FontWeight.w600, color: BackofficeTheme.cream),
+            ),
+            Text(
+              widget.clientAddress,
+              style: BackofficeTheme.inter(11, color: BackofficeTheme.cream.withValues(alpha: 0.7)),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: BackofficeTheme.cream.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_distanceKm.toStringAsFixed(1)} km',
+                  style: BackofficeTheme.inter(11, weight: FontWeight.w700, color: BackofficeTheme.cream),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _permissionDenied
+              ? _buildPermissionDeniedView()
+          : Stack(
+              children: [
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 14,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.proprie237.waste_pro',
+                    ),
+                    // Route polyline (real road-based route from OSRM)
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: _routePoints,
+                          color: _routeResult != null ? BackofficeTheme.green : BackofficeTheme.muted,
+                          strokeWidth: 4,
+                          isDotted: _routeResult == null,
+                        ),
+                      ],
+                    ),
+                    // Client marker
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: clientMarker,
+                          width: 44,
+                          height: 44,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: BackofficeTheme.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2.5),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
+                              ],
+                            ),
+                            child: const Icon(Icons.home, color: Colors.white, size: 20),
+                          ),
+                        ),
+                        // Collector marker
+                        Marker(
+                          point: startMarker,
+                          width: 44,
+                          height: 44,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: BackofficeTheme.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2.5),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
+                              ],
+                            ),
+                            child: const Icon(Icons.my_location, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                // Bottom info card
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 24,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: BackofficeTheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: BackofficeTheme.border),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 4)),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: BackofficeTheme.greenSoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.home, size: 18, color: BackofficeTheme.green),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.clientName,
+                                    style: BackofficeTheme.sora(13, weight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    widget.clientAddress,
+                                    style: BackofficeTheme.inter(11, color: BackofficeTheme.muted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _MapInfoChip(
+                              icon: Icons.straighten,
+                              label: _routeResult != null
+                                  ? _routeResult!.distanceFormatted
+                                  : '${_distanceKm.toStringAsFixed(1)} km',
+                            ),
+                            const SizedBox(width: 8),
+                            _MapInfoChip(
+                              icon: Icons.access_time,
+                              label: _routeResult != null
+                                  ? _routeResult!.durationFormatted
+                                  : '~${_durationMinutes.round()} min',
+                            ),
+                            if (_routeLoading) ...[
+                              const SizedBox(width: 8),
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ],
+                            if (_collectorPosition != null && !_routeLoading) ...[
+                              const SizedBox(width: 8),
+                              _MapInfoChip(
+                                icon: Icons.gps_fixed,
+                                label: 'Live',
+                                active: true,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Navigate button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _navService.openNavigation(
+                              origin: _startPos,
+                              destination: _clientPos,
+                              destinationName: widget.clientName,
+                            ),
+                            icon: const Icon(Icons.navigation, size: 18),
+                            label: Text(
+                              'Navigate with GPS',
+                              style: BackofficeTheme.inter(
+                                13,
+                                weight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: BackofficeTheme.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+// ====================================================================
+// Itinerary Map Screen (collector's full route overview)
+// ====================================================================
+
+class _ItineraryMapScreen extends StatefulWidget {
+  const _ItineraryMapScreen({
+    required this.tournee,
+    required this.collectorId,
+    required this.collectorName,
+  });
+
+  final List<TourneeStop> tournee;
+  final String collectorId;
+  final String collectorName;
+
+  @override
+  State<_ItineraryMapScreen> createState() => _ItineraryMapScreenState();
+}
+
+class _ItineraryMapScreenState extends State<_ItineraryMapScreen>
+    with SingleTickerProviderStateMixin {
+  final MapController _mapController = MapController();
+  LatLng? _collectorPos;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _posSub;
+
+  // Pulse animation.
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseScale;
+
+  static const LatLng _defaultCenter = LatLng(3.8480, 11.5021);
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    _pulseScale = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+    _subscribeToPosition();
+    // Auto-center on stops after the first frame so the map doesn't show
+    // a default view far from the actual route.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fitAllStops();
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  void _subscribeToPosition() {
+    _posSub = FirebaseFirestore.instance
+        .collection('collecteurs')
+        .doc(widget.collectorId)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      final data = snap.data();
+      if (data == null) return;
+      final lat = (data['latitude'] as num?)?.toDouble();
+      final lng = (data['longitude'] as num?)?.toDouble();
+      // Treat 0,0 or coordinates outside Cameroon as invalid.
+      final valid = lat != null && lng != null &&
+          !(lat == 0 && lng == 0) &&
+          (lat > 1 && lat < 14) && (lng > 8 && lng < 17);
+      setState(() {
+        _collectorPos = valid ? LatLng(lat, lng) : null;
+        _fitAllStops();
+      });
+    });
+  }
+
+  void _fitAllStops() {
+    final points = <LatLng>[];
+    if (_collectorPos != null) points.add(_collectorPos!);
+    for (final s in widget.tournee) {
+      if (s.latitude != null && s.longitude != null) {
+        points.add(LatLng(s.latitude!, s.longitude!));
+      }
+    }
+    if (points.isEmpty) return;
+    if (points.length == 1) {
+      _mapController.move(points.first, 15);
+      return;
+    }
+    final bounds = LatLngBounds.fromPoints(points);
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)),
+    );
+  }
+
+  // ── Build ────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    // Collect stop points for polylines.
+    final stopPoints = widget.tournee
+        .where((s) => s.latitude != null && s.longitude != null)
+        .map((s) => LatLng(s.latitude!, s.longitude!))
+        .toList();
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _collectorPos ?? _defaultCenter,
+              initialZoom: 14,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.proprie237.waste_pro',
+              ),
+              // Route polylines
+              if (stopPoints.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: stopPoints,
+                      color: BackofficeTheme.gold.withValues(alpha: 0.5),
+                      strokeWidth: 3,
+                      isDotted: true,
+                    ),
+                  ],
+                ),
+              // Collector → first pending stop
+              if (_collectorPos != null)
+                _buildCollectorRouteLine(),
+              // Stop markers
+              MarkerLayer(markers: _buildStopMarkers()),
+              // Collector marker
+              if (_collectorPos != null)
+                MarkerLayer(markers: [_buildCollectorMarker()]),
+            ],
+          ),
+          // Top bar
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildTopBar(),
+          ),
+          // Bottom info card
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: _buildInfoCard(),
+          ),
+          // My Location button (right side, above info card)
+          Positioned(
+            right: 16,
+            bottom: 180,
+            child: _buildMyLocationButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMyLocationButton() {
+    return GestureDetector(
+      onTap: _centerOnMyLocation,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: BackofficeTheme.surface,
+          shape: BoxShape.circle,
+          boxShadow: const [
+            BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Icon(
+          _collectorPos != null ? Icons.my_location : Icons.location_searching,
+          color: BackofficeTheme.green,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
+  void _centerOnMyLocation() {
+    if (_collectorPos != null) {
+      _mapController.move(_collectorPos!, 16);
+    } else {
+      _fetchAndCenterPosition();
+    }
+  }
+
+  Future<void> _fetchAndCenterPosition() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final pos = LatLng(position.latitude, position.longitude);
+      setState(() => _collectorPos = pos);
+      _mapController.move(pos, 16);
+    } catch (_) {}
+  }
+
+  Widget _buildTopBar() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        MediaQuery.of(context).padding.top + 8,
+        16,
+        12,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.7),
+            Colors.transparent,
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: BackofficeTheme.surface,
+                shape: BoxShape.circle,
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+                ],
+              ),
+              child: const Icon(Icons.arrow_back_rounded, color: BackofficeTheme.green, size: 20),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Today's Route",
+                  style: BackofficeTheme.sora(15, weight: FontWeight.w600, color: Colors.white),
+                ),
+                Text(
+                  '${widget.tournee.length} stops · ${widget.collectorName}',
+                  style: BackofficeTheme.inter(11, color: Colors.white.withValues(alpha: 0.6)),
+                ),
+              ],
+            ),
+          ),
+          // Fit-all button
+          GestureDetector(
+            onTap: _fitAllStops,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: BackofficeTheme.surface,
+                shape: BoxShape.circle,
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Icon(Icons.zoom_out_map, color: BackofficeTheme.green, size: 20),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Marker _buildCollectorMarker() {
+    return Marker(
+      point: _collectorPos!,
+      width: 44,
+      height: 44,
+      child: AnimatedBuilder(
+        animation: _pulseScale,
+        builder: (context, _) {
+          final s = _pulseScale.value;
+          return Transform.scale(
+            scale: s,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: BackofficeTheme.green,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: BackofficeTheme.green.withValues(alpha: 0.4 * (2 - s)),
+                    blurRadius: 12 * s,
+                    spreadRadius: 2 * (s - 1),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.my_location, color: Colors.white, size: 18),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<Marker> _buildStopMarkers() {
+    return widget.tournee.asMap().entries.map((entry) {
+      final i = entry.key;
+      final stop = entry.value;
+      if (stop.latitude == null || stop.longitude == null) return null;
+      final done = stop.status == 'Done';
+      final missed = stop.status == 'Missed';
+      final color = done
+          ? Colors.green
+          : missed
+              ? BackofficeTheme.red
+              : BackofficeTheme.gold;
+      return Marker(
+        point: LatLng(stop.latitude!, stop.longitude!),
+        width: 34,
+        height: 42,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Center(
+                child: done
+                    ? const Icon(Icons.check, color: Colors.white, size: 14)
+                    : missed
+                        ? const Icon(Icons.close, color: Colors.white, size: 14)
+                        : Text(
+                            '${i + 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+              ),
+            ),
+            Icon(Icons.arrow_drop_down, size: 12, color: color),
+          ],
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
+
+  Widget _buildCollectorRouteLine() {
+    if (_collectorPos == null) return const SizedBox.shrink();
+    final pending = widget.tournee.where((s) => s.status == 'To Do' || s.status == 'In Progress').toList();
+    if (pending.isEmpty) return const SizedBox.shrink();
+    // Find the first pending stop that has GPS coordinates.
+    final destStop = pending.firstWhere(
+      (s) => s.latitude != null && s.longitude != null,
+      orElse: () => pending.first,
+    );
+    if (destStop.latitude == null || destStop.longitude == null) return const SizedBox.shrink();
+    final dest = LatLng(destStop.latitude!, destStop.longitude!);
+    return PolylineLayer(
+      polylines: [
+        Polyline(
+          points: [_collectorPos!, dest],
+          color: BackofficeTheme.green,
+          strokeWidth: 4,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard() {
+    final pending = widget.tournee.where((t) => t.status == 'To Do' || t.status == 'In Progress').length;
+    final done = widget.tournee.where((t) => t.status == 'Done').length;
+    final missed = widget.tournee.where((t) => t.status == 'Missed').length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: BackofficeTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Today's Progress",
+            style: BackofficeTheme.sora(14, weight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _ItineraryStat(label: 'Pending', value: '$pending', color: BackofficeTheme.gold),
+              const SizedBox(width: 8),
+              _ItineraryStat(label: 'Done', value: '$done', color: BackofficeTheme.success),
+              const SizedBox(width: 8),
+              _ItineraryStat(label: 'Missed', value: '$missed', color: BackofficeTheme.red),
+            ],
+          ),
+          // Show stops list
+          const SizedBox(height: 10),
+          ...widget.tournee.take(5).toList().asMap().entries.map((entry) {
+            final i = entry.key;
+            final stop = entry.value;
+            final done = stop.status == 'Done';
+            final missed = stop.status == 'Missed';
+            final color = done ? Colors.green : missed ? BackofficeTheme.red : BackofficeTheme.gold;
+            return GestureDetector(
+              onTap: () {
+                if (stop.latitude != null && stop.longitude != null) {
+                  _mapController.move(
+                    LatLng(stop.latitude!, stop.longitude!),
+                    16,
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: done
+                            ? const Icon(Icons.check, size: 10, color: Colors.green)
+                            : missed
+                                ? const Icon(Icons.close, size: 10, color: BackofficeTheme.red)
+                                : Text(
+                                    '${i + 1}',
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: BackofficeTheme.gold),
+                                  ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        stop.clientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: done ? BackofficeTheme.muted : BackofficeTheme.text,
+                          decoration: done ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      stop.pickupTime.split('\u2013').first.trim(),
+                      style: BackofficeTheme.inter(10, color: BackofficeTheme.muted),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          if (widget.tournee.length > 5)
+            Text(
+              '+${widget.tournee.length - 5} more stops',
+              style: BackofficeTheme.inter(10, color: BackofficeTheme.muted),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small stat box for the itinerary card.
+class _ItineraryStat extends StatelessWidget {
+  const _ItineraryStat({required this.label, required this.value, required this.color});
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(value, style: BackofficeTheme.sora(16, weight: FontWeight.w700, color: color)),
+            const SizedBox(height: 2),
+            Text(label, style: BackofficeTheme.inter(9.5, color: BackofficeTheme.muted)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapInfoChip extends StatelessWidget {
+  const _MapInfoChip({
+    required this.icon,
+    required this.label,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: active ? BackofficeTheme.greenSoft : BackofficeTheme.bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: active ? BackofficeTheme.green : BackofficeTheme.muted,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: BackofficeTheme.inter(
+              10.5,
+              weight: FontWeight.w600,
+              color: active ? BackofficeTheme.green : BackofficeTheme.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ====================================================================
+
+String _dayLabel(DateTime d) {
   const days = [
-    'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
   ];
   const months = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
   return '${days[d.weekday - 1]} ${d.day.toString().padLeft(2, '0')} '
       '${months[d.month - 1]}';
@@ -1677,7 +3125,7 @@ class _IconBtn extends StatelessWidget {
   }
 }
 
-/// Carte de progression avec anneau.
+/// Progress card with ring indicator.
 class _ProgressCard extends StatelessWidget {
   const _ProgressCard({required this.done, required this.total});
 
@@ -1722,7 +3170,7 @@ class _ProgressCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Tournée du jour',
+                  'Today\'s Route',
                   style: BackofficeTheme.sora(
                     13,
                     weight: FontWeight.w600,
@@ -1731,9 +3179,9 @@ class _ProgressCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${_frDayLabel(DateTime.now())} — '
+                  '${_dayLabel(DateTime.now())} — '
                   '$remaining client${remaining > 1 ? 's' : ''} '
-                  'restant${remaining > 1 ? 's' : ''}',
+                  'remaining',
                   style: BackofficeTheme.inter(
                     10.5,
                     color: BackofficeTheme.cream.withValues(alpha: 0.55),
@@ -1760,13 +3208,13 @@ class _RingPainter extends CustomPainter {
     final stroke = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6;
-    // Fond
+    // Background
     canvas.drawCircle(
       center,
       radius,
       stroke..color = BackofficeTheme.cream.withValues(alpha: 0.15),
     );
-    // Progression
+    // Progress
     final sweep = 2 * math.pi * progress.clamp(0.0, 1.0);
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
@@ -1823,15 +3271,16 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _ClientCard extends StatelessWidget {
-  const _ClientCard({required this.client, required this.onTap});
+  const _ClientCard({required this.client, required this.onTap, required this.index});
 
-  final _TourneeClient client;
+  final TourneeStop client;
   final VoidCallback onTap;
+  final int index;
 
   Color get _accent => switch (client.status) {
-        'Terminé' => BackofficeTheme.success,
-        'Manqué' => BackofficeTheme.red,
-        'En cours' => BackofficeTheme.gold,
+        'Done' => BackofficeTheme.success,
+        'Missed' => BackofficeTheme.red,
+        'In Progress' => BackofficeTheme.gold,
         _ => BackofficeTheme.border,
       };
 
@@ -1848,7 +3297,7 @@ class _ClientCard extends StatelessWidget {
         child: IntrinsicHeight(
           child: Row(
             children: [
-              // Barre latérale colorée selon l'état
+              // Color bar based on status
               Container(width: 4, color: _accent),
               Expanded(
                 child: Padding(
@@ -1867,7 +3316,7 @@ class _ClientCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Text(
-                          '${client.num}',
+                          '${index + 1}',
                           style: BackofficeTheme.sora(
                             12,
                             weight: FontWeight.w700,
@@ -1881,7 +3330,7 @@ class _ClientCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              client.name,
+                              client.clientName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: BackofficeTheme.inter(
@@ -1919,7 +3368,7 @@ class _ClientCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            client.time.split('–').first.trim(),
+                            client.pickupTime.split('–').first.trim(),
                             style: BackofficeTheme.inter(
                               11,
                               weight: FontWeight.w700,
@@ -1949,9 +3398,9 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg) = switch (status) {
-      'Terminé' => (BackofficeTheme.greenSoft, BackofficeTheme.success),
-      'Manqué' => (BackofficeTheme.redSoft, BackofficeTheme.red),
-      'En cours' => (BackofficeTheme.goldSoft, BackofficeTheme.goldDim),
+      'Done' => (BackofficeTheme.greenSoft, BackofficeTheme.success),
+      'Missed' => (BackofficeTheme.redSoft, BackofficeTheme.red),
+      'In Progress' => (BackofficeTheme.goldSoft, BackofficeTheme.goldDim),
       _ => (BackofficeTheme.graySoft, BackofficeTheme.muted),
     };
     return Container(
@@ -1993,7 +3442,7 @@ class _HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final done = entry.status == 'Effectué';
+    final done = entry.status == 'Completed';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       decoration: BoxDecoration(
@@ -2028,7 +3477,7 @@ class _HistoryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  entry.heure == '—' ? 'Non visité' : 'Arrivée ${entry.heure}',
+                  entry.heure == '—' ? 'Not visited' : 'Arrival ${entry.heure}',
                   style: BackofficeTheme.inter(11, color: BackofficeTheme.muted),
                 ),
               ],
@@ -2047,7 +3496,7 @@ class _HistoryCard extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 5),
-              _StatusBadge(status: done ? 'Terminé' : 'Manqué'),
+              _StatusBadge(status: done ? 'Done' : 'Missed'),
             ],
           ),
         ],
@@ -2119,11 +3568,11 @@ class _ProfileRow extends StatelessWidget {
   }
 }
 
-/// En-tête du sheet détail client.
+/// Client sheet header.
 class _ClientHeader extends StatelessWidget {
   const _ClientHeader({required this.client, this.showTime = false});
 
-  final _TourneeClient client;
+  final TourneeStop client;
   final bool showTime;
 
   @override
@@ -2141,7 +3590,7 @@ class _ClientHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
-              boInitials(client.name),
+              boInitials(client.clientName),
               style: BackofficeTheme.sora(
                 16,
                 weight: FontWeight.w700,
@@ -2155,12 +3604,12 @@ class _ClientHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  client.name,
+                  client.clientName,
                   style: BackofficeTheme.sora(15.5, weight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  showTime ? '${client.time} · ${client.address}' : client.address,
+                  showTime ? '${client.pickupTime} · ${client.address}' : client.address,
                   style: BackofficeTheme.inter(
                     11.5,
                     color: BackofficeTheme.muted,
@@ -2281,6 +3730,71 @@ class _DoneCell extends StatelessWidget {
   }
 }
 
+class _SecondaryBtn extends StatelessWidget {
+  const _SecondaryBtn({required this.label, this.onTap});
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(13),
+        child: Container(
+          padding: const EdgeInsets.all(15),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: onTap != null ? BackofficeTheme.border : BackofficeTheme.border.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: BackofficeTheme.inter(
+              14,
+              weight: FontWeight.w600,
+              color: onTap != null ? BackofficeTheme.green : BackofficeTheme.muted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignaturePainter extends CustomPainter {
+  _SignaturePainter({required this.points});
+
+  final List<Offset?> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = BackofficeTheme.green
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < points.length - 1; i++) {
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      if (p1 != null && p2 != null) {
+        canvas.drawLine(p1, p2, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignaturePainter oldDelegate) => true;
+}
+
 class _PrimaryBtn extends StatelessWidget {
   const _PrimaryBtn({
     required this.icon,
@@ -2290,7 +3804,7 @@ class _PrimaryBtn extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

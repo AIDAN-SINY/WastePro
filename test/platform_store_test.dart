@@ -6,15 +6,15 @@ void main() {
     final store = PlatformStore();
 
     store.updateSociete(
-      store.societes.first.copyWith(raisonSociale: 'WastePro Douala SAS'),
+      store.societes.first.copyWith(raisonSociale: 'WastePro Yaoundé SAS'),
     );
 
     expect(
-      store.agences.where((a) => a.societe == 'WastePro Douala Ltd'),
+      store.agences.where((a) => a.societe == 'WastePro Yaoundé SARL'),
       isEmpty,
     );
     expect(
-      store.agences.where((a) => a.societe == 'WastePro Douala SAS').length,
+      store.agences.where((a) => a.societe == 'WastePro Yaoundé SAS').length,
       2,
     );
   });
@@ -32,7 +32,7 @@ void main() {
       () {
     final store = PlatformStore();
 
-    // ag1 (Douala — Bonanjo) : Jean Dooh est le manager seedé, 3 clients,
+    // ag1 (Yaoundé — Bastos): Jean Dooh is the seeded manager, 3 clients,
     // 2 collecteurs (seedClientsParAgence / seedCollecteursParAgence).
     final managers = store.managersForAgence('ag1');
     expect(managers.map((m) => m.nom), ['Jean Dooh']);
@@ -45,7 +45,7 @@ void main() {
     expect(collecteurs.length, 2);
     expect(collecteurs.every((c) => c.agenceId == 'ag1'), isTrue);
 
-    // Une agence sans collecteur seedé renvoie une liste vide.
+    // An agency with no seeded collector returns an empty list.
     expect(store.collecteursForAgence('ag2').length, 1);
   });
 
@@ -53,12 +53,12 @@ void main() {
       'per company', () {
     final store = PlatformStore();
 
-    // so1 (WastePro Douala Ltd) possède ag1 + ag2 (seed data).
+    // so1 (WastePro Yaoundé SARL) owns ag1 + ag2 (seed data).
     final agences = store.agencesForSociete('so1');
     expect(agences.length, 2);
     expect(agences.every((a) => a.societeId == 'so1'), isTrue);
 
-    // Managers = les utilisateurs de la société : Jean Dooh, Aïcha Bello
+    // Managers = company users: Jean Dooh, Aïcha Bello
     // (agences de so1) + Platform Admin (societeId so1).
     final managers = store.managersForSociete('so1');
     expect(managers.length, 3);
@@ -77,7 +77,7 @@ void main() {
     expect(collecteurs.length, 3);
     expect(collecteurs.every((c) => c.societeId == 'so1'), isTrue);
 
-    // so3 (EcoCollecte Kribi) n'a qu'une agence seedée → 1 client,
+    // so3 (EcoCollecte Kribi) has only one seeded agency → 1 client,
     // 1 collecteur.
     expect(store.agencesForSociete('so3').length, 1);
     expect(store.clientsForSociete('so3').length, 1);

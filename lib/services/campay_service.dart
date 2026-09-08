@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/config.dart';
 
-/// Exception levée par l'API CamPay (message exploitable côté UI).
+/// Exception raised by the CamPay API (UI-friendly message).
 class CampayException implements Exception {
   const CampayException(this.message);
   final String message;
@@ -13,7 +13,7 @@ class CampayException implements Exception {
   String toString() => message;
 }
 
-/// Transaction initiée par [CampayService.initCollect].
+/// Transaction initiated by [CampayService.initCollect].
 class CampayInitiatedTransaction {
   const CampayInitiatedTransaction({
     required this.reference,
@@ -21,17 +21,17 @@ class CampayInitiatedTransaction {
     required this.operator,
   });
 
-  /// Référence CamPay — sert à interroger le statut.
+  /// CamPay reference — used to query the status.
   final String reference;
 
-  /// Code USSD affiché au client (ex. `*126#` MTN, `#150*50#` Orange).
+  /// USSD code displayed to the client (e.g. `*126#` MTN, `#150*50#` Orange).
   final String ussdCode;
 
-  /// Opérateur détecté (`MTN` | `ORANGE`).
+  /// Detected operator (`MTN` | `ORANGE`).
   final String operator;
 }
 
-/// Statut d'une transaction CamPay interrogée.
+/// Status of a queried CamPay transaction.
 class CampayTransactionStatus {
   const CampayTransactionStatus({
     required this.reference,
@@ -52,10 +52,10 @@ class CampayTransactionStatus {
   final String currency;
   final String operator;
 
-  /// Code de transaction CamPay (ex. `CP201027T00005`).
+  /// CamPay transaction code (e.g. `CP201027T00005`).
   final String code;
 
-  /// Référence côté opérateur (MTN/Orange).
+  /// Operator-side reference (MTN/Orange).
   final String operatorReference;
 
   bool get isPending => status == 'PENDING';
@@ -63,16 +63,16 @@ class CampayTransactionStatus {
   bool get isFailed => status == 'FAILED';
 }
 
-/// Client REST CamPay — encaissement Mobile Money Cameroun (MTN MoMo /
-/// Orange Money) via l'API publique.
+/// REST client for CamPay — Cameroon Mobile Money collection (MTN MoMo /
+/// Orange Money) via the public API.
 ///
-/// Flux : [initCollect] envoie une demande de paiement au numéro du client ;
-/// CamPay déclenche une invite USSD sur son téléphone (il confirme avec son
-/// PIN). L'app interroge ensuite [getTransactionStatus] jusqu'à un état
-/// final (SUCCESSFUL / FAILED).
+/// Flow: [initCollect] sends a payment request to the client's number;
+/// CamPay triggers a USSD prompt on their phone (they confirm with their
+/// PIN). The app then polls [getTransactionStatus] until a terminal state
+/// (SUCCESSFUL / FAILED).
 ///
-/// Authentification : jeton d'accès PERMANENT de l'application CamPay
-/// (APP KEYS), envoyé dans l'en-tête `Authorization: Token <jeton>`.
+/// Authentication: PERMANENT access token for the CamPay application
+/// (APP KEYS), sent in the `Authorization: Token <token>` header.
 class CampayService {
   CampayService({
     this.token = AppConfig.campayToken,
@@ -80,26 +80,26 @@ class CampayService {
     http.Client? client,
   }) : _client = client ?? http.Client();
 
-  /// Jeton d'accès permanent CamPay.
+  /// Permanent CamPay access token.
   final String token;
 
-  /// Hôte API (demo.campay.net en test).
+  /// API host (demo.campay.net in test).
   final String baseUrl;
 
   final http.Client _client;
 
-  /// Vrai quand un jeton a été configuré.
+  /// True when a token has been configured.
   bool get isConfigured => token.isNotEmpty;
 
-  /// En-têtes communs.
+  /// Common headers.
   Map<String, String> _headers({bool json = true}) => {
         'Authorization': 'Token $token',
         if (json) 'Content-Type': 'application/json',
       };
 
-  /// Initie un encaissement auprès du numéro [from] (format `2376xxxxxxxx`,
-  /// sans `+`). Retourne immédiatement la référence + code USSD ; le client
-  /// doit confirmer sur son téléphone.
+  /// Initiates a collection for the number [from] (format `2376xxxxxxxx`,
+  /// without `+`). Returns immediately with the reference + USSD code; the
+  /// client must confirm on their phone.
   Future<CampayInitiatedTransaction> initCollect({
     required num amount,
     required String currency,
@@ -112,7 +112,7 @@ class CampayService {
       Uri.parse('$baseUrl/api/collect/'),
       headers: _headers(),
       body: jsonEncode({
-        'amount': amount.toStringAsFixed(0), // Entiers uniquement (ER201).
+        'amount': amount.toStringAsFixed(0), // Integers only (ER201).
         'currency': currency,
         'from': from,
         'description': description,
@@ -130,7 +130,7 @@ class CampayService {
     );
   }
 
-  /// Interroge le statut d'une transaction initiée.
+  /// Queries the status of an initiated transaction.
   Future<CampayTransactionStatus> getTransactionStatus(
     String reference,
   ) async {
@@ -154,12 +154,12 @@ class CampayService {
     );
   }
 
-  /// Normalise un numéro pour CamPay : retire le `+` et les espaces
+  /// Normalizes a phone number for CamPay: strips `+` and spaces
   /// (`+237 6XX XXX XXX` → `2376XXXXXXXX`).
   static String normalizePhone(String phone) =>
       phone.replaceAll(RegExp(r'[^0-9]'), '');
 
-  /// Génère une référence externe unique (préfixe + horodatage ms + aléa).
+  /// Generates a unique external reference (prefix + ms timestamp + random).
   static String newExternalReference(String prefix) {
     final rand = Random().nextInt(0xFFFFFF);
     return '$prefix-${DateTime.now().millisecondsSinceEpoch}-$rand';

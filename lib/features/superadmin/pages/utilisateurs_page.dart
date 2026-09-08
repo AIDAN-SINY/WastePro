@@ -52,10 +52,9 @@ class UtilisateursPageState extends State<UtilisateursPage> {
     return ['—', ...societes];
   }
 
-  /// Résout [societeId] et [agenceId] à partir des sélections du
-  /// formulaire (Phase 2). Un Agency Manager avec une agence non vide
-  /// hérite de la societeId de son agence ; un General Administrator
-  /// choisit une société directement.
+  /// Resolves [societeId] and [agenceId] from form selections (Phase 2).
+  /// An Agency Manager with a non-empty agency inherits the societeId of
+  /// their agency; a General Administrator picks a company directly.
   ({String societeId, String agenceId}) _resolveIds() {
     final store = context.read<PlatformStore>();
     final agenceVille = _form['agence']?.toString() ?? '—';
@@ -124,8 +123,7 @@ class UtilisateursPageState extends State<UtilisateursPage> {
     _form
       ..clear()
       ..addAll(user.toMap())
-      // Le mot de passe n'est pas pré-rempli : champ vide = conserver
-      // le mot de passe actuel.
+      // The password is not pre-filled: empty field = keep the current password.
       ..remove('password');
     showCrudDrawer(
       context,

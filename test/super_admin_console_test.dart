@@ -1,15 +1,20 @@
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waste_pro/features/superadmin/super_admin_console.dart';
 
+import 'helpers/setup_firebase.dart';
+
 void main() {
+  setUpAll(() => setupFirebaseMocks());
+
   Future<void> pumpConsole(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(home: SuperAdminConsole()));
+    await tester.pumpWidget(MaterialApp(home: SuperAdminConsole(db: FakeFirebaseFirestore())));
     // Let the KPI skeleton timers fire.
     await tester.pump(const Duration(milliseconds: 600));
   }
@@ -97,14 +102,14 @@ void main() {
     await tester.tap(find.text('Companies'));
     await tester.pumpAndSettle();
 
-    // 'WastePro Douala Ltd' has 2 attached agencies (seed data): its
+    // 'WastePro Yaoundé SARL' has 2 attached agencies (seed data): its
     // delete action is blocked with an explanatory toast, no confirm dialog.
     await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
     await tester.pumpAndSettle();
 
     expect(find.text('Delete this company?'), findsNothing);
     expect(find.textContaining('Cannot delete'), findsOneWidget);
-    expect(find.text('WastePro Douala Ltd'), findsWidgets);
+    expect(find.text('WastePro Yaoundé SARL'), findsWidgets);
 
     // Flush the toast auto-dismiss timer.
     await tester.pump(const Duration(seconds: 4));
@@ -115,7 +120,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(home: SuperAdminConsole()));
+    await tester.pumpWidget(MaterialApp(home: SuperAdminConsole(db: FakeFirebaseFirestore())));
     await tester.pump(const Duration(milliseconds: 600));
   }
 
@@ -136,7 +141,7 @@ void main() {
     // Navigate: drawer closes and the companies page shows cards.
     await tester.tap(find.text('Companies').hitTestable());
     await tester.pumpAndSettle();
-    expect(find.text('Bonanjo, Douala'), findsWidgets);
+    expect(find.text('Bastos, Yaoundé'), findsWidgets);
     expect(find.text('New company'), findsOneWidget);
   });
 
@@ -152,7 +157,7 @@ void main() {
 
     // Tapping the first card opens the full company detail page (parity
     // with desktop rows).
-    await tester.tap(find.text('WastePro Douala Ltd').first);
+    await tester.tap(find.text('WastePro Yaoundé SARL').first);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Back to companies'), findsOneWidget);
@@ -174,7 +179,7 @@ void main() {
             builder: (context) => Center(
               child: TextButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SuperAdminConsole()),
+                  MaterialPageRoute(builder: (_) => SuperAdminConsole(db: FakeFirebaseFirestore())),
                 ),
                 child: const Text('Open console'),
               ),
@@ -209,8 +214,8 @@ void main() {
   ) async {
     await pumpConsole(tester);
 
-    // Sans store Firestore injecté, la console tourne sur le mock en
-    // mémoire : un bandeau doit prévenir que rien n'est enregistré.
+    // Without an injected Firestore store, the console runs on the in-memory
+    // mock: a banner must warn that nothing is saved.
     expect(find.textContaining('Demo preview'), findsOneWidget);
   });
 
@@ -222,9 +227,8 @@ void main() {
     await tester.tap(find.text('New user'));
     await tester.pumpAndSettle();
 
-    // Pas de drawer de création : un toast explique qu il faut se
-    // connecter en super admin (« to create real users » n'apparaît que
-    // dans le toast, pas dans le bandeau).
+    // No creation drawer: a toast explains you need to log in as super admin
+    // ("to create real users" only appears in the toast, not the banner).
     expect(find.text('Full name'), findsNothing);
     expect(find.textContaining('to create real users'), findsOneWidget);
 
@@ -242,14 +246,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('New company'), findsOneWidget);
 
-    // Click the first company row: "WastePro Douala Ltd" (seed data).
-    await tester.tap(find.text('WastePro Douala Ltd').first);
+    // Click the first company row: "WastePro Yaoundé SARL" (seed data).
+    await tester.tap(find.text('WastePro Yaoundé SARL').first);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 600));
 
     // Full page detail: back to the list + company identity.
     expect(find.text('Back to companies'), findsOneWidget);
-    expect(find.text('WastePro Douala Ltd'), findsWidgets);
+    expect(find.text('WastePro Yaoundé SARL'), findsWidgets);
 
     // KPI cards + charts specific to the detail page.
     expect(find.text('Agencies'), findsWidgets);
@@ -270,7 +274,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Douala — Bonanjo'), findsWidgets);
+    expect(find.text('Yaoundé — Bastos'), findsWidgets);
     expect(find.text('Jean Dooh'), findsWidgets);
 
     await tester.pumpAndSettle();

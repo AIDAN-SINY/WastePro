@@ -149,6 +149,20 @@ class BoDashboardPage extends StatelessWidget {
                 ),
               ],
 
+              // Nouveaux clients abonnés par mois (Jan → Déc de l'année
+              // courante) — pleine largeur sur les deux layouts.
+              _chartCard(
+                'New clients subscribed',
+                '${DateTime.now().year}',
+                BoBarChart(
+                  values: monthlySubscriptions(
+                    store.clients,
+                    DateTime.now().year,
+                  ).map((e) => e.toDouble()).toList(),
+                  labels: subscriptionMonthLabels,
+                ),
+              ),
+
               _SectionTitle(title: 'Pending applications'),
               if (store.pendingRegistrations.isEmpty)
                 _PendingEmpty()

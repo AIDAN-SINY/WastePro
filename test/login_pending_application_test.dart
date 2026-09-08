@@ -5,10 +5,10 @@ import 'package:waste_pro/features/auth/screens/login_screen.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Une candidature soumise AVANT la migration Auth n'a pas de compte
-/// connectable (ni users/{téléphone}, ni compte Auth) : le login doit
-/// guider le client selon l'état de sa candidature au lieu du générique
-/// « User not found ».
+/// An application submitted BEFORE the Auth migration has no login account
+/// (neither users/{phone} nor Auth account): the login must guide the
+/// client according to their application status instead of the generic
+/// "User not found".
 void main() {
   Future<void> pumpLogin(WidgetTester tester, FakeFirebaseFirestore db) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -17,7 +17,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: LoginScreen(db: db, backend: FakeAuthBackend())),
     );
-    // pump fixe : le logo du login a une animation infinie (pas de
+    // Fixed pump: the login logo has an infinite animation (no
     // pumpAndSettle).
     await tester.pump(const Duration(seconds: 1));
   }
@@ -27,12 +27,12 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), 'whatever');
     await tester.tap(find.text('Log In'));
     await tester.pump(); // lance _handleAuth
-    await tester.pump(const Duration(milliseconds: 500)); // requêtes async
+    await tester.pump(const Duration(milliseconds: 500)); // async requests
     await tester.pump(const Duration(milliseconds: 500)); // snackbar slide-in
   }
 
   testWidgets(
-    'login avec candidature EN ATTENTE → message clair (pas « User not found »)',
+    'login with PENDING application → clear message (not "User not found")',
     (tester) async {
       final db = FakeFirebaseFirestore();
       await db.collection('registrations').doc('reg1').set({
@@ -41,7 +41,7 @@ void main() {
         'phone': '+237698224466',
         'status': 'pending',
         'agenceId': 'ag1',
-        'agenceName': 'Douala — Bonanjo',
+        'agenceName': 'Yaoundé — Bastos',
       });
 
       await pumpLogin(tester, db);
@@ -52,7 +52,7 @@ void main() {
     },
   );
 
-  testWidgets('login avec candidature REJETÉE → message dédié', (tester) async {
+  testWidgets('login with REJECTED application → dedicated message', (tester) async {
     final db = FakeFirebaseFirestore();
     await db.collection('registrations').doc('reg1').set({
       'id': 'reg1',
@@ -69,7 +69,7 @@ void main() {
   });
 
   testWidgets(
-    'login sans compte ni candidature → « User not found » conservé',
+    'login with no account or application → "User not found" preserved',
     (tester) async {
       final db = FakeFirebaseFirestore();
 

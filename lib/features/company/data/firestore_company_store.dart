@@ -7,6 +7,7 @@ import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
 import '../../../services/auth_backend.dart';
+import '../../backoffice/models.dart';
 import '../../superadmin/data/login_account_sync.dart';
 import 'company_store.dart';
 
@@ -60,7 +61,7 @@ class FirestoreCompanyStore extends CompanyStore {
     _cancelSubscriptions();
     setLoading(true);
     setErrorValue(null);
-    _pending = 3;
+    _pending = 4;
     _loadCompleter = Completer<void>();
     notifyListeners();
 
@@ -84,6 +85,14 @@ class FirestoreCompanyStore extends CompanyStore {
           .where('societeId', isEqualTo: societeId)
           .snapshots()
           .listen(_onUtilisateurs, onError: handleStreamError),
+    );
+    // Clients abonnés de l'entreprise (graphique annuel de l'Overview).
+    _subs.add(
+      _db
+          .collection('clients')
+          .where('societeId', isEqualTo: societeId)
+          .snapshots()
+          .listen(_onClients, onError: handleStreamError),
     );
 
     await _loadCompleter!.future;
@@ -115,6 +124,13 @@ class FirestoreCompanyStore extends CompanyStore {
       ..clear()
       ..addAll(qs.docs.map((d) => PlatformUserModel.fromMap(d.data())));
     if (seedIfEmpty && qs.docs.isEmpty && societeId.isNotEmpty) {}
+    _markLoaded();
+  }
+
+  void _onClients(QuerySnapshot<Map<String, dynamic>> qs) {
+    clients
+      ..clear()
+      ..addAll(qs.docs.map((d) => ClientModel.fromMap(d.data())));
     _markLoaded();
   }
 

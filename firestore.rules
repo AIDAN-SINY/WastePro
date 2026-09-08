@@ -109,5 +109,89 @@ service cloud.firestore {
     match /notifications/{id} {
       allow read, write: if true;
     }
+
+    // --- Issues reported by clients ---
+    // Clients write reports (overflowing bins, missed collections, etc.),
+    // agency managers read and resolve them in the backoffice.
+    match /issues/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Zones (collection calendars) ---
+    // Agency managers define fixed collection day(s) per zone.
+    match /zones/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Assignments (collector → zone + time window) ---
+    // Agency managers assign collectors to zones with time windows.
+    match /assignments/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Contracts (contrats) ---
+    match /contrats/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Collections (collectes) ---
+    match /collectes/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Invoices (factures) ---
+    match /factures/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Collection frequencies (frequences) ---
+    match /frequences/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Vehicles (fleet management) ---
+    match /vehicles/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Vehicle maintenance logs ---
+    match /vehicle_maintenance/{id} {
+      allow read, write: if true;
+    }
+
+    // --- SMS logs (audit trail for SMS notifications) ---
+    match /sms_logs/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Email logs (audit trail for email notifications) ---
+    match /email_logs/{id} {
+      allow read, write: if true;
+    }
+
+    // --- WhatsApp logs (audit trail for WhatsApp notifications) ---
+    match /whatsapp_logs/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Push notification queue ---
+    match /push_notifications/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Two-factor authentication codes ---
+    match /two_factor_codes/{uid} {
+      allow read, write: if true;
+    }
+
+    // --- App config (dev flags, settings) ---
+    match /app_config/{doc} {
+      allow read, write: if true;
+    }
+
+    // --- Invoices ---
+    match /invoices/{id} {
+      allow read, write: if true;
+    }
   }
 }

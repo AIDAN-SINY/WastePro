@@ -13,18 +13,22 @@ import 'package:waste_pro/providers/user_provider.dart';
 import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
+import 'fakes/fake_notification_provider.dart';
+import 'package:waste_pro/providers/notification_provider.dart';
 
-/// Backend dont le signOut ne termine JAMAIS (simule un signOut Firebase
-/// bloqué — plugin web/desktop, réseau…) : le logout doit quand même vider
-/// la session côté app, sinon l'utilisateur reste prisonnier du backoffice
-/// et ne peut pas se reconnecter avec un autre compte.
+import 'helpers/setup_firebase.dart';
+
+/// Backend whose signOut NEVER completes (simulates a stuck Firebase signOut
+/// (web/desktop plugin, network...): the logout must still clear
+/// the app-side session, otherwise the user stays trapped in the backoffice
+/// and cannot log in with a different account.
 class _HangingSignOutBackend extends FakeAuthBackend {
   @override
-  Future<void> signOut() => Completer<void>().future; // ne se résout jamais
+  Future<void> signOut() => Completer<void>().future; // never resolves
 }
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() => setupFirebaseMocks());
 
   Future<(FakeFirebaseFirestore, FakeAuthBackend, UserProvider)> pumpApp(
     WidgetTester tester,
@@ -53,9 +57,14 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<UserProvider>.value(
         value: userProvider,
-        child: WasteProApp(
-          consoleStore: PlatformStore(),
-          backofficeStore: BackofficeStore(),
+        child: ChangeNotifierProvider<NotificationProvider>.value(
+          value: FakeNotificationProvider(),
+          child: WasteProApp(
+            consoleStore: PlatformStore(),
+            backofficeStore: BackofficeStore(),
+            db: db,
+            skip2FA: true,
+          ),
         ),
       ),
     );
@@ -78,7 +87,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('login A → logout → login B (parcours réel)', (tester) async {
+  testWidgets('login A → logout → login B (real flow)', (tester) async {
     final backend = FakeAuthBackend()
       ..seedAccount('237656778990@wastepro.cm', 'mdpA')
       ..seedAccount('237674738258@wastepro.cm', 'mdpB');
@@ -88,7 +97,7 @@ void main() {
     await loginAs(tester, db, backend, userProvider, '+237656778990', 'mdpA');
     expect(find.byType(BackofficeScreen), findsOneWidget);
 
-    // Logout (signOut backend normal) → retour à l'accueil.
+    // Logout (normal backend signOut) → back to home.
     await userProvider.logout();
     await tester.pumpAndSettle();
     expect(find.byType(BackofficeScreen), findsNothing);
@@ -102,19 +111,19 @@ void main() {
   });
 
   testWidgets(
-    'le logout vide la session même si le signOut backend ne se termine pas',
+    'logout clears the session even if the backend signOut never completes',
     (tester) async {
       final backend = _HangingSignOutBackend()
         ..seedAccount('237656778990@wastepro.cm', 'mdpA')
         ..seedAccount('237674738258@wastepro.cm', 'mdpB');
       final (db, _, userProvider) = await pumpApp(tester, backend);
 
-      // Login A (via AuthService, comme l'écran de login).
+      // Login A (via AuthService, like the login screen).
       await loginAs(tester, db, backend, userProvider, '+237656778990', 'mdpA');
       expect(find.byType(BackofficeScreen), findsOneWidget);
 
-      // Logout : le signOut backend est bloqué, mais la session app DOIT
-      // être vidée (retour à l'accueil + possibilité de se reconnecter).
+      // Logout: the backend signOut is stuck, but the app session MUST
+      // be cleared (back to home + ability to log in again).
       unawaited(userProvider.logout());
       await tester.pumpAndSettle();
 
@@ -122,8 +131,8 @@ void main() {
       expect(find.text('Log In'), findsOneWidget);
       expect(userProvider.user, isNull);
 
-      // Login B : possible malgré le signOut bloqué (le signIn remplace
-      // la session).
+      // Login B: possible despite the stuck signOut (signIn replaces
+      // the session).
       await loginAs(tester, db, backend, userProvider, '+237674738258', 'mdpB');
       expect(find.byType(BackofficeScreen), findsOneWidget);
       expect(userProvider.user!.fullName, 'Chef B');

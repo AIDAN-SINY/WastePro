@@ -6,7 +6,7 @@ import 'package:waste_pro/services/payment_service.dart';
 
 void main() {
   group('PaymentService', () {
-    test('recordTransaction écrit la transaction dans Firestore', () async {
+    test('recordTransaction writes the transaction to Firestore', () async {
       final db = FakeFirebaseFirestore();
       final service = PaymentService(db: db);
 
@@ -37,7 +37,7 @@ void main() {
       expect(data['paymentMethod'], 'campay');
     });
 
-    test('recordTransaction accepte un paiement échoué', () async {
+    test('recordTransaction accepts a failed payment', () async {
       final db = FakeFirebaseFirestore();
       final service = PaymentService(db: db);
 
@@ -59,21 +59,21 @@ void main() {
       expect(doc.data()!['status'], 'cancelled');
     });
 
-    test('en mode démo, le montant est plafonné à 25 XAF', () async {
+    test('in demo mode, the amount is capped at 25 XAF', () async {
       final db = FakeFirebaseFirestore();
-      // Jeton configuré → charge() va jusqu'à l'initiation CamPay.
+      // Token configured → charge() goes up to CamPay initiation.
       final service = PaymentService(
         db: db,
         campay: CampayService(token: 'demo'),
       );
 
-      // Le plafond démo (25 XAF) s'applique au montant facturé.
+      // The demo cap (25 XAF) applies to the billed amount.
       expect(service.demoChargeableAmount(3000), 25);
       expect(service.demoChargeableAmount(25), 25);
       expect(service.demoChargeableAmount(10), 10);
     });
 
-    test('isConfigured reflète le jeton CamPay', () {
+    test('isConfigured reflects the CamPay token', () {
       final db = FakeFirebaseFirestore();
       expect(
         PaymentService(db: db, campay: CampayService(token: '')).isConfigured,
@@ -85,15 +85,15 @@ void main() {
       );
     });
 
-    testWidgets('charge lève si CamPay n est pas configuré', (tester) async {
+    testWidgets('charge throws if CamPay is not configured', (tester) async {
       final service = PaymentService(
         db: FakeFirebaseFirestore(),
         campay: CampayService(token: ''),
       );
       expect(service.isConfigured, isFalse);
 
-      // Contexte réel : la garde lève AVANT toute navigation, donc le
-      // contexte n'est jamais utilisé.
+      // Real context: the guard throws BEFORE any navigation, so the
+      // context is never used.
       BuildContext? ctx;
       await tester.pumpWidget(
         MaterialApp(

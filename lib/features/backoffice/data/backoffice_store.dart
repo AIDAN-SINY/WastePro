@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../models/assignment_model.dart';
 import '../models.dart';
 import '../../../models/notification_model.dart';
 import 'seed_data.dart';
@@ -76,6 +77,21 @@ class BackofficeStore extends ChangeNotifier {
   /// rejetée) — le store Firestore écrit dans la collection `notifications`.
   final List<NotificationModel> notifications = [];
 
+  /// Issues reported by clients (overflowing bins, missed collections, etc.).
+  final List<IssueModel> issues = [];
+
+  /// Zones managed by the agency (collection calendars).
+  final List<ZoneModel> zones = [...seedZones];
+
+  /// Assignments — collector → zone + time window + date.
+  final List<AssignmentModel> assignments = [];
+
+  /// Vehicles managed by the agency.
+  final List<VehicleModel> vehicles = [...seedVehicles];
+
+  /// Vehicle maintenance logs.
+  final List<VehicleMaintenanceModel> maintenanceLogs = [...seedMaintenanceLogs];
+
   List<RegistrationModel> get pendingRegistrations =>
       registrations.where((r) => r.status == 'pending').toList();
 
@@ -84,7 +100,8 @@ class BackofficeStore extends ChangeNotifier {
 
   static String _defaultFilter(BoEntity type) => switch (type) {
     BoEntity.client || BoEntity.collecteur || BoEntity.contrat => 'All',
-    BoEntity.collecte || BoEntity.facture || BoEntity.frequence => 'All',
+    BoEntity.collecte || BoEntity.facture || BoEntity.issue => 'All',
+    BoEntity.frequence || BoEntity.zone || BoEntity.assignment || BoEntity.vehicle => 'All',
   };
 
   String filterFor(BoEntity type) => _filters[type] ?? _defaultFilter(type);
@@ -92,6 +109,23 @@ class BackofficeStore extends ChangeNotifier {
   void selectFilter(BoEntity type, String value) {
     if (_filters[type] == value) return;
     _filters[type] = value;
+    notifyListeners();
+  }
+
+  // --- Zone filter (for collectors / clients) ---
+  /// Currently selected zone filter ('All' = no filtering).
+  String zoneFilter = 'All';
+
+  /// Returns the unique zone names from the collector list.
+  List<String> get availableZones {
+    final zones = collecteurs.map((c) => c.zone).where((z) => z.isNotEmpty).toSet().toList();
+    zones.sort();
+    return zones;
+  }
+
+  void selectZoneFilter(String value) {
+    if (zoneFilter == value) return;
+    zoneFilter = value;
     notifyListeners();
   }
 
@@ -136,6 +170,15 @@ class BackofficeStore extends ChangeNotifier {
     String password = '',
     String agenceId = '',
     String societeId = '',
+    String adresse = '',
+    String quartier = '',
+    double? latitude,
+    double? longitude,
+    String photoUrl = '',
+    String housingType = '',
+    List<String> collectionDays = const [],
+    String pickupTime = '',
+    String subscribedAt = '',
   }) async {
     clients.add(
       ClientModel(
@@ -147,12 +190,23 @@ class BackofficeStore extends ChangeNotifier {
         status: status,
         agenceId: agenceId,
         societeId: societeId,
+        adresse: adresse,
+        quartier: quartier,
+        latitude: latitude,
+        longitude: longitude,
+        photoUrl: photoUrl,
+        housingType: housingType,
+        subscribedAt: subscribedAt.isNotEmpty ? subscribedAt : _todayIso(),
       ),
     );
     notifyListeners();
   }
 
-  Future<void> updateClient(ClientModel updated, {String password = ''}) async {
+  Future<void> updateClient(ClientModel updated, {
+    String password = '',
+    List<String> collectionDays = const [],
+    String pickupTime = '',
+  }) async {
     final index = clients.indexWhere((c) => c.id == updated.id);
     if (index != -1) clients[index] = updated;
     notifyListeners();
@@ -176,6 +230,10 @@ class BackofficeStore extends ChangeNotifier {
     String password = '',
     String agenceId = '',
     String societeId = '',
+    String cni = '',
+    String photoUrl = '',
+    String vehicle = '',
+    int salary = 0,
   }) async {
     collecteurs.add(
       CollecteurModel(
@@ -187,6 +245,10 @@ class BackofficeStore extends ChangeNotifier {
         status: status,
         agenceId: agenceId,
         societeId: societeId,
+        cni: cni,
+        photoUrl: photoUrl,
+        vehicle: vehicle,
+        salary: salary,
       ),
     );
     notifyListeners();
@@ -236,6 +298,8 @@ class BackofficeStore extends ChangeNotifier {
         agenceId: reg.agenceId,
         societeId: reg.societeId,
         collecteurId: collecteurId,
+        // L'approbation = l'abonnement : le client entre dans le mois.
+        subscribedAt: _todayIso(),
       ),
     );
     _addNotification(reg, type: 'approved');
@@ -407,6 +471,82 @@ class BackofficeStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Issues CRUD ---
+
+  Future<void> resolveIssue(IssueModel issue) async {
+    final index = issues.indexWhere((i) => i.id == issue.id);
+    if (index != -1) {
+      issues[index] = issue.copyWith(status: 'resolved');
+    }
+    notifyListeners();
+  }
+
+  // --- Zones CRUD ---
+  Future<void> addZone({
+    required String name,
+    required List<String> collectionDays,
+    required String standardPickupTime,
+  }) async {
+    zones.add(
+      ZoneModel(
+        id: nextId(),
+        name: name,
+        collectionDays: collectionDays,
+        standardPickupTime: standardPickupTime,
+      ),
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateZone(ZoneModel updated) async {
+    final index = zones.indexWhere((z) => z.id == updated.id);
+    if (index != -1) zones[index] = updated;
+    notifyListeners();
+  }
+
+  Future<void> deleteZone(String id) async {
+    zones.removeWhere((z) => z.id == id);
+    notifyListeners();
+  }
+
+  // --- Assignments CRUD ---
+  Future<void> addAssignment({
+    required String collecteurId,
+    required String collecteurName,
+    required String zoneId,
+    required String zoneName,
+    required String startTime,
+    required String endTime,
+    required String date,
+    String status = 'Active',
+  }) async {
+    assignments.add(
+      AssignmentModel(
+        id: nextId(),
+        collecteurId: collecteurId,
+        collecteurName: collecteurName,
+        zoneId: zoneId,
+        zoneName: zoneName,
+        startTime: startTime,
+        endTime: endTime,
+        date: date,
+        status: status,
+      ),
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateAssignment(AssignmentModel updated) async {
+    final index = assignments.indexWhere((a) => a.id == updated.id);
+    if (index != -1) assignments[index] = updated;
+    notifyListeners();
+  }
+
+  Future<void> deleteAssignment(String id) async {
+    assignments.removeWhere((a) => a.id == id);
+    notifyListeners();
+  }
+
   // --- Frequences CRUD ---
   Future<void> addFrequence({
     required String libelle,
@@ -428,4 +568,138 @@ class BackofficeStore extends ChangeNotifier {
     frequences.removeWhere((f) => f.id == id);
     notifyListeners();
   }
+
+  // --- Vehicles CRUD ---
+  Future<void> addVehicle({
+    required String plateNumber,
+    required String type,
+    String brand = '',
+    String model = '',
+    int year = 0,
+    String status = 'Active',
+    String assignedCollecteurId = '',
+    String assignedCollecteurName = '',
+    int mileage = 0,
+    String lastMaintenanceDate = '',
+    String notes = '',
+  }) async {
+    vehicles.add(
+      VehicleModel(
+        id: nextId(),
+        plateNumber: plateNumber,
+        type: type,
+        brand: brand,
+        model: model,
+        year: year,
+        status: status,
+        assignedCollecteurId: assignedCollecteurId,
+        assignedCollecteurName: assignedCollecteurName,
+        mileage: mileage,
+        lastMaintenanceDate: lastMaintenanceDate,
+        notes: notes,
+      ),
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateVehicle(VehicleModel updated) async {
+    final index = vehicles.indexWhere((v) => v.id == updated.id);
+    if (index != -1) vehicles[index] = updated;
+    notifyListeners();
+  }
+
+  Future<void> deleteVehicle(String id) async {
+    vehicles.removeWhere((v) => v.id == id);
+    notifyListeners();
+  }
+
+  // --- Vehicle Maintenance CRUD ---
+  Future<void> addMaintenanceLog({
+    required String vehicleId,
+    required String vehiclePlate,
+    required String type,
+    String description = '',
+    int mileageAtService = 0,
+    required String serviceDate,
+    int cost = 0,
+    String mechanicName = '',
+    String nextServiceDate = '',
+    int nextServiceMileage = 0,
+    String status = 'Completed',
+  }) async {
+    maintenanceLogs.add(
+      VehicleMaintenanceModel(
+        id: nextId(),
+        vehicleId: vehicleId,
+        vehiclePlate: vehiclePlate,
+        type: type,
+        description: description,
+        mileageAtService: mileageAtService,
+        serviceDate: serviceDate,
+        cost: cost,
+        mechanicName: mechanicName,
+        nextServiceDate: nextServiceDate,
+        nextServiceMileage: nextServiceMileage,
+        status: status,
+      ),
+    );
+    // Update vehicle's last maintenance date and mileage.
+    final vi = vehicles.indexWhere((v) => v.id == vehicleId);
+    if (vi != -1) {
+      vehicles[vi] = vehicles[vi].copyWith(
+        lastMaintenanceDate: serviceDate,
+        mileage: mileageAtService > vehicles[vi].mileage ? mileageAtService : vehicles[vi].mileage,
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> updateMaintenanceLog(VehicleMaintenanceModel updated) async {
+    final index = maintenanceLogs.indexWhere((m) => m.id == updated.id);
+    if (index != -1) maintenanceLogs[index] = updated;
+    notifyListeners();
+  }
+
+  Future<void> deleteMaintenanceLog(String id) async {
+    maintenanceLogs.removeWhere((m) => m.id == id);
+    notifyListeners();
+  }
+
+  /// Returns maintenance logs for a specific vehicle.
+  List<VehicleMaintenanceModel> maintenanceForVehicle(String vehicleId) {
+    return maintenanceLogs.where((m) => m.vehicleId == vehicleId).toList()
+      ..sort((a, b) => b.serviceDate.compareTo(a.serviceDate));
+  }
+
+  /// Returns vehicles that need maintenance soon (within 500 km or 7 days).
+  List<VehicleModel> vehiclesNeedingMaintenance() {
+    final now = DateTime.now();
+    return vehicles.where((v) {
+      if (v.status == 'Retired') return false;
+      if (v.lastMaintenanceDate.isEmpty) return true;
+      final lastDate = DateTime.tryParse(v.lastMaintenanceDate);
+      if (lastDate == null) return true;
+      final daysSince = now.difference(lastDate).inDays;
+      final nextMileage = v.mileage + 500; // within 500 km
+      return daysSince >= v.maintenanceIntervalDays - 7 ||
+          v.mileage >= nextMileage;
+    }).toList();
+  }
+
+  /// Date du jour au format yyyy-MM-dd.
+  String _todayIso() {
+    final now = DateTime.now();
+    return '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Date du jour au format yyyy-MM-dd (partagé avec le store Firestore, qui
+/// étend [BackofficeStore] depuis une autre bibliothèque).
+String backofficeTodayIso() {
+  final now = DateTime.now();
+  return '${now.year.toString().padLeft(4, '0')}-'
+      '${now.month.toString().padLeft(2, '0')}-'
+      '${now.day.toString().padLeft(2, '0')}';
 }

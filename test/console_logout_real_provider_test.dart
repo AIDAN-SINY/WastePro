@@ -11,14 +11,16 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Logout depuis la console super admin avec le VRAI `UserProvider.logout()`
-/// (session vidée avant le signOut backend) — pas le provider fake mutable
-/// des tests de routage. C'est le parcours réel de l'utilisateur.
+import 'helpers/setup_firebase.dart';
+
+/// Logout from the super admin console with the REAL `UserProvider.logout()`
+/// (session cleared before the backend signOut) — not the mutable fake provider
+/// used in routing tests. This is the real user flow.
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() => setupFirebaseMocks());
 
   testWidgets(
-    'super admin : logout depuis la console → écran d accueil (provider réel)',
+    'super admin: logout from console → home screen (real provider)',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = const Size(1400, 900);
@@ -43,19 +45,19 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<UserProvider>.value(
           value: userProvider,
-          child: WasteProApp(consoleStore: PlatformStore()),
+          child: WasteProApp(consoleStore: PlatformStore(), db: db, skip2FA: true),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Le super admin est redirigé vers la console.
+      // The super admin is redirected to the console.
       expect(find.byType(SuperAdminConsole), findsOneWidget);
 
-      // Logout via l'icône de la sidebar (footer).
+      // Logout via the sidebar icon (footer).
       await tester.tap(find.byIcon(Icons.logout_rounded));
       await tester.pumpAndSettle();
 
-      // Retour à l'écran d'accueil (bouton Log In de la CTA).
+      // Back to the home screen (Log In button of the CTA).
       expect(find.byType(SuperAdminConsole), findsNothing);
       expect(find.text('Log In'), findsOneWidget);
       expect(userProvider.user, isNull);

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +29,7 @@ class SuperAdminConsole extends StatefulWidget {
     this.store,
     this.page,
     this.autoCreate,
+    this.db,
   });
 
   /// Optional store override — the real super admin login passes the
@@ -35,12 +37,15 @@ class SuperAdminConsole extends StatefulWidget {
   /// used (dev preview / tests).
   final PlatformStore? store;
 
-  /// Page initiale depuis l'URL (`/console/:page`) — 'overview' | 'societes'
+  /// Optional Firestore instance for dependency injection in tests.
+  final FirebaseFirestore? db;
+
+  /// Initial page from the URL (`/console/:page`) — 'overview' | 'societes'
   /// | 'agences' | 'utilisateurs' | 'rapports' | 'parametres'.
   final String? page;
 
-  /// Création à ouvrir automatiquement au rendu (depuis la palette
-  /// de commandes) : 'societe' | 'agence' | 'utilisateur'.
+  /// Auto-open creation on render (from the command palette):
+  /// 'societe' | 'agence' | 'utilisateur'.
   final String? autoCreate;
 
   @override
@@ -54,12 +59,12 @@ class _OpenPaletteIntent extends Intent {
 class _SuperAdminConsoleState extends State<SuperAdminConsole> {
   late PlatformStore _store;
 
-  /// Vrai quand la console a elle-même créé le store (mode mock / preview) :
-  /// dans ce cas seul, elle le dispose. Un store partagé/injecté appartient
-  /// à son créateur (ConsoleStoreScope, AuthWrapper, tests) et ne doit
-  /// jamais être disposé par la console — sinon le store Firestore partagé
-  /// serait détruit au logout et « used after being disposed » au login
-  /// suivant.
+  /// True when the console itself created the store (mock / preview mode):
+  /// in that case only, it disposes it. A shared/injected store belongs
+  /// to its creator (ConsoleStoreScope, AuthWrapper, tests) and must
+  /// never be disposed by the console — otherwise the shared Firestore store
+  /// would be destroyed on logout and "used after being disposed" on the
+  /// next login.
   late bool _ownsStore;
 
   late int _page = consolePageIndex(widget.page);
@@ -104,8 +109,8 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     super.initState();
     _bindStore();
     _store.load();
-    // Ouvre le drawer de création demandé via l'URL (?create=) après le
-    // premier rendu (les pages doivent être présentes dans l'IndexedStack).
+    // Opens the creation drawer requested via the URL (?create=) after the
+    // first render (pages must be present in the IndexedStack).
     final autoCreate = widget.autoCreate;
     if (autoCreate != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -130,27 +135,27 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     super.didUpdateWidget(oldWidget);
     // Le store peut changer au fil de la vie de la console (session réelle →
     // preview debug après logout, ou l'inverse après login) : on libère le
-    // store qu'on possédait (jamais un store partagé) et on s'aligne sur le
-    // nouveau. Sans ça, la console continuerait d'utiliser un store mort.
-    // Le `load()` re-arme les listeners : nécessaire quand on passe d'un
-    // mock (rien à charger) à un store Firestore partagé en cours de
-    // session ; inoffensif dans l'autre sens (load() annule et re-crée ses
-    // abonnements).
+    // the store we owned (never a shared store) and align with the new one.
+    // Without this, the console would continue using a dead store.
+    // The `load()` re-arms listeners: necessary when switching from a
+    // mock (nothing to load) to a shared Firestore store mid-session;
+    // harmless in the other direction (load() cancels and re-creates its
+    // subscriptions).
     if (oldWidget.store != widget.store) {
       if (_ownsStore) _store.dispose();
       _bindStore();
       _store.load();
     }
-    // Le routeur réutilise la même instance quand l'URL change
-    // (/console/overview → /console/societes) : initState ne se
-    // ré-exécute pas. On resynchronise donc la page affichée depuis le
-    // nouveau paramètre d'URL — sinon l'IndexedStack reste sur l'ancienne
-    // page jusqu'au rechargement manuel (F5).
+    // The router reuses the same instance when the URL changes
+    // (/console/overview → /console/societes): initState does not
+    // re-execute. We re-sync the displayed page from the new URL parameter —
+    // otherwise the IndexedStack stays on the old page until a manual
+    // refresh (F5).
     if (widget.page != oldWidget.page) {
       _page = consolePageIndex(widget.page);
     }
-    // Si l'instance est réutilisée avec une nouvelle action (?create=),
-    // initState ne se ré-exécute pas → on applique ici.
+    // If the instance is reused with a new action (?create=),
+    // initState does not re-execute → apply here.
     final autoCreate = widget.autoCreate;
     if (autoCreate != null && autoCreate != oldWidget.autoCreate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -167,10 +172,10 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     super.dispose();
   }
 
-  /// Navigue vers une page. Sur la route `/console/...` (app web), chaque
-  /// page devient une URL (`/console/societes`…) : bouton retour du
-  /// navigateur, rechargement et liens partageables fonctionnent. Hors
-  /// route console (preview pushée / tests), la navigation reste interne.
+  /// Navigates to a page. On the `/console/...` route (web app), each
+  /// page becomes a URL (`/console/societes`…): browser back button,
+  /// refresh, and shareable links work. Outside the console route
+  /// (pushed preview / tests), navigation stays internal.
   void _goToPage(int index, {bool closeDrawer = false, String? intent}) {
     final router = GoRouter.maybeOf(context);
     final isConsoleRoute = router != null &&
@@ -186,9 +191,9 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
       return;
     }
 
-    // Déjà sur la page cible avec une action (palette) : on l'applique
-    // directement — une navigation query-only relancerait la route sans
-    // ré-exécuter initState.
+    // Already on the target page with an action (palette): apply directly —
+    // a query-only navigation would re-launch the route without
+    // re-executing initState.
     if (index == _page && intent != null) {
       _applyAutoCreate(intent);
       return;
@@ -202,8 +207,8 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
     );
   }
 
-  /// Ouvre le drawer de création ciblé (utilisé par la palette et par le
-  /// paramètre d'URL `?create=` après une navigation).
+  /// Opens the targeted creation drawer (used by the palette and the
+  /// URL parameter `?create=` after navigation).
   void _applyAutoCreate(String intent) {
     switch (intent) {
       case 'societe':
@@ -376,9 +381,9 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
         if (_isDemo) const _DemoBanner(),
         Expanded(
           child: Padding(
-            // Marge horizontale constante du contenu : aligne toutes les
-            // pages (cartes, tableaux, KPIs) avec le topbar et évite que le
-            // contenu ne colle à la sidebar.
+            // Constant horizontal content margin: aligns all pages
+            // (cards, tables, KPIs) with the topbar and prevents content
+            // from sticking to the sidebar.
             padding: EdgeInsets.fromLTRB(
               mobile ? 16 : 28,
               16,
@@ -392,7 +397,7 @@ class _SuperAdminConsoleState extends State<SuperAdminConsole> {
                 SocietesPage(key: _societesKey),
                 AgencesPage(key: _agencesKey),
                 UtilisateursPage(key: _utilisateursKey),
-                const RapportsPage(),
+                RapportsPage(db: widget.db),
                 const ParametresPage(),
               ],
             ),
@@ -964,10 +969,9 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-/// Bandeau affiché quand la console tourne en aperçu démo (store mock en
-/// mémoire, pas de session super admin) : les créations ne sont pas
-/// enregistrées dans Firestore. Évite le piège « je crée des utilisateurs
-/// mais personne ne peut se connecter ».
+/// Banner shown when the console is running in demo preview mode (in-memory
+/// mock store, no super admin session): creations are not saved to Firestore.
+/// Prevents the trap of "I create users but nobody can log in".
 class _DemoBanner extends StatelessWidget {
   const _DemoBanner();
 

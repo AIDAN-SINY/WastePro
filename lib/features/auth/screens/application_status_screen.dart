@@ -115,25 +115,16 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
     }
   }
 
-  /// Approuvé : le profil Firestore porte désormais le rôle `client` — on
-  /// recharge le profil pour que le routeur bascule sur le dashboard client.
+  /// Approuvé : on déconnecte la session pending_client puis on redirige
+  /// vers l'écran de login pour que le client se reconnecte avec son nouveau
+  /// rôle `client`.
   Future<void> _handleApproved() async {
     final provider = context.read<UserProvider>();
+    // Déconnecte la session pending_client (rôle obsolète après approbation).
     if (provider.user != null) {
-      await provider.refreshUser(provider.user!.phoneNumber);
-      if (!mounted) return;
-      // Rôle rafraîchi → le routeur redirige vers le dashboard client.
-      final router = GoRouter.maybeOf(context);
-      if (router != null) {
-        router.go('/');
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (route) => false,
-        );
-      }
-      return;
+      await provider.logout();
     }
+    if (!mounted) return;
     _goToLogin();
   }
 
@@ -420,8 +411,9 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
       title: 'Approved! 🎉',
       message:
           'Your application was approved and a collector has been assigned '
-          'to you. You can now start scheduling your pickups.',
-      actionLabel: 'Go to my dashboard',
+          'to you. Please log in to access your dashboard and start '
+          'scheduling your pickups.',
+      actionLabel: 'Log in',
       onAction: _handleApproved,
       extra: _stepsIndicator(step: 2),
     );

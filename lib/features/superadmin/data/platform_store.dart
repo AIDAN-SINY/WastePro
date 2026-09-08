@@ -44,11 +44,11 @@ class PlatformStore extends ChangeNotifier {
   final List<AgenceModel> agences = [...seedAgences];
   final List<PlatformUserModel> utilisateurs = [...seedUtilisateurs];
 
-  /// Clients opérationnels scopés par agence (Phase 3) — alimentent la
-  /// fiche détail d'une agence (stats + table).
+  /// Operational clients scoped by agency (Phase 3) — feed the
+  /// agency detail card (stats + table).
   final List<ClientModel> clients = [...seedClientsParAgence];
 
-  /// Collecteurs opérationnels scopés par agence (Phase 3).
+  /// Operational collectors scoped by agency (Phase 3).
   final List<CollecteurModel> collecteurs = [...seedCollecteursParAgence];
 
   // --- Dashboard helpers ---
@@ -60,10 +60,10 @@ class PlatformStore extends ChangeNotifier {
   int get agencesCount => agences.length;
   int get utilisateursCount => utilisateurs.length;
 
-  // --- Company helpers (fiche détail d'une société) ---
+  // --- Company helpers (company detail card) ---
 
-  /// Agences rattachées à [societeId] — par id de société, sinon par nom
-  /// (docs hérités créés avant la Phase 2 qui référencent la société par
+  /// Agencies linked to [societeId] — by company id, otherwise by name
+  /// (legacy docs created before Phase 2 that reference the company by
   /// raisonSociale).
   List<AgenceModel> agencesForSociete(String societeId) {
     String? raisonSociale;
@@ -82,9 +82,9 @@ class PlatformStore extends ChangeNotifier {
         .toList();
   }
 
-  /// Managers (utilisateurs console) rattachés à [societeId] — par id de
-  /// société, sinon par agence : un utilisateur lié à une agence de la
-  /// société (docs hérités créés avant la Phase 3).
+  /// Managers (console users) linked to [societeId] — by company id,
+  /// otherwise by agency: a user linked to an agency of the company
+  /// (legacy docs created before Phase 3).
   List<PlatformUserModel> managersForSociete(String societeId) {
     final agencesDe = agencesForSociete(societeId);
     final agenceIds = agencesDe.map((a) => a.id).toSet();
@@ -98,7 +98,7 @@ class PlatformStore extends ChangeNotifier {
         .toList();
   }
 
-  /// Clients dont les docs appartiennent à [societeId] (par agence).
+  /// Clients whose docs belong to [societeId] (by agency).
   List<ClientModel> clientsForSociete(String societeId) {
     final agenceIds = agencesForSociete(societeId).map((a) => a.id).toSet();
     return clients
@@ -108,7 +108,7 @@ class PlatformStore extends ChangeNotifier {
         .toList();
   }
 
-  /// Collecteurs dont les docs appartiennent à [societeId] (par agence).
+  /// Collectors whose docs belong to [societeId] (by agency).
   List<CollecteurModel> collecteursForSociete(String societeId) {
     final agenceIds = agencesForSociete(societeId).map((a) => a.id).toSet();
     return collecteurs
@@ -118,10 +118,10 @@ class PlatformStore extends ChangeNotifier {
         .toList();
   }
 
-  // --- Agency helpers (fiche détail d'une agence — console entreprise) ---
+  // --- Agency helpers (agency detail card — company console) ---
 
-  /// Managers (chefs d'agence) affectés à [agenceId] — par id d'agence,
-  /// sinon par nom d'agence (docs hérités créés avant la Phase 3).
+  /// Managers (agency managers) assigned to [agenceId] — by agency id,
+  /// otherwise by agency name (legacy docs created before Phase 3).
   List<PlatformUserModel> managersForAgence(String agenceId) =>
       utilisateurs
           .where((u) =>
@@ -129,16 +129,16 @@ class PlatformStore extends ChangeNotifier {
               (u.agenceId.isEmpty && u.agence == _agenceNom(agenceId)))
           .toList();
 
-  /// Clients dont les docs appartiennent à [agenceId].
+  /// Clients whose docs belong to [agenceId].
   List<ClientModel> clientsForAgence(String agenceId) =>
       clients.where((c) => c.agenceId == agenceId).toList();
 
-  /// Collecteurs dont les docs appartiennent à [agenceId].
+  /// Collectors whose docs belong to [agenceId].
   List<CollecteurModel> collecteursForAgence(String agenceId) =>
       collecteurs.where((c) => c.agenceId == agenceId).toList();
 
-  /// Nom (ville) d'une agence à partir de son id — pour matcher les docs
-  /// hérités qui référencent l'agence par nom au lieu de l'id.
+  /// Name (ville) of an agency from its id — used to match legacy docs
+  /// that reference the agency by name instead of id.
   String _agenceNom(String agenceId) {
     for (final a in agences) {
       if (a.id == agenceId) return a.ville;
@@ -146,7 +146,7 @@ class PlatformStore extends ChangeNotifier {
     return '';
   }
 
-  // --- Sociétés CRUD ---
+  // --- Companies CRUD ---
   Future<void> addSociete({
     required String raisonSociale,
     required String adresse,
@@ -224,7 +224,7 @@ class PlatformStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Utilisateurs CRUD ---
+  // --- Users CRUD ---
   Future<void> addUtilisateur({
     required String nom,
     required String telephone,

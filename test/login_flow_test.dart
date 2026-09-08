@@ -5,31 +5,31 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// AuthService branché sur un backend Auth en mémoire (pas de Firebase).
+/// AuthService wired to an in-memory Auth backend (no Firebase).
 AuthService makeAuth(FakeFirebaseFirestore db, FakeAuthBackend backend) =>
     AuthService(db: db, backend: backend);
 
-/// Tests d'intégration du login « numéro + mot de passe » (Firebase Auth,
-/// après la migration sécurité).
+/// Integration tests for "phone + password" login (Firebase Auth,
+/// after the security migration).
 ///
-/// Ces tests reproduisent le parcours réel avec un Firestore simulé + un
-/// backend Auth en mémoire :
-///   1. Le superadmin se connecte avec son doc `users/{téléphone}`
-///      (créé dans la console Firebase, rôle `super_admin`, compte Auth
-///      créé par la migration — d'où le `seedAccount`).
-///   2. Le superadmin crée un utilisateur via la console → la console écrit
-///      son compte de connexion `users/{téléphone}` (uid + auth_profiles,
-///      PLUS aucun mot de passe en clair).
-///   3. Cet utilisateur peut se connecter avec le numéro + mot de passe.
+/// These tests replicate the real flow with simulated Firestore + an
+/// in-memory Auth backend:
+///   1. The superadmin logs in with their `users/{phone}` doc
+///      (created in the Firebase console, role `super_admin`, Auth account
+///      created by migration — hence `seedAccount`).
+///   2. The superadmin creates a user via the console → the console writes
+///      their login account `users/{phone}` (uid + auth_profiles,
+///      NO plaintext password).
+///   3. This user can log in with phone + password.
 void main() {
-  group('login superadmin (compte créé dans la console Firebase)', () {
-    test('se connecte avec numéro + mot de passe', () async {
+  group('superadmin login (account created in Firebase console)', () {
+    test('logs in with phone + password', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend()
         ..seedAccount('237677123456@wastepro.cm', 'admin123');
-      // Doc créé à la main dans la console : users/{téléphone} avec rôle
-      // super_admin ; le mot de passe vit dans Firebase Auth (migration), il
-      // n'est plus dans Firestore.
+      // Doc created manually in the console: users/{phone} with role
+      // super_admin; the password lives in Firebase Auth (migration),
+      // no longer in Firestore.
       await db.collection('users').doc('+237677123456').set({
         'phoneNumber': '+237677123456',
         'fullName': 'Super Admin',
@@ -61,7 +61,7 @@ void main() {
       );
     });
 
-    test('retourne null pour un numéro inconnu', () async {
+    test('returns null for an unknown number', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend();
       final auth = makeAuth(db, backend);
@@ -69,15 +69,15 @@ void main() {
     });
   });
 
-  group('login quelle que soit la saisie (console Firebase)', () {
-    test('retrouve le profil via une saisie brute ou espacée', () async {
+  group('login regardless of input format (Firebase console)', () {
+    test('finds the profile via raw or spaced input', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend()
         ..seedAccount('237677123456@wastepro.cm', 'admin123');
-      // Doc créé dans la console avec une clé canonique +237... : le login
-      // et l'auto-login (refreshUser) partagent la logique canonicalKeys et
-      // doivent retrouver le profil quelle que soit la façon de saisir le
-      // numéro (brut, avec espaces/tirets, avec ou sans +237).
+      // Doc created in the console with a canonical +237... key: login
+      // and auto-login (refreshUser) share the canonicalKeys logic and
+      // must find the profile regardless of how the number is entered
+      // (raw, with spaces/dashes, with or without +237).
       await db.collection('users').doc('+237677123456').set({
         'phoneNumber': '+237677123456',
         'fullName': 'Super Admin',
@@ -86,33 +86,33 @@ void main() {
 
       final auth = makeAuth(db, backend);
 
-      // Saisie brute sans +237 : canonicalKeys essaie +237677123456 puis
-      // 677123456 → le doc canonique est trouvé.
+      // Raw input without +237: canonicalKeys tries +237677123456 then
+      // 677123456 → the canonical doc is found.
       final byRaw = await auth.login('677123456', 'admin123');
       expect(byRaw, isNotNull);
       expect(byRaw!.role, 'super_admin');
 
-      // Saisie avec espaces : même résultat.
+      // Spaced input: same result.
       final bySpaced = await auth.login('+237 677 12 34 56', 'admin123');
       expect(bySpaced, isNotNull);
       expect(bySpaced!.fullName, 'Super Admin');
 
-      // Saisie canonique exacte : même résultat.
+      // Exact canonical input: same result.
       final byCanonical = await auth.login('+237677123456', 'admin123');
       expect(byCanonical, isNotNull);
       expect(byCanonical!.fullName, 'Super Admin');
     });
   });
 
-  group('comptes legacy créés à la main avec une clé brute', () {
-    test('se connecte via un doc users/{numéro sans +237}', () async {
+  group('legacy accounts created manually with a bare key', () {
+    test('logs in via a users/{number without +237} doc', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend()
         ..seedAccount('237653645807@wastepro.cm', 'motdepasse');
-      // Compte super admin créé à la main dans la console Firebase avec
-      // une clé NON canonique ('653645807' au lieu de '+237653645807').
-      // Le login doit quand même le retrouver (clé brute ajoutée aux clés
-      // candidates par canonicalKeys).
+      // Super admin account created manually in the Firebase console with
+      // a NON-canonical key ('653645807' instead of '+237653645807').
+      // Login must still find it (bare key added to candidate keys
+      // by canonicalKeys).
       await db.collection('users').doc('653645807').set({
         'phoneNumber': '653645807',
         'fullName': 'Adams',
@@ -127,13 +127,13 @@ void main() {
       expect(user.fullName, 'Adams');
     });
 
-    test('privilégie le doc canonique quand il existe aussi', () async {
+    test('prefers the canonical doc when it also exists', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend()
         ..seedAccount('237696713899@wastepro.cm', 'secret123');
-      // Doublon legacy (clé brute, sans compte Auth) + compte canonique
-      // correct : le login doit aboutir via la clé canonique et non échouer
-      // sur le doublon.
+      // Legacy duplicate (bare key, no Auth account) + correct canonical
+      // account: login must succeed via the canonical key and not fail
+      // on the duplicate.
       await db.collection('users').doc('696713899').set({
         'phoneNumber': '696713899',
         'fullName': 'Nadia (legacy)',
@@ -150,7 +150,7 @@ void main() {
       expect(user, isNotNull);
       expect(user!.fullName, 'Nadia');
 
-      // Et un mauvais mot de passe reste rejeté malgré le doublon.
+      // And a wrong password is still rejected despite the duplicate.
       expect(
         () => auth.login('696713899', 'mauvais'),
         throwsA('Incorrect Password'),
@@ -158,13 +158,13 @@ void main() {
     });
   });
 
-  group('utilisateurs créés par la console superadmin', () {
-    test('peuvent se connecter après création via la console', () async {
+  group('users created by the superadmin console', () {
+    test('can log in after creation via the console', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend();
-      // La console superadmin (FirestorePlatformStore) crée le compte Auth
-      // (via le backend injecté) + le doc `users/{téléphone}` (uid, PLUS
-      // aucun mot de passe en clair).
+      // The superadmin console (FirestorePlatformStore) creates the Auth
+      // account (via the injected backend) + the `users/{phone}` doc (uid,
+      // NO plaintext password).
       final store = FirestorePlatformStore(
         db: db,
         backend: backend,
@@ -182,17 +182,16 @@ void main() {
         password: 'secret123',
       );
 
-      // Le compte de connexion a bien été écrit avec le VRAI rôle console
-      // (General Administrator → general_admin, Phase 1) et le uid Auth.
+      // The login account was correctly written with the REAL console role
+      // (General Administrator → general_admin, Phase 1) and the Auth uid.
       final loginDoc = await db.collection('users').doc('+237699999999').get();
       expect(loginDoc.exists, isTrue);
       expect(loginDoc.data()?['role'], 'general_admin');
       expect(loginDoc.data()?['uid'], isNotEmpty);
       expect(loginDoc.data()?['password'], isNull,
-          reason: 'le mot de passe ne doit plus être écrit dans Firestore');
+          reason: 'the password must no longer be written to Firestore');
 
-      // L'utilisateur se connecte avec le numéro + le mot de passe fixé par
-      // le superadmin.
+      // The user logs in with the phone + password set by the superadmin.
       final auth = makeAuth(db, backend);
       final user = await auth.login('+237 699 99 99 99', 'secret123');
 
@@ -203,7 +202,7 @@ void main() {
       store.dispose();
     });
 
-    test('rejette un mot de passe différent de celui fixé', () async {
+    test('rejects a password different from the one set', () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend();
       final store = FirestorePlatformStore(
@@ -218,7 +217,7 @@ void main() {
         nom: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
         role: 'Agency Manager',
-        agence: 'Douala — Bonanjo',
+        agence: 'Yaoundé — Bastos',
         status: 'Active',
         password: 'mdp-cons',
       );

@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../models/agence_model.dart';
 import '../../models/platform_user_model.dart';
+import '../backoffice/models.dart';
+import '../superadmin/widgets/monthly_clients_bar.dart';
 import '../superadmin/theme.dart';
 import '../superadmin/widgets/app_table.dart';
 import '../superadmin/widgets/app_toast.dart';
@@ -35,10 +37,10 @@ import 'widgets/manager_credentials_dialog.dart';
 class CompanyConsole extends StatefulWidget {
   const CompanyConsole({super.key, this.societeId, this.store});
 
-  /// Id de l'entreprise de l'administrateur connecté. '' en preview démo.
+  /// Id of the connected administrator's company. '' in demo preview.
   final String? societeId;
 
-  /// Store injecté (tests) ; sinon créé paresseusement.
+  /// Injected store (tests); otherwise created lazily.
   final CompanyStore? store;
 
   @override
@@ -106,8 +108,8 @@ class _CompanyConsoleState extends State<CompanyConsole> {
   // --- Demo detection ---
   bool get _isDemo => _store is! FirestoreCompanyStore;
 
-  /// Sélectionne une agence depuis le dropdown du header et bascule sur
-  /// l'Overview pour montrer ses stats.
+  /// Selects an agency from the header dropdown and switches to
+  /// the Overview to show its stats.
   void _selectAgence(String id) {
     _store.selectAgence(id);
     setState(() => _page = 0);
@@ -546,7 +548,7 @@ class _CompanyConsoleState extends State<CompanyConsole> {
     );
   }
 
-  /// Dropdown du header : « All agencies » + une entrée par agence.
+  /// Header dropdown: "All agencies" + one entry per agency.
   Widget _buildAgencyDropdown() {
     return Consumer<CompanyStore>(
       builder: (context, store, _) {
@@ -819,6 +821,10 @@ class OverviewPage extends StatelessWidget {
             // Charts
             _buildCharts(store, wide),
             const SizedBox(height: 16),
+            // Progression annuelle des abonnements (scope entreprise ou
+            // agence zoomée).
+            _buildAnnualSubscriptions(store),
+            const SizedBox(height: 16),
             // Agences (ou agence sélectionnée) + managers
             if (sel == null)
               _AgenciesOverview(store: store)
@@ -955,6 +961,19 @@ class OverviewPage extends StatelessWidget {
         const SizedBox(height: 16),
         donutChart,
       ],
+    );
+  }
+
+  /// Carte « nouveaux clients abonnés par mois » (Jan → Déc de l'année
+  /// courante), scopée à l'entreprise — ou à l'agence zoomée.
+  Widget _buildAnnualSubscriptions(CompanyStore store) {
+    final sel = store.selectedAgence;
+    final year = DateTime.now().year;
+    final counts = monthlySubscriptions(store.scopedClients, year);
+    return _chartCard(
+      title: 'New clients subscribed',
+      tag: '${sel?.ville ?? 'All agencies'} · $year',
+      child: MonthlyClientsBar(values: counts),
     );
   }
 
@@ -1382,10 +1401,10 @@ class _AgenciesPageState extends State<_AgenciesPage> {
           final store = context.read<CompanyStore>();
           final nom = form['nom']?.toString().trim() ?? '';
           final villePart = form['ville']?.toString().trim() ?? '';
-          // The agency is named after its city (e.g. "Douala — Bonanjo"):
+          // The agency is named after its city (e.g. "Yaoundé — Bastos"):
           // City and Agency name are combined into the existing ville field.
           // If the name already includes the city, keep it as-is to avoid
-          // duplication ("Douala — Douala — Bonanjo").
+          // duplication ("Yaoundé — Yaoundé — Bastos").
           final ville = villePart.isEmpty
               ? nom
               : nom.isEmpty || villePart.contains(nom)
@@ -1523,7 +1542,7 @@ class _AgenciesPageState extends State<_AgenciesPage> {
         SaTextField(
           label: 'City',
           initial: _form['ville']?.toString(),
-          hint: 'Ex. Douala — Bonanjo',
+          hint: 'Ex. Yaoundé — Bastos',
           onChanged: (v) => _form['ville'] = v,
         ),
         const SizedBox(height: 16),

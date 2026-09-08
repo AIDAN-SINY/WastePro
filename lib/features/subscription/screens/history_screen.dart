@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
+import '../../payment/screens/bills_screen.dart';
+import '../../profile/screens/profile_screen.dart';
 import 'subscription_screen.dart';
 
 /// Historique des paiements (« My Bill ») — alimenté par la collection
@@ -44,11 +46,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
         foregroundColor: dGreen,
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        // Transactions du client, les plus récentes d'abord.
+        // Transactions du client — sorted in Dart to avoid
+        // requiring a composite Firestore index.
         stream: FirebaseFirestore.instance
             .collection('transactions')
             .where('phone', isEqualTo: user.phoneNumber)
-            .orderBy('createdAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -69,7 +71,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
             );
           }
 
-          final docs = snapshot.data!.docs;
+          // Sort in Dart to avoid needing a composite index.
+          final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+            snapshot.data!.docs,
+          );
+          docs.sort((a, b) {
+            final aTime = (a.data()['createdAt'] as Timestamp?)?.toDate();
+            final bTime = (b.data()['createdAt'] as Timestamp?)?.toDate();
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+            return bTime.compareTo(aTime);
+          });
           if (docs.isEmpty) {
             return _buildEmptyState();
           }
@@ -118,7 +131,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Icon(
               Icons.receipt_long,
               size: 64,
-              color: dMuted.withOpacity(0.3),
+              color: dMuted.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -185,8 +198,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
         : 'FAILED';
     final statusColor = isSuccess ? dGreen : dRed;
     final statusBg = isSuccess
-        ? dGreen.withOpacity(0.1)
-        : dRed.withOpacity(0.1);
+        ? dGreen.withValues(alpha: 0.1)
+        : dRed.withValues(alpha: 0.1);
     final date = createdAt == null
         ? ''
         : '${createdAt.day}/${createdAt.month}/${createdAt.year}';
@@ -200,7 +213,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         border: Border.all(color: dBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -211,7 +224,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: dGreen.withOpacity(0.1),
+              color: dGreen.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
@@ -275,7 +288,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         color: dSurface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 15,
             offset: const Offset(0, -3),
           ),
@@ -315,7 +328,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   navProvider.setIndex(2);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+                    MaterialPageRoute(builder: (_) => const BillsScreen()),
                   );
                 },
               ),
@@ -326,7 +339,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 index: 3,
                 onTap: () {
                   navProvider.setIndex(3);
-                  Navigator.pushReplacementNamed(context, '/profile');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ProfileScreen()),
+                  );
                 },
               ),
             ],
@@ -347,7 +364,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      splashColor: dGreen.withOpacity(0.1),
+      splashColor: dGreen.withValues(alpha: 0.1),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
@@ -357,10 +374,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected ? dGreen.withOpacity(0.15) : Colors.transparent,
+                color: isSelected ? dGreen.withValues(alpha: 0.15) : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
                 border: isSelected
-                    ? Border.all(color: dGreen.withOpacity(0.3), width: 1.5)
+                    ? Border.all(color: dGreen.withValues(alpha: 0.3), width: 1.5)
                     : null,
               ),
               child: Icon(

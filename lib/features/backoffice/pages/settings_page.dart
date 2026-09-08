@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../data/backoffice_store.dart';
 import '../models.dart';
@@ -63,12 +64,15 @@ class BoSettingsPage extends StatelessWidget {
                 children: [
                   _infoField('Company name', 'WastePro'),
                   const SizedBox(height: 15),
-                  _infoField('City of operation', 'Douala'),
+                  _infoField('City of operation', 'Yaoundé'),
                   const SizedBox(height: 15),
-                  _infoField('Support number', '+237 6XX XXX XXX'),
+                  _infoField('Support number', '+237 696 713 899'),
                 ],
               ),
             ),
+            const SizedBox(height: 8),
+            _title('Development'),
+            const _DevBypassCard(),
           ],
         );
       },
@@ -125,6 +129,104 @@ class _FrequenceRow extends StatelessWidget {
       onKebab: () {
         showBoActionSheet(context, onEdit: onEdit, onDelete: onDelete);
       },
+    );
+  }
+}
+
+class _DevBypassCard extends StatefulWidget {
+  const _DevBypassCard();
+
+  @override
+  State<_DevBypassCard> createState() => _DevBypassCardState();
+}
+
+class _DevBypassCardState extends State<_DevBypassCard> {
+  bool _bypass = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('settings')
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _bypass = doc.data()?['devPaymentBypass'] == true;
+          _loading = false;
+        });
+      } else if (mounted) {
+        setState(() => _loading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggle(bool value) async {
+    setState(() {
+      _bypass = value;
+      _loading = true;
+    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('settings')
+          .set({'devPaymentBypass': value}, SetOptions(merge: true));
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BackofficeTheme.card(),
+      child: Row(
+        children: [
+          Icon(
+            Icons.science_outlined,
+            color: _bypass ? const Color(0xFFD4A853) : BackofficeTheme.muted,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Skip payment (dev mode)',
+                  style: BackofficeTheme.inter(13, weight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'When ON, subscriptions are auto-confirmed without CamPay. '
+                  'Use only during development.',
+                  style: BackofficeTheme.inter(11, color: BackofficeTheme.muted, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          if (_loading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Switch(
+              value: _bypass,
+              onChanged: _toggle,
+              activeThumbColor: const Color(0xFFD4A853),
+            ),
+        ],
+      ),
     );
   }
 }

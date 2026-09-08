@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/notification_model.dart';
+import 'pickup_confirmation_screen.dart';
 
-/// Écran « Notifications » du dashboard client — liste les notifications
-/// in-app reçues (décisions du chef d'agence sur la candidature, futures
-/// notifications produit…).
+/// Client dashboard Notifications screen — lists in-app notifications
+/// received (agency manager decisions on applications, future product
+/// notifications...).
 ///
-/// Ouvert depuis la cloche du dashboard : les notifications sont marquées
-/// comme lues à l'ouverture (le badge de la cloche disparaît).
+/// Opened from the dashboard bell: notifications are marked as read on
+/// open (the bell badge disappears).
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({
     super.key,
@@ -17,7 +18,7 @@ class NotificationsScreen extends StatefulWidget {
     required this.phone,
   }) : _db = db;
 
-  /// Base injectée par les tests ; sinon l'instance par défaut.
+  /// Optional Firestore instance for testing; otherwise the default.
   final FirebaseFirestore? _db;
 
   /// Numéro de téléphone du client connecté (canonique).
@@ -38,13 +39,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   static const Color dMuted = Color(0xFF7C8A80);
   static const Color dGreen = Color(0xFF0F3D2E);
   static const Color dGreenSoft = Color(0xFFE7EFE9);
+  static const Color dGold = Color(0xFFE8A33D);
+  static const Color dGoldSoft = Color(0xFFFBEDD6);
   static const Color dRed = Color(0xFFC1443D);
 
   @override
   void initState() {
     super.initState();
-    // Marque tout comme lu à l'ouverture (fire-and-forget).
+    // Mark all as read on open (fire-and-forget).
     _markAllRead();
+  }
+
+  /// Opens the pickup confirmation screen when the user taps a
+  /// pickup_to_confirm notification.
+  Future<void> _onTapNotification(NotificationModel n) async {
+    if (n.type == 'pickup_to_confirm') {
+      // Mark as read.
+      await _db.collection('notifications').doc(n.id).update({'read': true});
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PickupConfirmationScreen(
+            db: _db,
+            pickupId: n.id,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _markAllRead() async {
@@ -63,7 +84,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       }
       await batch.commit();
     } catch (_) {
-      // Silencieux : un échec de lecture ne doit pas bloquer l'écran.
+      // Silent: a read failure should not block the screen.
     }
   }
 
@@ -117,7 +138,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               padding: const EdgeInsets.all(16),
               itemCount: items.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) => _item(items[index]),
+              itemBuilder: (context, index) {
+              final n = items[index];
+              // Tap on a pickup_to_confirm notification opens the confirmation screen.
+              return GestureDetector(
+                onTap: () => _onTapNotification(n),
+                child: _item(n),
+              );
+            },
             );
           },
         ),
@@ -164,9 +192,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _item(NotificationModel n) {
+    final pickupRequest = n.type == 'pickup_to_confirm';
+    final pickupConfirmed = n.type == 'pickup_confirmed';
+    final pickupDisputed = n.type == 'pickup_disputed';
     final approved = n.type == 'approved';
-    final iconColor = approved ? dGreen : dRed;
-    final iconBg = approved ? dGreenSoft : dRed.withValues(alpha: 0.1);
+    final iconColor = pickupConfirmed
+        ? dGreen
+        : pickupDisputed
+            ? dRed
+            : pickupRequest
+                ? dGold
+                : approved
+                    ? dGreen
+                    : dRed;
+    final iconBg = pickupConfirmed
+        ? dGreenSoft
+        : pickupDisputed
+            ? dRed.withValues(alpha: 0.1)
+            : pickupRequest
+                ? const Color(0xFFFBEDD6)
+                : approved
+                    ? dGreenSoft
+                    : dRed.withValues(alpha: 0.1);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -182,7 +229,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             height: 40,
             decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
             child: Icon(
-              approved ? Icons.check_rounded : Icons.close_rounded,
+              pickupConfirmed
+                  ? Icons.check_circle_rounded
+                  : pickupDisputed
+                      ? Icons.report_rounded
+                      : pickupRequest
+                          ? Icons.notifications_active_rounded
+                          : approved
+                              ? Icons.check_rounded
+                              : Icons.close_rounded,
               color: iconColor,
               size: 20,
             ),

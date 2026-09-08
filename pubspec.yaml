@@ -36,6 +36,7 @@ dependencies:
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0
   firebase_app_check: ^0.3.0 
+  firebase_messaging: ^15.0.0
   shared_preferences: ^2.2.3
   mobile_scanner: ^5.1.0
   # Modern Phone Input
@@ -68,6 +69,27 @@ dependencies:
   # son PIN — aucune page WebView ni clé secrète côté client.
   http: ^1.2.0
 
+  # Checkout Mobile Money — Campay REST API (dio + GetX)
+  dio: ^5.4.0
+  flutter_dotenv: ^5.1.0
+  get: ^4.6.6
+
+  # Report generation (PDF, Excel, CSV)
+  pdf: ^3.11.0
+  excel: ^4.0.6
+  share_plus: ^10.0.0
+  path_provider: ^2.1.0
+  intl: ^0.19.0
+
+  # Offline support
+  connectivity_plus: ^6.0.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Navigation
+  url_launcher: ^6.2.0
+  qr_flutter: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -89,6 +111,7 @@ dev_dependencies:
 flutter:
 
    assets:
+       - .env
        - assets/images/waste_bg.jpg
        - assets/images/internal_bg.jpg
   # The following line ensures that the Material Icons font is

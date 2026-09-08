@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../models/agence_model.dart';
 import '../../../models/platform_user_model.dart';
 import '../../../models/societe_model.dart';
+import '../../backoffice/models.dart';
 
 /// Store de la console entreprise (General Administrator).
 ///
@@ -55,6 +56,14 @@ class CompanyStore extends ChangeNotifier {
         .toList();
   }
 
+  /// Clients (abonnés) de l'entreprise dans le scope courant (tous, ou
+  /// uniquement ceux de l'agence sélectionnée par le dropdown).
+  List<ClientModel> get scopedClients {
+    final sel = selectedAgence;
+    if (sel == null) return clients;
+    return clients.where((c) => c.agenceId == sel.id).toList();
+  }
+
   /// Nombre de chefs d'agence affectés à [agenceId].
   int managersForAgence(String agenceId) {
     return utilisateurs.where((u) => u.agenceId == agenceId).length;
@@ -94,6 +103,10 @@ class CompanyStore extends ChangeNotifier {
   final List<SocieteModel> societes = [];
   final List<AgenceModel> agences = [];
   final List<PlatformUserModel> utilisateurs = [];
+
+  /// Clients abonnés de l'entreprise (rempli par le store Firestore :
+  /// `clients` où `societeId == X`).
+  final List<ClientModel> clients = [];
 
   /// Nom de l'entreprise (raison sociale) une fois chargée.
   String get societeNom =>
@@ -182,11 +195,12 @@ class CompanyStore extends ChangeNotifier {
     societes.clear();
     agences.clear();
     utilisateurs.clear();
+    clients.clear();
 
     societes.add(const SocieteModel(
       id: 'preview-so1',
-      raisonSociale: 'WastePro Douala Ltd',
-      adresse: '127 Rue du Commerce, Akwa, Douala',
+      raisonSociale: 'WastePro Yaoundé SARL',
+      adresse: '127 Rue du Commerce, Bastos, Yaoundé',
       telephone: '+237 233 42 10 55',
       email: 'contact@wastepro.cm',
       status: 'Active',
@@ -195,27 +209,27 @@ class CompanyStore extends ChangeNotifier {
     agences.addAll([
       const AgenceModel(
         id: 'preview-ag1',
-        societe: 'WastePro Douala Ltd',
+        societe: 'WastePro Yaoundé SARL',
         societeId: 'preview-so1',
-        ville: 'Douala — Bonanjo',
+        ville: 'Yaoundé — Bastos',
         responsable: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
         status: 'Active',
       ),
       const AgenceModel(
         id: 'preview-ag2',
-        societe: 'WastePro Douala Ltd',
+        societe: 'WastePro Yaoundé SARL',
         societeId: 'preview-so1',
-        ville: 'Douala — Bassa',
+        ville: 'Yaoundé — Nlongkak',
         responsable: 'Aïcha Bello',
         telephone: '+237 699 33 67 41',
         status: 'Active',
       ),
       const AgenceModel(
         id: 'preview-ag3',
-        societe: 'WastePro Douala Ltd',
+        societe: 'WastePro Yaoundé SARL',
         societeId: 'preview-so1',
-        ville: 'Yaoundé',
+        ville: 'Yaoundé — Mokolo',
         responsable: 'Marie Ekwalla',
         telephone: '+237 690 45 12 78',
         status: 'Active',
@@ -228,7 +242,7 @@ class CompanyStore extends ChangeNotifier {
         nom: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
         role: 'Agency Manager',
-        agence: 'Douala — Bonanjo',
+        agence: 'Yaoundé — Bastos',
         societeId: 'preview-so1',
         agenceId: 'preview-ag1',
         status: 'Active',
@@ -239,7 +253,7 @@ class CompanyStore extends ChangeNotifier {
         nom: 'Aïcha Bello',
         telephone: '+237 699 33 67 41',
         role: 'Agency Manager',
-        agence: 'Douala — Bassa',
+        agence: 'Yaoundé — Nlongkak',
         societeId: 'preview-so1',
         agenceId: 'preview-ag2',
         status: 'Active',
@@ -255,6 +269,88 @@ class CompanyStore extends ChangeNotifier {
         agenceId: 'preview-ag3',
         status: 'Active',
         password: '',
+      ),
+    ]);
+
+    // Clients abonnés : dates réparties sur l'année pour que la carte
+    // « nouveaux clients abonnés par mois » soit riche dès l'ouverture.
+    clients.addAll([
+      ClientModel(
+        id: 'preview-c1',
+        name: 'Jean Dooh',
+        phone: '+237 677 12 34 56',
+        zone: 'Bastos',
+        plan: 'Standard',
+        status: 'Active',
+        agenceId: 'preview-ag1',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-02-10',
+      ),
+      ClientModel(
+        id: 'preview-c2',
+        name: 'Sarah Mbida',
+        phone: '+237 691 77 04 22',
+        zone: 'Bastos',
+        plan: 'Essential',
+        status: 'Active',
+        agenceId: 'preview-ag1',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-03-05',
+      ),
+      ClientModel(
+        id: 'preview-c3',
+        name: 'Éric Tchoua',
+        phone: '+237 656 40 88 15',
+        zone: 'Nkolbisson',
+        plan: 'Standard',
+        status: 'Suspended',
+        agenceId: 'preview-ag1',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-01-20',
+      ),
+      ClientModel(
+        id: 'preview-c4',
+        name: 'Aïcha Bello',
+        phone: '+237 699 33 67 41',
+        zone: 'Mokolo',
+        plan: 'Standard',
+        status: 'Active',
+        agenceId: 'preview-ag2',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-05-11',
+      ),
+      ClientModel(
+        id: 'preview-c5',
+        name: 'Patrice Fotso',
+        phone: '+237 674 20 15 63',
+        zone: 'Asseng',
+        plan: 'Premium',
+        status: 'Active',
+        agenceId: 'preview-ag2',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-04-08',
+      ),
+      ClientModel(
+        id: 'preview-c6',
+        name: 'Marie Ekwalla',
+        phone: '+237 690 45 12 78',
+        zone: 'Nlongkak',
+        plan: 'Premium',
+        status: 'Active',
+        agenceId: 'preview-ag2',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-06-16',
+      ),
+      ClientModel(
+        id: 'preview-c7',
+        name: 'Nadine Onguéné',
+        phone: '+237 670 22 45 88',
+        zone: 'Bastos',
+        plan: 'Standard',
+        status: 'Active',
+        agenceId: 'preview-ag3',
+        societeId: 'preview-so1',
+        subscribedAt: '2026-07-03',
       ),
     ]);
   }

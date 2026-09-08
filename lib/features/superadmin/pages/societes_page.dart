@@ -147,14 +147,14 @@ class SocietesPageState extends State<SocietesPage> {
         SaTextField(
           label: 'Company name',
           initial: _form['raisonSociale']?.toString(),
-          hint: 'Ex. WastePro Douala Ltd',
+          hint: 'Ex. WastePro Yaoundé SARL',
           onChanged: (v) => _form['raisonSociale'] = v,
         ),
         const SizedBox(height: 16),
         SaTextField(
           label: 'Address',
           initial: _form['adresse']?.toString(),
-          hint: 'Ex. Bonanjo, Douala',
+          hint: 'Ex. Bastos, Yaoundé',
           onChanged: (v) => _form['adresse'] = v,
         ),
         const SizedBox(height: 16),

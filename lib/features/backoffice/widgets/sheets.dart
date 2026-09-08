@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -237,10 +238,28 @@ class _BoFormSheetState extends State<_BoFormSheet> {
   late final TextEditingController _zone;
   late final TextEditingController _number;
   late final TextEditingController _password;
+  late final TextEditingController _cni;
+  late final TextEditingController _vehicle;
+  late final TextEditingController _salary;
+  late final TextEditingController _photoUrl;
+  late final TextEditingController _photoUrl2;
+  late final TextEditingController _pickupTime;
   bool _obscurePassword = true;
   String _selectA = ''; // plan / status / client / libelle
   String _selectB = ''; // status / frequence / client...
+  String _selectC = ''; // housing type
   late DateTime _date;
+  final Set<String> _collectionDays = {};
+
+  static const _allDays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+    'Friday', 'Saturday', 'Sunday',
+  ];
+  static const _dayAbbrev = {
+    'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',
+    'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat',
+    'Sunday': 'Sun',
+  };
 
   bool get _isEdit => widget.existing != null;
 
@@ -256,6 +275,12 @@ class _BoFormSheetState extends State<_BoFormSheet> {
     _zone = TextEditingController();
     _number = TextEditingController();
     _password = TextEditingController();
+    _cni = TextEditingController();
+    _vehicle = TextEditingController();
+    _salary = TextEditingController();
+    _photoUrl = TextEditingController();
+    _photoUrl2 = TextEditingController();
+    _pickupTime = TextEditingController();
     _date = DateTime.now();
     _seed();
   }
@@ -267,6 +292,12 @@ class _BoFormSheetState extends State<_BoFormSheet> {
     _zone.dispose();
     _number.dispose();
     _password.dispose();
+    _cni.dispose();
+    _vehicle.dispose();
+    _salary.dispose();
+    _photoUrl.dispose();
+    _photoUrl2.dispose();
+    _pickupTime.dispose();
     super.dispose();
   }
 
@@ -280,6 +311,34 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         _zone.text = c?.zone ?? '';
         _selectA = c?.plan ?? 'Standard';
         _selectB = c?.status ?? 'Active';
+        _cni.text = c?.adresse ?? '';
+        _vehicle.text = c?.quartier ?? '';
+        _salary.text = c?.latitude != null ? c!.latitude!.toStringAsFixed(6) : '';
+        _photoUrl.text = c?.photoUrl ?? '';
+        _photoUrl2.text = c?.longitude != null ? c!.longitude!.toStringAsFixed(6) : '';
+        _selectC = c?.housingType ?? 'House';
+        // Load collection_days from users/{phone} doc (not on ClientModel).
+        if (_isEdit && c != null) {
+          final canonical = _canonicalPhone(c.phone);
+          if (canonical.isNotEmpty) {
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(canonical)
+                .get()
+                .then((doc) {
+              if (doc.exists && mounted) {
+                final days = (doc.data()?['collection_days'] as List<dynamic>?)
+                        ?.map((e) => e.toString())
+                        .toList() ?? [];
+                final time = doc.data()?['pickup_time'] as String? ?? '';
+                setState(() {
+                  _collectionDays.addAll(days);
+                  if (time.isNotEmpty) _pickupTime.text = time;
+                });
+              }
+            });
+          }
+        }
       case BoEntity.collecteur:
         final c = d as CollecteurModel?;
         _name.text = c?.name ?? '';
@@ -287,6 +346,10 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         _zone.text = c?.zone ?? '';
         _number.text = c?.rating.toString() ?? '4.5';
         _status = c?.status ?? 'Active';
+        _cni.text = c?.cni ?? '';
+        _vehicle.text = c?.vehicle ?? '';
+        _salary.text = c != null && c.salary > 0 ? c.salary.toString() : '';
+        _photoUrl.text = c?.photoUrl ?? '';
       case BoEntity.contrat:
         final c = d as ContratModel?;
         _selectA =
@@ -334,6 +397,18 @@ class _BoFormSheetState extends State<_BoFormSheet> {
         final c = d as FrequenceModel?;
         _name.text = c?.libelle ?? '';
         _number.text = c?.jours.toString() ?? '7';
+      case BoEntity.issue:
+        break; // Issues have their own page
+      case BoEntity.zone:
+        break; // Zones have their own page
+      case BoEntity.assignment:
+        break; // Assignments have their own page
+      case BoEntity.vehicle:
+        final v = d as VehicleModel?;
+        _name.text = v?.plateNumber ?? '';
+        _number.text = v?.brand ?? '';
+        _selectC = v?.type ?? 'Tricycle';
+        _status = v?.status ?? 'Active';
     }
   }
 
@@ -353,6 +428,10 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       BoEntity.collecte => 'collection',
       BoEntity.facture => 'invoice',
       BoEntity.frequence => 'frequency',
+      BoEntity.issue => 'issue',
+      BoEntity.zone => 'zone',
+      BoEntity.assignment => 'assignment',
+      BoEntity.vehicle => 'vehicle',
     };
     return '${_isEdit ? 'Edit' : 'New'} $base';
   }
@@ -398,6 +477,12 @@ class _BoFormSheetState extends State<_BoFormSheet> {
       switch (widget.type) {
         case BoEntity.client:
           if (s.isEmpty) return _warn('Client name is required');
+          final adresse = _cni.text.trim();
+          final quartier = _vehicle.text.trim();
+          final lat = double.tryParse(_salary.text.trim());
+          final lng = double.tryParse(_photoUrl2.text.trim());
+          final photoUrl = _photoUrl.text.trim();
+          final housingType = _selectC.isEmpty ? 'House' : _selectC;
           if (_isEdit) {
             await store.updateClient(
               (widget.existing as ClientModel).copyWith(
@@ -406,8 +491,16 @@ class _BoFormSheetState extends State<_BoFormSheet> {
                 zone: zone,
                 plan: _selectA,
                 status: _selectB,
+                adresse: adresse,
+                quartier: quartier,
+                latitude: lat,
+                longitude: lng,
+                photoUrl: photoUrl,
+                housingType: housingType,
               ),
               password: password,
+              collectionDays: _collectionDays.toList(),
+              pickupTime: _pickupTime.text.trim(),
             );
           } else {
             await store.addClient(
@@ -417,10 +510,22 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               plan: _selectA,
               status: _selectB,
               password: password,
+              adresse: adresse,
+              quartier: quartier,
+              latitude: lat,
+              longitude: lng,
+              photoUrl: photoUrl,
+              housingType: housingType,
+              collectionDays: _collectionDays.toList(),
+              pickupTime: _pickupTime.text.trim(),
             );
           }
         case BoEntity.collecteur:
           if (s.isEmpty) return _warn('Collector name is required');
+          final cni = _cni.text.trim();
+          final vehicle = _vehicle.text.trim();
+          final salary = int.tryParse(_salary.text.trim()) ?? 0;
+          final photoUrl = _photoUrl.text.trim();
           if (_isEdit) {
             await store.updateCollecteur(
               (widget.existing as CollecteurModel).copyWith(
@@ -429,6 +534,10 @@ class _BoFormSheetState extends State<_BoFormSheet> {
                 zone: zone,
                 rating: r,
                 status: _status,
+                cni: cni,
+                vehicle: vehicle,
+                salary: salary,
+                photoUrl: photoUrl,
               ),
               password: password,
             );
@@ -440,6 +549,10 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               rating: r,
               status: _status,
               password: password,
+              cni: cni,
+              vehicle: vehicle,
+              salary: salary,
+              photoUrl: photoUrl,
             );
           }
         case BoEntity.contrat:
@@ -518,6 +631,37 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             );
           } else {
             await store.addFrequence(libelle: s, jours: n);
+          }
+        case BoEntity.issue:
+          break; // Issues are managed via their own page
+        case BoEntity.zone:
+          break; // Zones are managed via their own page
+        case BoEntity.assignment:
+          break; // Assignments are managed via their own page
+        case BoEntity.vehicle:
+          final plate = _name.text.trim();
+          final type = _selectC.isEmpty ? 'Tricycle' : _selectC;
+          final brand = _number.text.trim();
+          final model = _vehicle.text.trim();
+          final statusVal = _status.isEmpty ? 'Active' : _status;
+          if (_isEdit) {
+            await store.updateVehicle(
+              (widget.existing as VehicleModel).copyWith(
+                plateNumber: plate,
+                type: type,
+                brand: brand,
+                model: model,
+                status: statusVal,
+              ),
+            );
+          } else {
+            await store.addVehicle(
+              plateNumber: plate,
+              type: type,
+              brand: brand,
+              model: model,
+              status: statusVal,
+            );
           }
       }
     } catch (e) {
@@ -640,7 +784,9 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             hint: 'Ex. Jean Dooh',
           ),
           _text('Phone', _phone, hint: '+237 6XX XX XX XX', phone: true),
-          _text('Zone / Area', _zone, hint: 'Ex. Bonanjo'),
+          _text('Address', _cni, hint: 'Ex. Avenue de la République 123'),
+          _text('Zone / Area', _zone, hint: 'Ex. Bastos'),
+          _text('Neighborhood', _vehicle, hint: 'Ex. Bastos'),
           Row(
             children: [
               Expanded(
@@ -662,13 +808,118 @@ class _BoFormSheetState extends State<_BoFormSheet> {
               ),
             ],
           ),
+          Row(
+            children: [
+              Expanded(
+                child: _select(
+                  'Housing Type',
+                  ['House', 'Apartment', 'Villa', 'Other'],
+                  _selectC.isEmpty ? 'House' : _selectC,
+                  (v) => setState(() => _selectC = v),
+                ),
+              ),
+            ],
+          ),
+          // Collection days multi-select (clients only)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _label('Collection Day(s)'),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _allDays.map((day) {
+                    final isSelected = _collectionDays.contains(day);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _collectionDays.remove(day);
+                          } else {
+                            _collectionDays.add(day);
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: isSelected ? BackofficeTheme.green : BackofficeTheme.graySoft,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? BackofficeTheme.green : BackofficeTheme.border,
+                          ),
+                        ),
+                        child: Text(
+                          _dayAbbrev[day] ?? day,
+                          style: BackofficeTheme.inter(
+                            11,
+                            weight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            color: isSelected ? Colors.white : BackofficeTheme.text,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          // Pickup time window (clients only)
+          _text(
+            'Pickup Time Window',
+            _pickupTime,
+            hint: '07:00 — 08:00',
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _text(
+                  'GPS Latitude',
+                  _salary,
+                  hint: '3.8665',
+                  number: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _text(
+                  'GPS Longitude',
+                  _photoUrl2,
+                  hint: '11.5155',
+                  number: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          _text('Photo URL', _photoUrl, hint: 'https://...'),
           _passwordField(),
         ];
       case BoEntity.collecteur:
         return [
           _text('Full name', _name, hint: 'Ex. Paul Mbarga'),
           _text('Phone', _phone, hint: '+237 6XX XX XX XX', phone: true),
-          _text('Assigned zone', _zone, hint: 'Ex. Bonanjo / Akwa'),
+          _text('CNI (National ID)', _cni, hint: 'Ex. 111222333'),
+          _text('Assigned zone', _zone, hint: 'Ex. Bastos / Nlongkak'),
+          _text('Vehicle', _vehicle, hint: 'Ex. Tricycle — MB-2024-CM'),
+          _text(
+            'Salary (XAF)',
+            _salary,
+            hint: 'Ex. 75000',
+            number: true,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
+          ),
+          _text('Photo URL', _photoUrl, hint: 'https://...'),
           Row(
             children: [
               Expanded(
@@ -805,7 +1056,39 @@ class _BoFormSheetState extends State<_BoFormSheet> {
           _text('Label', _name, hint: 'Ex. Twice a week'),
           _text('Interval (days)', _number, hint: '7', number: true),
         ];
+      case BoEntity.issue:
+        return []; // Issues have their own page
+      case BoEntity.zone:
+        return []; // Zones have their own page
+      case BoEntity.assignment:
+        return []; // Assignments have their own page
+      case BoEntity.vehicle:
+        return [
+          _text('Plate Number', _name, hint: 'CE-123-AE'),
+          _select(
+            'Type',
+            ['Tricycle', 'Truck', 'Motorcycle', 'Van'],
+            _selectC.isEmpty ? 'Tricycle' : _selectC,
+            (v) => setState(() => _selectC = v),
+          ),
+          _text('Brand', _number, hint: 'TVS, Bajaj, Isuzu...'),
+          _text('Model', _vehicle, hint: 'King HD, RE HD...'),
+          _select(
+            'Status',
+            ['Active', 'Maintenance', 'Retired'],
+            _status.isEmpty ? 'Active' : _status,
+            (v) => setState(() => _status = v),
+          ),
+        ];
     }
+  }
+
+  String _canonicalPhone(String phone) {
+    final cleaned = phone.trim().replaceAll(RegExp(r'[\s-]'), '');
+    if (cleaned.isEmpty) return '';
+    if (cleaned.startsWith('+')) return cleaned;
+    if (cleaned.startsWith('237')) return '+$cleaned';
+    return '+237$cleaned';
   }
 
   Widget _label(String text) => Padding(
@@ -866,7 +1149,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
           _password,
           key: const Key('bo_f_password'),
           hint: _isEdit ? 'Leave empty to keep current' : 'Min. 4 characters',
-          obscure: true,
+          obscure: _obscurePassword,
           suffixIcon: IconButton(
             onPressed: () =>
                 setState(() => _obscurePassword = !_obscurePassword),
@@ -898,8 +1181,17 @@ class _BoFormSheetState extends State<_BoFormSheet> {
     String value,
     ValueChanged<String> onChanged,
   ) {
-    if (options.isEmpty) return const SizedBox.shrink();
-    final current = options.contains(value) ? value : options.first;
+    if (options.isEmpty && value.isEmpty) return const SizedBox.shrink();
+    // If the current value isn't in the options list (e.g. a collection
+    // references a client that was renamed or deleted), prepend it so the
+    // dropdown shows the correct name instead of falling back to the first
+    // option.
+    final effectiveOptions = (
+      value.isNotEmpty && !options.contains(value)
+          ? [value, ...options]
+          : options
+    ).toList();
+    final current = effectiveOptions.contains(value) ? value : effectiveOptions.first;
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: Column(
@@ -917,7 +1209,7 @@ class _BoFormSheetState extends State<_BoFormSheet> {
             ),
             decoration: _dec(null),
             items: [
-              for (final o in options)
+              for (final o in effectiveOptions)
                 DropdownMenuItem(
                   value: o,
                   child: Text(o, overflow: TextOverflow.ellipsis),

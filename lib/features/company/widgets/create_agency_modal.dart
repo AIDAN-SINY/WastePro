@@ -107,13 +107,13 @@ class _CreateAgencyModalState extends State<_CreateAgencyModal> {
                       const SizedBox(height: 20),
                       SaTextField(
                         label: 'Agency name',
-                        hint: 'Ex. Bonanjo',
+                        hint: 'Ex. Bastos',
                         onChanged: (v) => _form['nom'] = v,
                       ),
                       const SizedBox(height: 16),
                       SaTextField(
                         label: 'Location',
-                        hint: 'Ex. Rue de la Paix, Akwa',
+                        hint: 'Ex. Rue de la Paix, Nlongkak',
                         onChanged: (v) => _form['location'] = v,
                       ),
                       const SizedBox(height: 16),
@@ -132,7 +132,7 @@ class _CreateAgencyModalState extends State<_CreateAgencyModal> {
                       const SizedBox(height: 16),
                       SaTextField(
                         label: 'City',
-                        hint: 'Ex. Douala',
+                        hint: 'Ex. Yaoundé',
                         onChanged: (v) => _form['ville'] = v,
                       ),
                       const SizedBox(height: 16),

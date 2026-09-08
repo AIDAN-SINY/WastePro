@@ -11,6 +11,7 @@ class UserModel {
   final bool? isSubscribed;
   final String societeId; // '' for clients/collectors without a console link
   final String agenceId;
+  final String agenceName; // e.g. "Yaoundé — Etoudi"
   final String collecteurId; // collecteur assigné au client par le backoffice
 
   UserModel({
@@ -26,6 +27,7 @@ class UserModel {
     this.isSubscribed,
     this.societeId = '',
     this.agenceId = '',
+    this.agenceName = '',
     this.collecteurId = '',
   });
 
@@ -42,6 +44,7 @@ class UserModel {
       'isSubscribed': isSubscribed,
       'societeId': societeId,
       'agenceId': agenceId,
+      'agenceName': agenceName,
       'collecteurId': collecteurId,
     };
   }
@@ -60,6 +63,7 @@ class UserModel {
       isSubscribed: map['isSubscribed'] as bool?,
       societeId: map['societeId'] as String? ?? '',
       agenceId: map['agenceId'] as String? ?? '',
+      agenceName: map['agenceName'] as String? ?? '',
       collecteurId: map['collecteurId'] as String? ?? '',
     );
   }

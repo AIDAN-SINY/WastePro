@@ -7,13 +7,17 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Parcours de bout en bout : le superadmin crée un utilisateur dans la
-/// console (store Firestore réel), le compte de connexion `users/{téléphone}`
-/// est écrit avec le uid Auth (le mot de passe vit dans Firebase Auth), et
-/// cet utilisateur parvient à se connecter avec son numéro + mot de passe.
+import 'helpers/setup_firebase.dart';
+
+/// End-to-end flow: the superadmin creates a user in the console
+/// (real Firestore store), the login account `users/{phone}`
+/// is written with the Auth uid (password lives in Firebase Auth), and
+/// this user can log in with their phone + password.
 void main() {
+  setUpAll(() => setupFirebaseMocks());
+
   testWidgets(
-      'superadmin crée un utilisateur via le drawer → il peut se connecter',
+      'superadmin creates a user via drawer → user can log in',
       (tester) async {
     final db = FakeFirebaseFirestore();
     final backend = FakeAuthBackend();
@@ -25,21 +29,20 @@ void main() {
     );
     await store.initialLoad;
 
-    // Console desktop avec le vrai store Firestore (comme après un login
-    // super admin).
+    // Desktop console with real Firestore store (as after a super admin login).
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(home: SuperAdminConsole(store: store)),
+      MaterialApp(home: SuperAdminConsole(store: store, db: db)),
     );
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
-    // Avec un vrai store Firestore, aucun bandeau « aperçu démo ».
+    // With a real Firestore store, no "demo preview" banner.
     expect(find.textContaining('Demo preview'), findsNothing);
 
     // Aller sur la page Utilisateurs et ouvrir le drawer « New user ».
-    // ("Users" apparaît aussi ailleurs : on cible le premier, la sidebar.)
+    // ("Users" also appears elsewhere: target the first one, the sidebar.)
     await tester.tap(find.text('Users').first);
     await tester.pumpAndSettle();
     expect(find.text('New user'), findsOneWidget);
@@ -47,7 +50,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Full name'), findsOneWidget);
 
-    // Remplir le formulaire : nom, téléphone, mot de passe.
+    // Fill in the form: name, phone, password.
     await tester.enterText(find.byType(TextFormField).at(0), 'Marie Ekwalla');
     await tester.enterText(
       find.byType(TextFormField).at(1),
@@ -57,7 +60,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    // Aucune erreur pendant la création. Flush le timer du toast de succès.
+    // No errors during creation. Flush the success toast timer.
     expect(tester.takeException(), isNull);
     await tester.pump(const Duration(seconds: 4));
 
@@ -65,23 +68,23 @@ void main() {
     // agency_manager + uid Auth — le mot de passe vit dans Firebase Auth).
     final loginDoc = await db.collection('users').doc('+237699999999').get();
     expect(loginDoc.exists, isTrue,
-        reason: 'la console doit créer le compte de connexion users/{phone}');
-    // Rôle par défaut du drawer = Agency Manager → rôle de connexion
-    // agency_manager (Phase 1 : vrai rôle, plus le générique 'admin').
+        reason: 'the console must create the login account users/{phone}');
+    // Default drawer role = Agency Manager → login role
+    // agency_manager (Phase 1: real role, no longer the generic 'admin').
     expect(loginDoc.data()?['role'], 'agency_manager');
     expect(loginDoc.data()?['uid'], isNotEmpty);
     expect(loginDoc.data()?['password'], isNull,
-        reason: 'plus aucun mot de passe en clair dans Firestore');
+        reason: 'no more plaintext password in Firestore');
     expect(loginDoc.data()?['fullName'], 'Marie Ekwalla');
     expect(loginDoc.data()?['consoleCreated'], isTrue);
 
-    // L'utilisateur créé se connecte avec son numéro + le mot de passe fixé
-    // par le superadmin.
+    // The created user logs in with their phone + the password set by
+    // the superadmin.
     final auth = AuthService(db: db, backend: backend);
     final user = await auth.login('+237 699 99 99 99', 'secret123');
     expect(user, isNotNull,
-        reason: 'l utilisateur créé par le superadmin doit pouvoir se '
-            'connecter avec numéro + mot de passe');
+        reason: 'the user created by the superadmin must be able to '
+            'log in with phone + password');
     expect(user!.fullName, 'Marie Ekwalla');
     expect(user.role, 'agency_manager');
 
@@ -105,7 +108,7 @@ void main() {
       nom: 'Jean Dooh',
       telephone: '+237 677 12 34 56',
       role: 'Agency Manager',
-      agence: 'Douala — Bonanjo',
+      agence: 'Yaoundé — Bastos',
       status: 'Active',
       password: 'mdp-cons',
     );
@@ -148,7 +151,7 @@ void main() {
       nom: 'Chef Agence',
       telephone: '+237 699 55 55 55',
       role: 'Agency Manager',
-      agence: 'Douala',
+      agence: 'Yaoundé',
       status: 'Active',
       password: 'mdp-am',
     );
@@ -179,7 +182,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(home: SuperAdminConsole(store: store)),
+      MaterialApp(home: SuperAdminConsole(store: store, db: db)),
     );
     await tester.pump(const Duration(milliseconds: 600));
 
@@ -266,7 +269,7 @@ void main() {
       nom: 'Marie Ekwalla',
       telephone: '+237 699 11 11 11',
       role: 'Agency Manager',
-      agence: 'Douala — Bonanjo',
+      agence: 'Yaoundé — Bastos',
       status: 'Active',
       password: 'secret123',
     );
@@ -312,7 +315,7 @@ void main() {
       nom: 'Premier',
       telephone: '+237 699 33 33 33',
       role: 'Agency Manager',
-      agence: 'Douala',
+      agence: 'Yaoundé',
       status: 'Active',
       password: 'mdp-1',
     );

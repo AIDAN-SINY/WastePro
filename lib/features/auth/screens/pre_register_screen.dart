@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../models/agence_model.dart';
+import 'map_picker_screen.dart';
 import '../../../services/auth_backend.dart';
 import '../../../services/auth_service.dart';
 import 'login_screen.dart';
@@ -149,7 +150,7 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
 
   // --- Suggestions d'agences ---
 
-  /// Ville (ex. « Douala ») déduite de la zone saisie (« Douala: Akwa »).
+  /// Ville (ex. « Yaoundé ») déduite de la zone saisie (« Yaoundé: Bastos »).
   String get _zoneCity {
     final z = _zoneCtrl.text.trim();
     if (z.isEmpty) return '';
@@ -160,7 +161,7 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
   /// Agences correspondant à la zone/quartier saisi (ville OU adresse).
   ///
   /// La zone peut être un quartier seul (« etoudi »), une ville+quartier
-  /// (« Douala: Akwa ») ou un nom libre (« carrefour du palais ») : on
+  /// (« Yaoundé: Bastos ») ou un nom libre (« carrefour du palais ») : on
   /// découpe la saisie en mots-clés (sur « : », « , », « - », « / ») et une
   /// agence correspond si son `ville` ou sa `location` contient au moins un
   /// de ces mots-clés.
@@ -216,6 +217,23 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
   String get _effectiveAgencyId => _selected?.id ?? '';
 
   String get _effectiveSocieteId => _selected?.societeId ?? '';
+
+  // --- Choix de la zone sur la carte ---
+
+  /// Ouvre [MapPickerScreen] et remplit le champ zone avec l'adresse
+  /// choisie par le client (les suggestions d'agences suivent, comme une
+  /// saisie manuelle).
+  Future<void> _pickOnMap() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const MapPickerScreen()),
+    );
+    if (result == null || !mounted) return;
+    final address = result['address'] as String? ?? '';
+    if (address.isEmpty) return;
+    _zoneCtrl.text = address;
+    _onZoneChanged(address);
+  }
 
   // --- Soumission ---
 
@@ -405,11 +423,21 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
             _label('Neighborhood / zone'),
             _field(
               _zoneCtrl,
-              hint: 'Ex. Douala: Akwa',
+              hint: 'Ex. Yaoundé: Bastos',
               icon: Icons.map_outlined,
               onChanged: _onZoneChanged,
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Enter your zone' : null,
+              trailing: IconButton(
+                key: const Key('zone_pick_map'),
+                onPressed: _pickOnMap,
+                tooltip: 'Pick your location on the map',
+                icon: const Icon(
+                  Icons.my_location_rounded,
+                  color: accentGold,
+                  size: 18,
+                ),
+              ),
             ),
 
             // Suggestions d'agences selon la zone.
@@ -693,7 +721,8 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
     );
   }
 
-  /// Champ texte générique (fond sombre vitré, icône, option mot de passe).
+  /// Champ texte générique (fond sombre vitré, icône, option mot de passe,
+  /// action de fin de ligne comme « choisir sur la carte »).
   Widget _field(
     TextEditingController ctrl, {
     required String hint,
@@ -703,6 +732,7 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
     bool isObscure = true,
     VoidCallback? obscureCtrl,
     ValueChanged<String>? onChanged,
+    Widget? trailing,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -744,6 +774,10 @@ class _PreRegisterScreenState extends State<PreRegisterScreen> {
               ),
             ),
             const SizedBox(width: 4),
+          ],
+          if (trailing != null) ...[
+            trailing,
+            const SizedBox(width: 2),
           ],
         ],
       ),

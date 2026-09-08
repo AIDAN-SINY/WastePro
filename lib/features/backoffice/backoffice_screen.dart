@@ -8,9 +8,14 @@ import 'data/backoffice_store.dart';
 import 'data/firestore_backoffice_store.dart';
 import 'models.dart';
 import 'pages/applications_page.dart';
+import 'pages/assignments_page.dart';
 import 'pages/dashboard_page.dart';
+import 'pages/issues_page.dart';
+import 'pages/tracking_page.dart';
+import 'pages/zones_page.dart';
 import 'pages/list_page.dart';
 import 'pages/settings_page.dart';
+import '../../features/home/pickup_schedule_screen.dart';
 import 'theme.dart';
 import 'widgets/sheets.dart';
 import 'widgets/toast.dart';
@@ -72,7 +77,13 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     'collecteurs': 'Collectors',
     'contrats': 'Contracts',
     'collectes': 'Collections',
+    'schedule': 'Weekly Schedule',
+    'issues': 'Issues',
+    'zones': 'Zones',
+    'assignments': 'Assignments',
+    'vehicles': 'Vehicles',
     'facturation': 'Billing',
+    'tracking': 'Live Tracking',
     'parametres': 'Settings',
   };
 
@@ -84,7 +95,13 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     ('collecteurs', Icons.person_search_rounded, 'Collectors'),
     ('contrats', Icons.description_outlined, 'Contracts'),
     ('collectes', Icons.event_note_rounded, 'Collections'),
+    ('schedule', Icons.calendar_month_outlined, 'Schedule'),
+    ('issues', Icons.report_outlined, 'Issues'),
+    ('zones', Icons.map_outlined, 'Zones'),
+    ('assignments', Icons.assignment_ind_outlined, 'Assignments'),
+    ('vehicles', Icons.local_shipping_outlined, 'Vehicles'),
     ('facturation', Icons.payments_outlined, 'Billing'),
+    ('tracking', Icons.map_outlined, 'Tracking'),
     ('parametres', Icons.settings_outlined, 'Settings'),
   ];
 
@@ -141,8 +158,20 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
         return '${_store.collecteurs.length} agents';
       case 'contrats':
         return '${_store.contrats.length} total';
+      case 'schedule':
+        return 'Weekly pickup calendar';
+      case 'issues':
+        return '${_store.issues.length} reported';
+      case 'zones':
+        return '${_store.zones.length} zones';
+      case 'assignments':
+        return '${_store.assignments.length} active';
+      case 'vehicles':
+        return '${_store.vehicles.length} registered';
       case 'facturation':
         return '${_store.factures.length} invoices';
+      case 'tracking':
+        return 'Real-time positions';
       case 'parametres':
         return 'Company settings';
       default:
@@ -155,6 +184,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     'collecteurs' => BoEntity.collecteur,
     'contrats' => BoEntity.contrat,
     'collectes' => BoEntity.collecte,
+    'vehicles' => BoEntity.vehicle,
     'facturation' => BoEntity.facture,
     _ => null,
   };
@@ -164,6 +194,7 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
     BoEntity.collecteur => 'New collector',
     BoEntity.contrat => 'New contract',
     BoEntity.collecte => 'New collection',
+    BoEntity.vehicle => 'New vehicle',
     BoEntity.facture => 'New invoice',
     _ => 'New',
   };
@@ -674,6 +705,21 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
           search: _search,
           desktop: desktop,
         );
+      case 'schedule':
+        return PickupScheduleScreen(store: _store);
+      case 'issues':
+        return BoIssuesPage(store: _store, desktop: desktop);
+      case 'zones':
+        return BoZonesPage(store: _store, desktop: desktop);
+      case 'assignments':
+        return BoAssignmentsPage(store: _store, desktop: desktop);
+      case 'vehicles':
+        return BoListPage(
+          store: _store,
+          type: BoEntity.vehicle,
+          search: _search,
+          desktop: desktop,
+        );
       case 'facturation':
         return BoListPage(
           store: _store,
@@ -681,6 +727,8 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
           search: _search,
           desktop: desktop,
         );
+      case 'tracking':
+        return const BoTrackingPage();
       case 'parametres':
         return BoSettingsPage(store: _store, desktop: desktop);
       default:
@@ -1079,9 +1127,39 @@ class _BackofficeScreenState extends State<BackofficeScreen> {
                     'Collections',
                   ),
                   _menuItem(
+                    'schedule',
+                    Icons.calendar_month_outlined,
+                    'Schedule',
+                  ),
+                  _menuItem(
+                    'issues',
+                    Icons.report_outlined,
+                    'Issues',
+                  ),
+                  _menuItem(
+                    'zones',
+                    Icons.map_outlined,
+                    'Zones',
+                  ),
+                  _menuItem(
+                    'assignments',
+                    Icons.assignment_ind_outlined,
+                    'Assignments',
+                  ),
+                  _menuItem(
+                    'vehicles',
+                    Icons.local_shipping_outlined,
+                    'Vehicles',
+                  ),
+                  _menuItem(
                     'facturation',
                     Icons.payments_outlined,
                     'Billing',
+                  ),
+                  _menuItem(
+                    'tracking',
+                    Icons.map_outlined,
+                    'Live Tracking',
                   ),
                   _menuItem('parametres', Icons.settings_outlined, 'Settings'),
                   const Spacer(),

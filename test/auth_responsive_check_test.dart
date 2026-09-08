@@ -4,8 +4,8 @@ import 'package:waste_pro/features/auth/screens/welcome_screen.dart';
 import 'package:waste_pro/features/auth/screens/login_screen.dart';
 
 void main() {
-  // Rend un écran à une taille donnée et vérifie qu'il n'y a ni exception
-  // (débordement) ni erreur pendant le layout.
+  // Renders a screen at a given size and checks that there are no exceptions
+  // (overflow) or errors during layout.
   Future<void> pumpAt(
     WidgetTester tester,
     Widget screen,
@@ -18,14 +18,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: screen),
     );
-    // pump fixe (pas de pumpAndSettle : le logo du login a une animation
-    // infinie qui empêcherait la stabilisation).
+    // Fixed pump (not pumpAndSettle: the login logo has an infinite animation
+    // that would prevent settling).
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull,
-        reason: 'exception pendant le rendu à $size');
+        reason: 'exception during render at $size');
   }
 
-  testWidgets('welcome: desktop et mobile sans débordement', (tester) async {
+  testWidgets('welcome: desktop and mobile without overflow', (tester) async {
     // Desktop (web / Windows)
     await pumpAt(tester, const WelcomeScreen(), const Size(1440, 900));
     expect(find.text('Log In'), findsOneWidget);
@@ -38,7 +38,7 @@ void main() {
     expect(find.text('Log In'), findsOneWidget);
   });
 
-  testWidgets('login: desktop et mobile sans débordement', (tester) async {
+  testWidgets('login: desktop and mobile without overflow', (tester) async {
     // Desktop (web / Windows) — brand panel + login card
     await pumpAt(tester, const LoginScreen(), const Size(1440, 900));
     expect(find.text('Log In'), findsOneWidget);

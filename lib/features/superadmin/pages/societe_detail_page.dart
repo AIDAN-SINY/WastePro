@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/app_table.dart';
 import '../widgets/cells.dart';
 import '../widgets/kpi_card.dart';
+import '../widgets/monthly_clients_bar.dart';
 import '../widgets/status_badge.dart';
 
 /// Fiche détaillée d'une société (compagnie) — page pleine grandeur de la
@@ -90,6 +91,10 @@ class SocieteDetailPage extends StatelessWidget {
 
             // --- Charts ---
             _buildCharts(wide, clients),
+            const SizedBox(height: 16),
+
+            // --- Nouveaux clients abonnés par mois (cette société) ---
+            _buildMonthlySubscriptions(clients),
             const SizedBox(height: 16),
 
             // --- Info société ---
@@ -543,6 +548,20 @@ class SocieteDetailPage extends StatelessWidget {
   }
 
   // --- Info card ---
+
+  /// Carte « nouveaux clients abonnés par mois » — progression annuelle de
+  /// la société (scope compagnie du super admin).
+  Widget _buildMonthlySubscriptions(List<ClientModel> clients) {
+    final year = DateTime.now().year;
+    return _chartCard(
+      title: 'New clients subscribed',
+      tag: '${clients.length} client${clients.length > 1 ? 's' : ''} · $year',
+      child: MonthlyClientsBar(
+        values: monthlySubscriptions(clients, year),
+        height: 170,
+      ),
+    );
+  }
 
   Widget _buildInfoCard(SocieteModel societe) {
     return Container(

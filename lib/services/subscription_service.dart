@@ -58,11 +58,19 @@ class SubscriptionService {
 
   /// 1. FLOW: Client -> Frequency -> Contract
   /// This implements the "Contract" table from your diagram.
+  ///
+  /// [resolvedDays] — concrete collection day(s) resolved from the zone's
+  ///   calendar by [FrequencyResolver].
+  /// [pickupTime] — standard time window inherited from the zone.
+  /// [zoneName] — name of the zone this contract is linked to.
   Future<void> createContractFlow(
     String clientPhone,
     String frequencyId,
-    double amount,
-  ) async {
+    double amount, {
+    List<String> resolvedDays = const [],
+    String pickupTime = '',
+    String zoneName = '',
+  }) async {
     // Generate Unique ID for the Contract
     String contractId = "CTR-${DateTime.now().millisecondsSinceEpoch}";
 
@@ -71,6 +79,10 @@ class SubscriptionService {
       'contract_id': contractId,
       'client_id': clientPhone, // FK to Clients
       'frequency_id': frequencyId, // FK to Frequency (daily, weekly, monthly)
+      'frequency_tier': frequencyId,
+      'collection_days': resolvedDays,
+      'pickup_time': pickupTime,
+      'zone_name': zoneName,
       'status': 'Active',
       'expiry_date': DateTime.now().add(const Duration(days: 30)),
       'amount_paid': amount,
@@ -82,6 +94,9 @@ class SubscriptionService {
       'active_contract_id':
           contractId, // Maintains the 1:1 relation from diagram
       'subscription_plan': frequencyId,
+      'collection_days': resolvedDays,
+      'pickup_time': pickupTime,
+      'zone_name': zoneName,
       'isSubscribed': true,
       'needsPickup': true,
       'last_subscription_at': FieldValue.serverTimestamp(),

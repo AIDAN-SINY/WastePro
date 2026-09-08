@@ -13,6 +13,7 @@ import 'package:waste_pro/models/user_model.dart';
 import 'package:waste_pro/providers/user_provider.dart';
 
 import 'fakes/fake_auth_backend.dart';
+import 'helpers/setup_firebase.dart';
 
 class FakeUserProvider extends UserProvider {
   FakeUserProvider({this.fakeUser, this.fakeIsLoading = false})
@@ -29,6 +30,8 @@ class FakeUserProvider extends UserProvider {
 }
 
 void main() {
+  setUpAll(() => setupFirebaseMocks());
+
   testWidgets('app shows welcome screen', (WidgetTester tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(

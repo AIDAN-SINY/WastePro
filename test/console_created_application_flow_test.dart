@@ -6,7 +6,7 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Laisse les listeners de snapshots rattraper les écritures.
+/// Lets snapshot listeners catch up with writes.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -17,24 +17,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'console → candidature → backoffice : une agence créée par la console '
-    'entreprise, son chef d agence, la candidature du client, et la visibilité '
-    'dans le backoffice scopé',
+    'console → application → backoffice: an agency created by the company '
+    'console, its agency manager, the client application, and visibility '
+    'in the scoped backoffice',
     () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend();
 
-      // --- L entreprise existe ---
+      // --- The company exists ---
       await db.collection('societes').doc('so9').set({
         'id': 'so9',
         'raisonSociale': 'WastePro Akwa Ltd',
-        'adresse': 'Akwa, Douala',
+        'adresse': 'Bastos, Yaoundé',
         'telephone': '+237 233 42 10 55',
         'email': 'contact@wastepro-akwa.cm',
         'status': 'Active',
       });
 
-      // --- 1. Le General Administrator crée une agence (console entreprise) ---
+      // --- 1. The General Administrator creates an agency (company console) ---
       final company = FirestoreCompanyStore(
         db: db,
         backend: backend,
@@ -45,20 +45,20 @@ void main() {
       await _settle();
 
       final agence = await company.addAgence(
-        ville: 'Douala — Akwa',
+        ville: 'Yaoundé — Mokolo',
         location: 'Avenue Kennedy',
         responsable: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
         status: 'Active',
       );
-      // L'agence est écrite AVEC son id dans le doc (lu par le formulaire
-      // client via AgenceModel.fromMap(map['id'])).
+      // The agency is written WITH its id in the doc (read by the client
+      // form via AgenceModel.fromMap(map['id'])).
       final agenceDoc =
           await db.collection('agences').doc(agence.id).get();
       expect(agenceDoc.exists, isTrue);
       expect(agenceDoc.data()?['id'], agence.id);
 
-      // --- 2. Le GA crée le chef d'agence affecté à cette agence ---
+      // --- 2. The GA creates the agency manager assigned to this agency ---
       await company.addUtilisateur(
         nom: 'Jean Dooh',
         telephone: '+237 677 12 34 56',
@@ -70,14 +70,14 @@ void main() {
       );
       await _settle();
 
-      // Le compte de connexion du chef porte le MÊME agenceId que l'agence.
+      // The manager's login account carries the SAME agenceId as the agency.
       final managerLogin =
           await db.collection('users').doc('+237677123456').get();
       expect(managerLogin.exists, isTrue);
       expect(managerLogin.data()?['role'], 'agency_manager');
       expect(managerLogin.data()?['agenceId'], agence.id);
 
-      // --- 3. Le client remplit la pré-inscription (choix de l'agence) ---
+      // --- 3. The client fills out the pre-registration (agency choice) ---
       final auth = AuthService(db: db, backend: backend);
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
@@ -92,7 +92,7 @@ void main() {
       final regs = await db.collection('registrations').get();
       expect(regs.docs.single.data()['agenceId'], agence.id);
 
-      // --- 4. Le chef d'agence se connecte → backoffice scopé ---
+      // --- 4. The agency manager logs in → scoped backoffice ---
       final manager = await AuthService(db: db, backend: backend).login(
         '+237 677 12 34 56',
         'manager123',
@@ -110,7 +110,7 @@ void main() {
       await store.initialLoad;
       await _settle();
 
-      // La candidature EST visible dans le backoffice du chef d'agence.
+      // The application IS visible in the agency manager's backoffice.
       expect(store.registrations.length, 1);
       expect(store.pendingRegistrations.single.fullName, 'Carine Mbappe');
       expect(store.pendingRegistrations.single.agenceId, agence.id);
@@ -121,17 +121,17 @@ void main() {
   );
 
   test(
-    'backoffice scopé : une candidature écrite avec le NOM de l agence (mais '
-    'un id différent, ex. agence homonyme) reste visible via le fallback',
+    'scoped backoffice: an application written with the AGENCY NAME (but '
+    'a different id, e.g. a namesake agency) remains visible via fallback',
     () async {
       final db = FakeFirebaseFirestore();
 
-      // Deux agences HOMONYMES (ex. l agence seed « Douala — Bonanjo » et
-      // une vraie agence créée plus tard avec le même nom).
-      const ville = 'Douala — Bonanjo';
+      // Two HOMONYMOUS agencies (e.g. the seeded agency "Yaoundé — Bastos" and
+      // a real agency created later with the same name).
+      const ville = 'Yaoundé — Bastos';
       await db.collection('agences').doc('agSeed').set({
         'id': 'agSeed',
-        'societe': 'WastePro Douala Ltd',
+        'societe': 'WastePro Yaoundé SARL',
         'societeId': 'so1',
         'ville': ville,
         'responsable': 'Jean Dooh',
@@ -147,7 +147,7 @@ void main() {
         'telephone': '+237 690 45 12 78',
         'status': 'Active',
       });
-      // Le chef est affecté à la VRAIE agence (agReal).
+      // The manager is assigned to the REAL agency (agReal).
       await db.collection('users').doc('+237690451278').set({
         'phoneNumber': '+237690451278',
         'fullName': 'Marie Ekwalla',
@@ -158,8 +158,8 @@ void main() {
         'consoleCreated': true,
       });
 
-      // Le client a sélectionné l'agence homonyme agSeed (même nom) : sa
-      // candidature porte l'id de agSeed mais le nom « Douala — Bonanjo ».
+      // The client selected the namesake agency agSeed (same name): their
+      // application carries the id of agSeed but the name "Yaoundé — Bastos".
       await AuthService(db: db, backend: FakeAuthBackend())
           .submitPreRegistration(
         fullName: 'Carine Mbappe',
@@ -181,15 +181,15 @@ void main() {
       await store.initialLoad;
       await _settle();
 
-      // L'id ne correspond pas, mais le NOM oui : le chef d'agence VOIT la
-      // candidature et peut l'approuver (l'approbation crée le client sous
-      // l'agence choisie par le client).
+      // The id doesn't match, but the NAME does: the agency manager SEES the
+      // application and can approve it (approval creates the client under
+      // the agency chosen by the client).
       expect(store.pendingRegistrations.length, 1);
       expect(store.pendingRegistrations.single.fullName, 'Carine Mbappe');
       expect(store.pendingRegistrations.single.agenceId, 'agSeed');
 
-      // Approbation : le client est créé sous l'agence CHOISIE par le
-      // client (agSeed), jamais sous celle du chef qui approuve (agReal).
+      // Approval: the client is created under the AGENCY CHOSEN by the
+      // client (agSeed), never under the manager's own agency (agReal).
       await store.approveRegistration(
         store.pendingRegistrations.single,
         collecteurId: 'coX',

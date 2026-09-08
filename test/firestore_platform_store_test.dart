@@ -69,7 +69,7 @@ void main() {
     await store.initialLoad;
     await _settle();
 
-    // Les clients/collecteurs alimentent la fiche détail d'une agence.
+    // Clients/collectors feed the agency detail card.
     expect(store.clients.single.agenceId, 'ag1');
     expect(store.collecteurs.single.rating, 4.8);
     expect(store.clientsForAgence('ag1').single.name, 'Jean Dooh');
@@ -119,7 +119,7 @@ void main() {
     // Create
     await store.addSociete(
       raisonSociale: 'Test SARL',
-      adresse: 'Douala',
+      adresse: 'Yaoundé',
       telephone: '+237 6 00 00 00 00',
       email: 'test@sarl.cm',
       status: 'Active',
@@ -144,11 +144,11 @@ void main() {
     store.dispose();
   });
 
-  test('permission-denied après déconnexion ne déclenche pas de bannière',
+  test('permission-denied after logout does not trigger a banner',
       () async {
     final db = FakeFirebaseFirestore();
-    // Simule une session Firebase Auth révoquée (logout) : les listeners
-    // encore actifs sont rejetés par les règles → pas d'erreur affichée.
+    // Simulates a revoked Firebase Auth session (logout): still-active listeners
+    // are rejected by rules → no error displayed.
     final store = FirestorePlatformStore(
       db: db,
       seedIfEmpty: false,
@@ -162,7 +162,7 @@ void main() {
     );
 
     expect(store.error, isNull,
-        reason: 'Après logout, permission-denied est attendu — pas une erreur.');
+        reason: 'After logout, permission-denied is expected — not an error.');
     expect(store.isLoading, isFalse);
 
     store.dispose();
@@ -197,7 +197,7 @@ void main() {
     await store.initialLoad;
     await _settle();
 
-    // so1 'WastePro Douala Ltd' owns ag1 + ag2 (seed data).
+    // so1 'WastePro Yaoundé SARL' owns ag1 + ag2 (seed data).
     final so1 = store.societes.firstWhere((s) => s.id == 'so1');
     expect(
       store.agences.where((a) => a.societe == so1.raisonSociale).length,
@@ -205,19 +205,19 @@ void main() {
     );
 
     await store.updateSociete(
-      so1.copyWith(raisonSociale: 'WastePro Douala SAS'),
+      so1.copyWith(raisonSociale: 'WastePro Yaoundé SAS'),
     );
 
     // In-memory lists are in sync…
     expect(
       store.agences
           .where((a) => a.id == 'ag1' || a.id == 'ag2')
-          .every((a) => a.societe == 'WastePro Douala SAS'),
+          .every((a) => a.societe == 'WastePro Yaoundé SAS'),
       isTrue,
     );
     // …and the rename really landed in Firestore.
     final ag1 = await db.collection('agences').doc('ag1').get();
-    expect(ag1.data()?['societe'], 'WastePro Douala SAS');
+    expect(ag1.data()?['societe'], 'WastePro Yaoundé SAS');
 
     store.dispose();
   });
@@ -233,17 +233,17 @@ void main() {
     await _settle();
 
     await store.addAgence(
-      societe: 'WastePro Douala Ltd',
-      ville: 'Douala — Akwa',
+      societe: 'WastePro Yaoundé SARL',
+      ville: 'Yaoundé — Mokolo',
       responsable: 'Paul Biya Jr',
       telephone: '+237 688 00 00 00',
       status: 'Active',
     );
-    expect(store.agences.single.ville, 'Douala — Akwa');
+    expect(store.agences.single.ville, 'Yaoundé — Mokolo');
     final agenceId = store.agences.first.id;
     expect(
       (await db.collection('agences').doc(agenceId).get()).data()?['ville'],
-      'Douala — Akwa',
+      'Yaoundé — Mokolo',
     );
 
     await store.addUtilisateur(
@@ -284,7 +284,7 @@ void main() {
       nom: 'No Password',
       telephone: '+237 611 11 11 11',
       role: 'Agency Manager',
-      agence: 'Douala — Bonanjo',
+      agence: 'Yaoundé — Bastos',
       status: 'Active',
       password: '',
     );
@@ -416,7 +416,7 @@ void main() {
       'nom': 'Legacy',
       'telephone': '+237 677 11 11 11',
       'role': 'Agency Manager',
-      'agence': 'Douala',
+      'agence': 'Yaoundé',
       'status': 'Active',
       'password': 'oldpass',
     });

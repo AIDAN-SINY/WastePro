@@ -143,7 +143,7 @@ class AgencesPageState extends State<AgencesPage> {
         SaTextField(
           label: 'City',
           initial: _form['ville']?.toString(),
-          hint: 'Ex. Douala — Bonanjo',
+          hint: 'Ex. Yaoundé — Bastos',
           onChanged: (v) => _form['ville'] = v,
         ),
         const SizedBox(height: 16),

@@ -7,7 +7,10 @@ import 'package:waste_pro/features/backoffice/widgets/chips.dart';
 import 'package:waste_pro/features/backoffice/widgets/item_card.dart';
 import 'package:waste_pro/features/backoffice/widgets/toast.dart';
 
+import 'helpers/setup_firebase.dart';
+
 void main() {
+  setUpAll(() => setupFirebaseMocks());
   setUp(BoToastService.resetForTesting);
 
   Future<void> pumpBackoffice(
@@ -50,8 +53,8 @@ void main() {
 
     expect(find.text('Jean Dooh'), findsOneWidget);
     expect(find.text('Marie Ekwalla'), findsOneWidget);
-    // La carte affiche aussi le collecteur assigné au client.
-    expect(find.text('Bonanjo · Standard · Paul Mbarga'), findsOneWidget);
+    // The card also shows the collector assigned to the client.
+    expect(find.text('Bastos · Standard · Paul Mbarga'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -67,8 +70,8 @@ void main() {
     expect(find.text('New client'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('bo_f_name')), 'Jean Test');
-    // Le mot de passe est requis à la création (il permet au client de se
-    // connecter à son application).
+    // The password is required at creation (it allows the client to log
+    // into their application).
     await tester.enterText(find.byKey(const Key('bo_f_password')), 'secret123');
     await tester.tap(find.byKey(const Key('bo_sheet_save')));
     await tester.pumpAndSettle();
@@ -197,8 +200,8 @@ void main() {
   testWidgets('desktop : sidebar web-first + navigation sans drawer', (
     tester,
   ) async {
-    // Large écran → layout desktop (web-first) : sidebar fixe à gauche,
-    // pas de tab bar mobile ni de menu hamburger.
+    // Large screen → desktop layout (web-first): fixed sidebar on the left,
+    // no mobile tab bar or hamburger menu.
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -210,20 +213,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Sidebar desktop (brand + entrées) visible ; pas de tab bar mobile.
+    // Desktop sidebar (brand + entries) visible; no mobile tab bar.
     expect(find.text('AGENCY BACKOFFICE'), findsOneWidget);
     expect(find.byKey(const Key('bo_tab_dashboard')), findsNothing);
     expect(find.byKey(const Key('bo_menu')), findsNothing);
 
-    // Navigation via la sidebar : cliquer Clients affiche la liste.
+    // Navigation via sidebar: clicking Clients shows the list.
     await tester.tap(find.text('Clients').first);
     await tester.pumpAndSettle();
     expect(find.text('Jean Dooh'), findsOneWidget);
-    expect(find.text('Bonanjo · Standard · Paul Mbarga'), findsOneWidget);
+    expect(find.text('Bastos · Standard · Paul Mbarga'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Bouton d'action web-first visible (remplace le FAB mobile) et toggle
-    // de recherche desktop présent (page listable).
+    // Web-first action button visible (replaces the mobile FAB) and desktop
+    // search toggle present (listable page).
     expect(find.text('New client'), findsOneWidget);
     expect(find.byKey(const Key('bo_fab')), findsNothing);
     expect(find.byKey(const Key('bo_bo_search_toggle')), findsOneWidget);
@@ -243,7 +246,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // KPIs du dashboard présents (page d'accueil par défaut).
+    // Dashboard KPIs present (default home page).
     expect(find.text('Active clients'), findsOneWidget);
     expect(find.text("Today's collections"), findsOneWidget);
     expect(find.text('Revenue (thousands)'), findsOneWidget);
@@ -251,7 +254,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('desktop : le review d\'application est un dialogue centré', (
+  testWidgets('desktop: application review is a centered dialog', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -265,31 +268,31 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Aller sur la page Applications via la sidebar.
+    // Navigate to the Applications page via the sidebar.
     await tester.tap(find.text('Applications').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Review').first);
     await tester.pumpAndSettle();
 
-    // Web-first : dialogue centré (Dialog), pas de bottom sheet.
+    // Web-first: centered dialog (Dialog), not a bottom sheet.
     expect(find.text('Review application'), findsOneWidget);
     expect(find.byType(Dialog), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // Ferme le dialogue en tapant sur la barrière (hors de la boîte).
+    // Close the dialog by tapping on the barrier (outside the box).
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsNothing);
   });
 
-  testWidgets('desktop : la sidebar affiche le nom de l\'agence', (
+  testWidgets('desktop: sidebar shows the agency name', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final store = _NamedBackofficeStore('Douala — Bonanjo');
+    final store = _NamedBackofficeStore('Yaoundé — Bastos');
     await tester.pumpWidget(
       MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -298,15 +301,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Nom de l'agence dans le footer de la sidebar (desktop).
-    expect(find.text('Douala — Bonanjo'), findsOneWidget);
+    // Agency name in the sidebar footer (desktop).
+    expect(find.text('Yaoundé — Bastos'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mobile : le review d\'application reste une bottom sheet', (
+  testWidgets('mobile: application review stays as a bottom sheet', (
     tester,
   ) async {
-    // Petit écran → bottom sheet (pas de dialogue centré).
+    // Small screen → bottom sheet (not a centered dialog).
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -336,8 +339,8 @@ void main() {
   ) async {
     await pumpBackoffice(tester, BackofficeStore());
 
-    // Titre de section + en-tête de la carte (le menu latéral porte un
-    // libellé « Applications », distinct).
+    // Section title + card header (the sidebar menu has a separate
+    // "Applications" label).
     expect(find.text('Pending applications'), findsWidgets);
     expect(find.text('2 to review'), findsOneWidget);
     expect(find.text('Carine Mbappe'), findsOneWidget);
@@ -522,6 +525,47 @@ void main() {
     expect(find.text('Samuel Njoya'), findsOneWidget);
     expect(find.text('Éric Tchoua'), findsOneWidget);
     expect(find.text('Jean Dooh'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('weekly schedule page opens from the menu and lists contracts',
+      (tester) async {
+    await pumpBackoffice(tester, BackofficeStore());
+
+    // Mobile layout → Schedule lives in the side menu.
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_schedule')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Weekly Schedule'), findsOneWidget);
+    // Seed contracts (no collection days) appear in the Unscheduled section.
+    expect(find.text('Unscheduled'), findsOneWidget);
+    expect(find.text('Jean Dooh'), findsOneWidget);
+    expect(find.text('Marie Ekwalla'), findsOneWidget);
+    expect(find.text('Aïcha Bello'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('weekly schedule groups contracts by collection day',
+      (tester) async {
+    final store = BackofficeStore();
+    // Contrat avec jours de collecte définis → apparaît dans sa journée.
+    store.contrats[0] = store.contrats[0].copyWith(
+      collectionDays: ['Tuesday', 'Friday'],
+      pickupTime: '07:00 — 08:00',
+    );
+    await pumpBackoffice(tester, store);
+
+    await tester.tap(find.byKey(const Key('bo_menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bo_menu_schedule')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tuesday'), findsOneWidget);
+    expect(find.text('Friday'), findsOneWidget);
+    // Le contrat est listé dans ses DEUX jours de collecte.
+    expect(find.text('07:00 — 08:00'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 }

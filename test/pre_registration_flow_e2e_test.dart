@@ -5,7 +5,7 @@ import 'package:waste_pro/services/auth_service.dart';
 
 import 'fakes/fake_auth_backend.dart';
 
-/// Laisse les listeners de snapshots rattraper les écritures.
+/// Lets snapshot listeners catch up with writes.
 Future<void> _settle() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -16,24 +16,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
-    'parcours complet : client candidat → chef d agence voit → approbation '
-    '→ client se connecte',
+    'complete flow: client applicant → agency manager sees → approval '
+    '→ client logs in',
     () async {
       final db = FakeFirebaseFirestore();
       final backend = FakeAuthBackend()
         ..seedAccount('237677123456@wastepro.cm', 'manager123');
 
-      // --- Contexte : une agence existe (ag1, société so1) ---
+      // --- Context: an agency exists (ag1, company so1) ---
       await db.collection('agences').doc('ag1').set({
         'id': 'ag1',
-        'societe': 'WastePro Douala Ltd',
+        'societe': 'WastePro Yaoundé SARL',
         'societeId': 'so1',
-        'ville': 'Douala — Bonanjo',
+        'ville': 'Yaoundé — Bastos',
         'responsable': 'Jean Dooh',
         'telephone': '+237 677 12 34 56',
         'status': 'Active',
       });
-      // Un collecteur actif dans cette agence (pour l'assignation).
+      // An active collector in this agency (for assignment).
       await db.collection('collecteurs').doc('co1').set({
         'id': 'co1',
         'name': 'Paul Mbarga',
@@ -44,8 +44,8 @@ void main() {
         'agenceId': 'ag1',
         'societeId': 'so1',
       });
-      // Le chef d'agence (compte de connexion créé par la console super
-      // admin : rôle agency_manager, scopé à ag1, uid Auth).
+      // The agency manager (login account created by the super admin
+      // console: role agency_manager, scoped to ag1, Auth uid).
       await db.collection('users').doc('+237677123456').set({
         'phoneNumber': '+237677123456',
         'fullName': 'Jean Dooh',
@@ -56,31 +56,31 @@ void main() {
         'consoleCreated': true,
       });
 
-      // --- 1. Le client remplit la pré-inscription (app) ---
+      // --- 1. The client fills out the pre-registration (app) ---
       final auth = AuthService(db: db, backend: backend);
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
         zone: 'Bonanjo',
         agenceId: 'ag1',
-        agenceName: 'Douala — Bonanjo',
+        agenceName: 'Yaoundé — Bastos',
         societeId: 'so1',
         password: 'secret123',
       );
 
-      // La candidature est bien enregistrée (status pending, liée à ag1).
+      // The application is correctly recorded (status pending, linked to ag1).
       final regs = await db.collection('registrations').get();
       expect(regs.docs.single.data()['status'], 'pending');
       expect(regs.docs.single.data()['agenceId'], 'ag1');
-      // Le client a son profil pending_client (créé dès l'inscription) mais
-      // pas encore de client backoffice.
+      // The client has their pending_client profile (created at registration) but
+      // no backoffice client yet.
       expect((await db.collection('clients').get()).docs, isEmpty);
       final pendingUser =
           await db.collection('users').doc('+237698224466').get();
       expect(pendingUser.exists, isTrue);
       expect(pendingUser.data()?['role'], 'pending_client');
 
-      // --- 2. Le chef d'agence se connecte → backoffice scopé à ag1 ---
+      // --- 2. The agency manager logs in → backoffice scoped to ag1 ---
       final manager = await AuthService(db: db, backend: backend).login(
         '+237 677 12 34 56',
         'manager123',
@@ -99,11 +99,11 @@ void main() {
       await store.initialLoad;
       await _settle();
 
-      // Le chef d'agence VOIT la candidature de Carine (scope ag1).
+      // The agency manager SEES Carine's application (scope ag1).
       expect(store.registrations.length, 1);
       expect(store.pendingRegistrations.single.fullName, 'Carine Mbappe');
 
-      // Un autre chef d'agence (ag2) ne la verrait PAS.
+      // Another agency manager (ag2) would NOT see it.
       final otherStore = FirestoreBackofficeStore(
         db: db,
         backend: backend,
@@ -115,14 +115,14 @@ void main() {
       expect(otherStore.registrations, isEmpty);
       otherStore.dispose();
 
-      // --- 3. Le chef d'agence approuve et assigne le collecteur ---
+      // --- 3. The agency manager approves and assigns the collector ---
       await store.approveRegistration(
         store.pendingRegistrations.single,
         collecteurId: 'co1',
       );
       await _settle();
 
-      // Client créé + compte de connexion avec le mot de passe du client.
+      // Client created + login account with the client's password.
       final client = store.clients.singleWhere((c) => c.name == 'Carine Mbappe');
       expect(client.agenceId, 'ag1');
       expect(client.collecteurId, 'co1');
@@ -135,7 +135,7 @@ void main() {
       expect(login.data()?['password'], isNull);
       expect(login.data()?['collecteurId'], 'co1');
 
-      // --- 4. Le client peut maintenant se connecter ---
+      // --- 4. The client can now log in ---
       final clientUser = await AuthService(db: db, backend: backend)
           .login('698 22 44 66', 'secret123');
       expect(clientUser, isNotNull);
@@ -148,46 +148,46 @@ void main() {
   );
 
   test(
-    'nom d agence partiel tapé par le client → résolu vers la bonne agence',
+    'partial agency name typed by client → resolved to the correct agency',
     () async {
       final db = FakeFirebaseFirestore();
       await db.collection('agences').doc('ag1').set({
         'id': 'ag1',
-        'societe': 'WastePro Douala Ltd',
+        'societe': 'WastePro Yaoundé SARL',
         'societeId': 'so1',
-        'ville': 'Douala — Bonanjo',
+        'ville': 'Yaoundé — Bastos',
         'responsable': 'Jean Dooh',
         'telephone': '+237 677 12 34 56',
         'status': 'Active',
       });
 
       final auth = AuthService(db: db, backend: FakeAuthBackend());
-      // Le client tape « bonanjo » (pas le nom complet) sans sélectionner.
+      // The client types "bastos" (not the full name) without selecting.
       await auth.submitPreRegistration(
         fullName: 'Carine Mbappe',
         phone: '698 22 44 66',
-        zone: 'Bonanjo',
+        zone: 'Bastos',
         agenceId: '',
-        agenceName: 'bonanjo',
+        agenceName: 'bastos',
         societeId: '',
         password: 'secret123',
       );
 
       final regs = await db.collection('registrations').get();
-      // La candidature est rattachée à l'agence unique trouvée par le nom
-      // partiel — sinon le chef d'agence ne la verrait jamais.
+      // The application is linked to the unique agency found by the partial
+      // name — otherwise the agency manager would never see it.
       expect(regs.docs.single.data()['agenceId'], 'ag1');
       expect(regs.docs.single.data()['societeId'], 'so1');
-      // Le NOM enregistré est celui RÉEL de l'agence résolue (pas le texte
-      // tapé) — c'est la clé de secours qui rend la candidature visible
-      // dans le backoffice scopé et affichée avec la bonne agence.
-      expect(regs.docs.single.data()['agenceName'], 'Douala — Bonanjo');
+      // The recorded NAME is the ACTUAL name of the resolved agency (not the typed
+      // text) — this is the fallback key that makes the application visible
+      // in the scoped backoffice and displayed with the correct agency.
+      expect(regs.docs.single.data()['agenceName'], 'Yaoundé — Bastos');
     },
   );
 
   test(
-    'deux candidatures du même numéro : la 2e est refusée sans crash '
-    '(pas d index composé requis)',
+    'two applications from the same number: the 2nd is rejected without crash '
+    '(no composite index required)',
     () async {
       final db = FakeFirebaseFirestore();
       final auth = AuthService(db: db, backend: FakeAuthBackend());
@@ -197,18 +197,18 @@ void main() {
         phone: '698 22 44 66',
         zone: 'Bonanjo',
         agenceId: 'ag1',
-        agenceName: 'Douala — Bonanjo',
+        agenceName: 'Yaoundé — Bastos',
         societeId: 'so1',
         password: 'secret123',
       );
-      // Pas de 2e candidature : un seul where sur phone, filtre en mémoire.
+      // No 2nd application: a single where on phone, filtered in memory.
       expect(
         () => auth.submitPreRegistration(
           fullName: 'Carine Mbappe',
           phone: '698 22 44 66',
           zone: 'Bonanjo',
           agenceId: 'ag1',
-          agenceName: 'Douala — Bonanjo',
+          agenceName: 'Yaoundé — Bastos',
           societeId: 'so1',
           password: 'otherpass',
         ),

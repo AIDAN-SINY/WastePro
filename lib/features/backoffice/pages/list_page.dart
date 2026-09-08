@@ -7,6 +7,7 @@ import '../widgets/chips.dart';
 import '../widgets/item_card.dart';
 import '../widgets/sheets.dart';
 import '../widgets/toast.dart';
+import 'vehicle_maintenance_page.dart';
 
 /// Generic list page for the backoffice (clients, collecteurs, contrats,
 /// collectes, factures) with filter chips, search and item CRUD.
@@ -33,6 +34,10 @@ class BoListPage extends StatelessWidget {
         BoEntity.collecte => 'collection',
         BoEntity.facture => 'invoice',
         BoEntity.frequence => 'frequency',
+        BoEntity.issue => 'issue',
+        BoEntity.zone => 'zone',
+        BoEntity.assignment => 'assignment',
+        BoEntity.vehicle => 'vehicle',
       };
 
   String get _emptyText => switch (type) {
@@ -42,6 +47,10 @@ class BoListPage extends StatelessWidget {
         BoEntity.collecte => 'No collections found',
         BoEntity.facture => 'No invoices found',
         BoEntity.frequence => 'No frequencies',
+        BoEntity.issue => 'No issues found',
+        BoEntity.zone => 'No zones found',
+        BoEntity.assignment => 'No assignments found',
+        BoEntity.vehicle => 'No vehicles found',
       };
 
   /// (label shown, status value used for filtering) per the design.
@@ -74,6 +83,15 @@ class BoListPage extends StatelessWidget {
             ('Overdue', 'Overdue'),
           ],
         BoEntity.frequence => [('All', 'All')],
+        BoEntity.issue => [('All', 'All')],
+        BoEntity.zone => [('All', 'All')],
+        BoEntity.assignment => [('All', 'All')],
+        BoEntity.vehicle => [
+            ('All', 'All'),
+            ('Active', 'Active'),
+            ('Maintenance', 'Maintenance'),
+            ('Retired', 'Retired'),
+          ],
       };
 
   @override
@@ -99,6 +117,11 @@ class BoListPage extends StatelessWidget {
                 store.selectFilter(type, value);
               },
             ),
+            // Zone filter dropdown (shown only for clients & collectors).
+            if (type == BoEntity.client || type == BoEntity.collecteur) ...[
+              const SizedBox(height: 8),
+              _ZoneDropdown(store: store),
+            ],
             const SizedBox(height: 12),
             Expanded(
               child: items.isEmpty
@@ -148,13 +171,21 @@ class BoListPage extends StatelessWidget {
 
     switch (type) {
       case BoEntity.client:
+        final zoneSel = store.zoneFilter;
         return store.clients
-            .where((c) => _statusMatches(sel, c.status) && (match(c.name) || match(c.zone)))
+            .where((c) =>
+                _statusMatches(sel, c.status) &&
+                (zoneSel == 'All' || c.zone == zoneSel) &&
+                (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.collecteur:
+        final zoneSel = store.zoneFilter;
         return store.collecteurs
-            .where((c) => _statusMatches(sel, c.status) && (match(c.name) || match(c.zone)))
+            .where((c) =>
+                _statusMatches(sel, c.status) &&
+                (zoneSel == 'All' || c.zone == zoneSel) &&
+                (match(c.name) || match(c.zone)))
             .toList()
             .cast<Object>();
       case BoEntity.contrat:
@@ -175,6 +206,17 @@ class BoListPage extends StatelessWidget {
             .cast<Object>();
       case BoEntity.frequence:
         return store.frequences.toList().cast<Object>();
+      case BoEntity.issue:
+        return store.issues.toList().cast<Object>();
+      case BoEntity.zone:
+        return store.zones.toList().cast<Object>();
+      case BoEntity.assignment:
+        return store.assignments.toList().cast<Object>();
+      case BoEntity.vehicle:
+        return store.vehicles
+            .where((v) => _statusMatches(sel, v.status) && (match(v.plateNumber) || match(v.type) || match(v.brand)))
+            .toList()
+            .cast<Object>();
     }
   }
 
@@ -236,25 +278,53 @@ class BoListPage extends StatelessWidget {
           status: 'Active',
           onKebab: () => _onKebab(context, item),
         );
+      case BoEntity.issue:
+        return const SizedBox.shrink(); // Issues have their own page
+      case BoEntity.zone:
+        return const SizedBox.shrink(); // Zones have their own page
+      case BoEntity.assignment:
+        return const SizedBox.shrink(); // Assignments have their own page
+      case BoEntity.vehicle:
+        final v = item as VehicleModel;
+        return BoItemCard(
+          avatarText: v.plateNumber.length > 4 ? v.plateNumber.substring(0, 4) : v.plateNumber,
+          title: '${v.type} — ${v.plateNumber}',
+          subtitle: '${v.brand} ${v.model} · ${v.year > 0 ? v.year : 'N/A'}${v.assignedCollecteurName.isNotEmpty ? ' · ${v.assignedCollecteurName}' : ''}',
+          status: v.status,
+          onKebab: () => _onKebab(context, v),
+        );
     }
   }
 
   void _onKebab(BuildContext context, Object item) {
     // Les clients ont une action dédiée : réassigner leur collecteur.
+    // Les véhicules ont une action dédiée : maintenance.
     final isClient = type == BoEntity.client;
+    final isVehicle = type == BoEntity.vehicle;
     showBoActionSheet(
       context,
       onEdit: () =>
           showBoFormSheet(context, store: store, type: type, existing: item),
       onDelete: () => _delete(context, item),
-      extraLabel: isClient ? 'Reassign collector' : null,
+      extraLabel: isClient ? 'Reassign collector' : (isVehicle ? 'Maintenance' : null),
       onExtra: isClient
           ? () => showBoReassignSheet(
                 context,
                 store: store,
                 client: item as ClientModel,
               )
-          : null,
+          : isVehicle
+              ? () => _openMaintenance(context, item as VehicleModel)
+              : null,
+    );
+  }
+
+  void _openMaintenance(BuildContext context, VehicleModel vehicle) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VehicleMaintenancePage(store: store, vehicle: vehicle),
+      ),
     );
   }
 
@@ -272,8 +342,71 @@ class BoListPage extends StatelessWidget {
         store.deleteFacture((item as FactureModel).id);
       case BoEntity.frequence:
         store.deleteFrequence((item as FrequenceModel).id);
+      case BoEntity.issue:
+        break; // Issues are resolved, not deleted
+      case BoEntity.zone:
+        break; // Zones are managed via their own page
+      case BoEntity.assignment:
+        break; // Assignments are managed via their own page
+      case BoEntity.vehicle:
+        store.deleteVehicle((item as VehicleModel).id);
     }
     BoToastService.show('$_entityName deleted');
+  }
+}
+
+class _ZoneDropdown extends StatelessWidget {
+  const _ZoneDropdown({required this.store});
+  final BackofficeStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final zones = store.availableZones;
+    final current = store.zoneFilter;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: BackofficeTheme.surface,
+          border: Border.all(color: BackofficeTheme.border),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.map_outlined, size: 16, color: BackofficeTheme.muted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: current,
+                  isDense: true,
+                  style: BackofficeTheme.inter(12.5),
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: BackofficeTheme.muted,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'All',
+                      child: Text('All zones'),
+                    ),
+                    ...zones.map((z) => DropdownMenuItem(
+                          value: z,
+                          child: Text(z),
+                        )),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) store.selectZoneFilter(v);
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

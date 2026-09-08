@@ -22,7 +22,11 @@ class BoBarChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (values.isEmpty) return const SizedBox.shrink();
     final max = values.reduce((a, b) => a > b ? a : b).clamp(0.0001, double.infinity).toDouble();
-    final barArea = height - 20; // room for labels
+    // Réserve haute pour les étiquettes (y compris si elles passent sur
+    // deux lignes sur écran étroit) : la barre s'adapte à l'espace restant
+    // au lieu de faire déborder la colonne (12 mois = colonnes étroites).
+    final barArea = height - 26;
+    final labelArea = height - barArea - 6;
     final color = barColor ?? BackofficeTheme.green;
 
     return SizedBox(
@@ -53,11 +57,19 @@ class BoBarChart extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      labels[i],
-                      style: BackofficeTheme.inter(
-                        9,
-                        color: BackofficeTheme.muted,
+                    SizedBox(
+                      height: labelArea,
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          labels[i],
+                          maxLines: 1,
+                          style: BackofficeTheme.inter(
+                            9,
+                            color: BackofficeTheme.muted,
+                          ),
+                        ),
                       ),
                     ),
                   ],
