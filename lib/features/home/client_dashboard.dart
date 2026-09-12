@@ -6,6 +6,7 @@ import '../../providers/user_provider.dart';
 import '../subscription/screens/subscription_screen.dart';
 import '../subscription/screens/history_screen.dart';
 import '../profile/screens/profile_screen.dart';
+import 'chatbot_screen.dart';
 
 class ClientDashboard extends StatefulWidget {
   const ClientDashboard({super.key});
@@ -24,67 +25,66 @@ class _ClientDashboardState extends State<ClientDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<UserProvider>(context).user!;
+    final user = Provider.of<UserProvider>(context).user;
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final pages = [
+      _buildHomeBody(user),
+      const HistoryScreen(),
+      const SubscriptionScreen(),
+      const ProfileScreen(),
+    ];
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. HEADER: GREETING & NOTIFICATION
-              _buildHeader(user),
-              const SizedBox(height: 25),
+      body: IndexedStack(index: _currentIndex, children: pages),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
 
-              // 2. HERO CARD: NEXT PICKUP (The Green Card)
-              _buildHeroCard(user),
-              const SizedBox(height: 30),
-
-              // 3. QUICK ACTIONS (Accès rapide)
-              _sectionTitle("Accès rapide"),
-              const SizedBox(height: 15),
-              _buildQuickActions(),
-
-              const SizedBox(height: 30),
-
-              // 4. MONTHLY STATS (Ce mois-ci)
-              _sectionTitle("Ce mois-ci"),
-              const SizedBox(height: 15),
-              _buildMonthlyStats(),
-
-              const SizedBox(height: 30),
-
-              // 5. CHART SECTION (Suivi)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _sectionTitle("Suivi"),
-                  Text(
-                    "Détails",
-                    style: TextStyle(
-                      color: Colors.orange[800],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+  Widget _buildHomeBody(user) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(user),
+            const SizedBox(height: 25),
+            _buildHeroCard(user),
+            const SizedBox(height: 30),
+            _sectionTitle('Accès rapide'),
+            const SizedBox(height: 15),
+            _buildQuickActions(),
+            const SizedBox(height: 30),
+            _sectionTitle('Ce mois-ci'),
+            const SizedBox(height: 15),
+            _buildMonthlyStats(),
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _sectionTitle('Suivi'),
+                Text(
+                  'Détails',
+                  style: TextStyle(
+                    color: Colors.orange[800],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
                   ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              _buildChartSection(),
-
-              const SizedBox(height: 20),
-
-              // 6. COLLECTOR TRACKING CARD
-              _buildCollectorTracking(),
-
-              const SizedBox(height: 100), // Space for bottom nav
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            _buildChartSection(),
+            const SizedBox(height: 20),
+            _buildCollectorTracking(),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -100,7 +100,7 @@ class _ClientDashboardState extends State<ClientDashboard> {
               radius: 24,
               backgroundColor: primaryGreen,
               child: Text(
-                user.fullName[0],
+                user.displayInitial,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -113,19 +113,18 @@ class _ClientDashboardState extends State<ClientDashboard> {
               children: [
                 RichText(
                   text: TextSpan(
-                    text: "Bonjour, ",
+                    text: 'Bonjour, ',
                     style: GoogleFonts.inter(color: Colors.black, fontSize: 18),
                     children: [
                       TextSpan(
-                        text: user.fullName.split(' ')[0],
+                        text: user.firstName,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const TextSpan(text: " 👋"),
                     ],
                   ),
                 ),
                 Text(
-                  user.toMap()['neighborhood'] ?? "Bonanjo, Douala",
+                  user.neighborhood ?? 'Cameroun',
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ],
@@ -134,14 +133,23 @@ class _ClientDashboardState extends State<ClientDashboard> {
         ),
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade300),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChatbotScreen()),
+                );
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: const Icon(Icons.notifications_none, size: 22),
               ),
-              child: const Icon(Icons.notifications_none, size: 22),
             ),
             InkWell(
               onTap: () {
@@ -174,12 +182,14 @@ class _ClientDashboardState extends State<ClientDashboard> {
       decoration: BoxDecoration(
         color: primaryGreen,
         borderRadius: BorderRadius.circular(24),
-        image: const DecorationImage(
-          image: AssetImage(
-            'assets/images/card_pattern.png',
-          ), // Subtle texture if you have one
-          opacity: 0.1,
-          fit: BoxFit.cover,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryGreen,
+            primaryGreen.withValues(alpha: 0.85),
+            const Color(0xFF1A5C3A),
+          ],
         ),
       ),
       child: Column(
@@ -242,9 +252,9 @@ class _ClientDashboardState extends State<ClientDashboard> {
             ),
           ),
           Text(
-            "Demain - 07:00 — Rue 1.234, ${user.toMap()['neighborhood'] ?? 'Bonanjo'}",
+            "Demain - 07:00 - ${user.neighborhood ?? 'Point de collecte'}",
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 13,
             ),
           ),
@@ -429,16 +439,27 @@ class _ClientDashboardState extends State<ClientDashboard> {
   Widget _actionItem(IconData i, String l, Color bg, Color ic) {
     return InkWell(
       onTap: () {
-        if (l.contains("Ma facture"))
+        if (l.contains('Ma facture') || l.contains('facture')) {
+          setState(() => _currentIndex = 1);
+          return;
+        }
+        if (l.contains('supp.')) {
+          setState(() => _currentIndex = 2);
+          return;
+        }
+        if (l.contains('Support')) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const HistoryScreen()),
+            MaterialPageRoute(builder: (_) => const ChatbotScreen()),
           );
-        if (l.contains("supp."))
+          return;
+        }
+        if (l.contains('Signaler') || l.contains('problème')) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+            MaterialPageRoute(builder: (_) => const ChatbotScreen()),
           );
+        }
       },
       child: Column(
         children: [

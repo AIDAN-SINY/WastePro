@@ -19,11 +19,17 @@ class PickupScheduleScreen extends StatelessWidget {
             .where('role', isEqualTo: 'client')
             .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final docs = snapshot.data!.docs;
+          if (docs.isEmpty) {
+            return const Center(child: Text('No client schedules yet.'));
+          }
 
           return SingleChildScrollView(
             scrollDirection:
