@@ -708,26 +708,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   )),
               const SizedBox(height: 20),
 
-              // Spinner (when NOT showing PIN field).
-              Obx(() {
-                if (controller.awaitingPin.value) {
-                  return const SizedBox.shrink();
-                }
-                return const Padding(
-                  padding: EdgeInsets.only(bottom: 20),
-                  child: CircularProgressIndicator(color: _dGreen),
-                );
-              }),
+              // Spinner while waiting for phone confirmation.
+              const Padding(
+                padding: EdgeInsets.only(bottom: 20),
+                child: CircularProgressIndicator(color: _dGreen),
+              ),
 
-              // PIN input field (when waiting for PIN).
-              Obx(() {
-                if (!controller.awaitingPin.value) {
-                  return const SizedBox.shrink();
-                }
-                return _buildPinInput(controller);
-              }),
-
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
 
               // Warning.
               Container(
@@ -743,14 +730,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.warning_amber_rounded,
+                      Icons.phone_android_rounded,
                       size: 16,
                       color: Colors.orange.shade700,
                     ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        'Do not close this screen',
+                        'Confirm with your MoMo / Orange Money PIN on your phone',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -769,122 +756,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // PIN Input
+  // Pay Button
   // ---------------------------------------------------------------------------
-
-  Widget _buildPinInput(CheckoutController controller) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _dSurface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _dBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Title.
-          Text(
-            'Enter your Mobile Money PIN',
-            style: GoogleFonts.sora(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _dText,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Your PIN will be sent securely to confirm the payment',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: _dMuted,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // PIN field.
-          TextField(
-            keyboardType: TextInputType.number,
-            obscureText: true,
-            maxLength: 6,
-            style: GoogleFonts.sora(
-              fontSize: 22,
-              letterSpacing: 8,
-              color: _dText,
-            ),
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              hintText: '••••••',
-              hintStyle: GoogleFonts.sora(
-                fontSize: 22,
-                letterSpacing: 8,
-                color: _dMuted.withValues(alpha: 0.3),
-              ),
-              counterText: '',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: _dBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: _dGreen, width: 2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-            onChanged: (value) => controller.pin.value = value,
-          ),
-          const SizedBox(height: 16),
-
-          // Confirm button.
-          SizedBox(
-            width: double.infinity,
-            child: Obx(() => ElevatedButton(
-                  onPressed: controller.isProcessing.value
-                      ? null
-                      : () => controller.submitPin(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _dGreen,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: controller.isProcessing.value
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Text(
-                          'CONFIRM PAYMENT',
-                          style: GoogleFonts.sora(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                )),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Helpers

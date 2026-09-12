@@ -1,3 +1,5 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// Central app configuration.
 ///
 /// CamPay credentials can come from:
@@ -20,9 +22,12 @@ class AppConfig {
     defaultValue: 'https://demo.campay.net',
   );
 
-  /// True when the app is running against the CamPay sandbox (demo).
-  static bool get isCampayDemo => campayBaseUrl.contains('demo');
-
+  /// True when running against CamPay sandbox (`CAMPAY_ENV=demo` or demo host).
+  static bool get isCampayDemo {
+    final env = dotenv.env['CAMPAY_ENV']?.trim().toLowerCase();
+    if (env != null && env.isNotEmpty) return env != 'production';
+    return campayBaseUrl.contains('demo');
+  }
   /// Demo charge sent to CamPay while UI still shows full plan prices.
   static const double campayDemoMaxAmount = 1;
 

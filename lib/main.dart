@@ -35,9 +35,12 @@ import 'routing.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from .env file.
-  await dotenv.load(fileName: ".env");
-
+  // Load environment variables from .env (CamPay, HF, etc.).
+  try {
+    await dotenv.load(fileName: '.env', isOptional: true);
+  } catch (e) {
+    debugPrint('dotenv load skipped: $e');
+  }
   // Initialize Firebase — wrapped in try-catch so the app launches offline.
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)

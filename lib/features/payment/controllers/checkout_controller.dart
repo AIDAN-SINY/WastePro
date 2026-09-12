@@ -147,42 +147,71 @@ class CheckoutController extends GetxController {
       return;
     }
 
+    if (!_service.isConfigured) {
+      _notify(
+        'CamPay not configured',
+        'Add CAMPAY_TOKEN or CAMPAY_USERNAME/PASSWORD in .env, then restart the app.',
+        error: true,
+      );
+      return;
+    }
+
     isProcessing.value = true;
     pin.value = '';
     awaitingPin.value = false;
 
     try {
       final phone = sanitizePhone(phoneNumber.value);
-      final useLiveApi = _service.isConfigured;
-
-      if (!useLiveApi && _service.isDemo) {
-        paymentStatus.value =
-            'Demo 1 XAF - local simulation (add CAMPAY credentials in .env for live CamPay)';
-        await Future<void>.delayed(const Duration(seconds: 1));
-        _reference = CampayApiService.newExternalReference(txRefPrefix);
-      } else {
-        paymentStatus.value = 'Authenticating with CamPay...';
-        _token = await _service.getToken();
-
-        paymentStatus.value =
-            'Sending ${chargeableAmount.toStringAsFixed(0)} XAF to your phone (plan ${displayAmount.toStringAsFixed(0)} XAF)...';
-        final ref = externalReference ??
-            CampayApiService.newExternalReference(txRefPrefix);
-
-        final result = await _service.requestPayment(
-          token: _token,
-          phoneNumber: phone,
-          amount: chargeableAmount,
-          description:
-              '$description (demo ${chargeableAmount} XAF / plan $displayAmount XAF)',
-          externalReference: ref,
+      if (phone.length < 12) {
+        _showError(
+          'Invalid phone',
+          'Use a Cameroon MoMo number like 6XX XXX XXX.',
         );
-        _reference = result['reference'] as String? ?? '';
+        return;
       }
 
+      paymentStatus.value = 'Connecting to CamPay...';
+      _token = await _service.getToken();
+
       paymentStatus.value =
-          'Enter your Mobile Money PIN below to confirm the payment.';
-      awaitingPin.value = true;
+          'Sending payment request (${chargeableAmount.toStringAsFixed(0)} XAF)...\n'
+          'Check your phone for the MTN / Orange Money prompt.';
+      final ref = externalReference ??
+          CampayApiService.newExternalReference(txRefPrefix);
+
+      final result = await _service.requestPayment(
+        token: _token,
+        phoneNumber: phone,
+        amount: chargeableAmount,
+        description: description,
+        externalReference: ref,
+      );
+      _reference = result['reference'] as String? ?? '';
+      final ussd = result['ussd_code']?.toString();
+
+      paymentStatus.value = ussd != null && ussd.isNotEmpty
+          ? 'Approve on your phone now.\nUSSD: $ussd\nWaiting for confirmation...'
+          : 'Approve the payment on your phone (MoMo / Orange Money PIN).\nDo not close this screen...';
+
+      // CamPay sends the USSD push to the handset — we only poll status.
+      // No in-app PIN and no local fake success.
+      final status = await _service.pollUntilResolved(
+        token: _token,
+        reference: _reference,
+      );
+
+      if (status != 'SUCCESSFUL') {
+        final msg = status == 'TIMEOUT'
+            ? 'No confirmation received on your phone in time. Try again.'
+            : 'Payment was declined or failed on your phone.';
+        _showError('Payment Issue', msg);
+        return;
+      }
+
+      paymentStatus.value = 'Payment confirmed!';
+      await _writeTransactionToFirestore();
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      onPaymentSuccess?.call();
     } on CampayApiException catch (e) {
       _showError('Payment Error', e.message);
     } catch (e) {
@@ -231,61 +260,13 @@ class CheckoutController extends GetxController {
     }
   }
 
+  /// Kept for UI compatibility — MoMo no longer uses in-app PIN.
   Future<void> submitPin() async {
-    final enteredPin = pin.value.trim();
-    if (enteredPin.isEmpty) {
-      _notify('PIN required', 'Please enter your Mobile Money PIN.', error: true);
-      return;
-    }
-
-    isProcessing.value = true;
-    awaitingPin.value = false;
-
-    try {
-      final useLiveApi = _service.isConfigured && _token.isNotEmpty;
-
-      if (!useLiveApi && _service.isDemo) {
-        paymentStatus.value = 'Confirming demo payment (1 XAF)...';
-        await Future<void>.delayed(const Duration(seconds: 2));
-        paymentStatus.value = 'Verifying payment status...';
-        await Future<void>.delayed(const Duration(seconds: 1));
-      } else {
-        paymentStatus.value = 'Confirming payment with your PIN...';
-        await _service.requestPayment(
-          token: _token,
-          phoneNumber: sanitizePhone(phoneNumber.value),
-          amount: chargeableAmount,
-          description: description,
-          externalReference: _reference.isNotEmpty ? _reference : null,
-          pin: enteredPin,
-        );
-
-        paymentStatus.value = 'Verifying payment status...';
-        final status = await _service.pollUntilResolved(
-          token: _token,
-          reference: _reference,
-        );
-
-        if (status != 'SUCCESSFUL') {
-          final msg = status == 'TIMEOUT'
-              ? 'Payment timed out. No charge was made.'
-              : 'Payment failed. No charge was made.';
-          _showError('Payment Issue', msg);
-          return;
-        }
-      }
-
-      paymentStatus.value = 'Payment confirmed!';
-      await _writeTransactionToFirestore();
-      await Future<void>.delayed(const Duration(milliseconds: 800));
-      onPaymentSuccess?.call();
-    } on CampayApiException catch (e) {
-      _showError('Payment Error', e.message);
-    } catch (e) {
-      _showError('Error', 'An unexpected error occurred: $e');
-    } finally {
-      isProcessing.value = false;
-    }
+    _notify(
+      'Use your phone',
+      'Enter your MoMo / Orange Money PIN on your phone when prompted, not in the app.',
+      error: true,
+    );
   }
 
   Future<void> _writeTransactionToFirestore() async {
