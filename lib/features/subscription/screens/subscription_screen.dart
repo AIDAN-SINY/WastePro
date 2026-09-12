@@ -113,7 +113,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       };
 
   // Professional Payment Handshake Logic
-  void _handleSubscription(String cycleName, double amount) async {
+  Future<void> _handleSubscription(String cycleName, double amount) async {
     final tier = _tierForPlan(cycleName);
 
     // --- Step 0: Day picker (if zone calendar exists and tier requires it) ---
