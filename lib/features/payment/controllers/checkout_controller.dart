@@ -73,6 +73,22 @@ class CheckoutController extends GetxController {
   String _token = '';
   String _reference = '';
 
+  @override
+  void onInit() {
+    super.onInit();
+    // Prefill MoMo phone from the signed-in client when available.
+    try {
+      final ctx = Get.context;
+      if (ctx != null) {
+        final user = Provider.of<UserProvider>(ctx, listen: false).user;
+        final phone = user?.phoneNumber.trim() ?? '';
+        if (phone.isNotEmpty) {
+          phoneNumber.value = phone;
+        }
+      }
+    } catch (_) {}
+  }
+
   num get chargeableAmount {
     if (_service.isDemo || AppConfig.isCampayDemo) {
       return AppConfig.campayDemoMaxAmount;
@@ -300,6 +316,7 @@ class CheckoutController extends GetxController {
       await FirebaseFirestore.instance.collection('transactions').add({
         'userId': phone,
         'phone': phone,
+        'customerName': user?.fullName,
         'amount': chargeableAmount,
         'displayAmount': displayAmount,
         'currency': 'XAF',

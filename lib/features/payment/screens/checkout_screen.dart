@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/config.dart';
+import '../../../providers/user_provider.dart';
 import '../controllers/checkout_controller.dart';
-
 /// Écran de checkout — sélection du mode de paiement Mobile Money
 /// (Orange Money / MTN Mobile Money) avec saisie de numéro et overlay de
 /// progression pendant le traitement Campay.
@@ -50,6 +51,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   late final CheckoutController controller;
   late final String _tag;
+  late final TextEditingController _phoneCtrl;
+  bool _phonePrefillDone = false;
 
   @override
   void initState() {
@@ -65,10 +68,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       ),
       tag: _tag,
     );
+    _phoneCtrl = TextEditingController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_phonePrefillDone) return;
+    _phonePrefillDone = true;
+    try {
+      final user = Provider.of<UserProvider>(context, listen: false).user;
+      var initialPhone = user?.phoneNumber.trim() ?? '';
+      if (initialPhone.startsWith('237') && initialPhone.length > 9) {
+        initialPhone = initialPhone.substring(3);
+      }
+      if (initialPhone.isNotEmpty) {
+        _phoneCtrl.text = initialPhone;
+        controller.phoneNumber.value = initialPhone;
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _phoneCtrl.dispose();
     if (Get.isRegistered<CheckoutController>(tag: _tag)) {
       Get.delete<CheckoutController>(tag: _tag);
     }
@@ -620,6 +643,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // Phone number field.
           Expanded(
             child: TextField(
+              controller: _phoneCtrl,
               keyboardType: TextInputType.phone,
               style: GoogleFonts.inter(fontSize: 14, color: _dText),
               decoration: InputDecoration(

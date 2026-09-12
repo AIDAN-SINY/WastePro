@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -232,7 +233,7 @@ class _WasteProAppState extends State<WasteProApp> {
   Widget build(BuildContext context) {
     return ConsoleStoreScope(
       ensureStore: ensureConsoleStore,
-      child: MaterialApp.router(
+      child: GetMaterialApp.router(
         title: 'Waste Pro Cameroon',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

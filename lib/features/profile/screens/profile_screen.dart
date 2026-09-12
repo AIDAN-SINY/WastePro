@@ -1,12 +1,23 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../../providers/user_provider.dart';
-import '../../../providers/navigation_provider.dart';
-import '../../auth/screens/welcome_screen.dart';
-import '../../payment/screens/bills_screen.dart';
-import '../../subscription/screens/history_screen.dart';
 
+import '../../../core/subscription_billing.dart';
+import '../../../core/subscription_plans.dart';
+import '../../../models/user_model.dart';
+import '../../../providers/navigation_provider.dart';
+import '../../../providers/user_provider.dart';
+import '../../auth/screens/welcome_screen.dart';
+import '../../home/support_screen.dart';
+import '../../payment/screens/bills_screen.dart';
+import '../../payment/screens/checkout_screen.dart';
+import '../../subscription/screens/history_screen.dart';
+import '../../subscription/screens/subscription_screen.dart';
+import '../../../services/subscription_service.dart';
+import '../../../core/config.dart';
+import '../../payment/screens/payment_receipt_screen.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -15,22 +26,23 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  static const _bg = Color(0xFFF5F7F6);
+  static const _surface = Color(0xFFFFFFFF);
+  static const _green = Color(0xFF0F3D2E);
+  static const _gold = Color(0xFFD4A853);
+  static const _muted = Color(0xFF7C8A80);
+  static const _border = Color(0xFFE8EBE9);
+  static const _text = Color(0xFF182620);
+
   @override
   Widget build(BuildContext context) {
-    // Getting the user data from our Global State (Provider)
     final userProvider = Provider.of<UserProvider>(context);
     final navProvider = Provider.of<NavigationProvider>(context);
     final user = userProvider.user;
 
-    // Redirect to login if user is null (after logout)
     if (user == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        // App web : AuthWrapper (route '/') bascule déjà vers l'écran
-        // d'accueil. On pop simplement ce sous-écran (et les autres poussés
-        // au-dessus) pour révéler l'accueil du routeur — jamais de push
-        // impérative par-dessus le routeur (elle forcerait à recharger la
-        // page pour se reconnecter).
         if (GoRouter.maybeOf(context) != null) {
           Navigator.of(context).popUntil((route) => route.isFirst);
           return;
@@ -46,99 +58,672 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: _bg,
       appBar: AppBar(
-        title: const Text("My Account"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 100),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            // 1. TOP HEADER: ICON & NAME
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.green,
-              child: Icon(Icons.person, size: 55, color: Colors.white),
-            ),
-            const SizedBox(height: 15),
-            Text(
-              user.fullName,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              "Account Type: ${user.role.toUpperCase()}",
-              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 30),
-
-            // 2. INFORMATION SECTION
-            _buildSectionTitle("Personal Information"),
-            _buildInfoTile(Icons.phone, "Phone Number", "+237 ${user.phoneNumber}"),
-            
-            // Place of Residence (Based on our Map Geolocation)
-            _buildInfoTile(
-              Icons.home, 
-              "Place of Residence", 
-              user.latitude != null 
-                ? "Pinned at: ${user.latitude!.toStringAsFixed(4)}, ${user.longitude!.toStringAsFixed(4)}" 
-                : "No location set yet"
-            ),
-
-            const SizedBox(height: 20),
-
-            // 3. SECURITY & SETTINGS SECTION
-            _buildSectionTitle("Security & Services"),
-            _buildActionTile(Icons.lock_outline, "Security PIN", "Change your 4-digit code", () {}),
-            _buildActionTile(Icons.map_outlined, "Collection Point", "Update your GPS location", () {}),
-            _buildActionTile(Icons.support_agent, "Contact Support", "Talk to WastePro agents", () {}),
-
-            const SizedBox(height: 40),
-
-            // 4. LOGOUT / DELETE
-            TextButton(
-              onPressed: () => userProvider.logout(),
-              child: const Text("Logout", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            ),
-            const SizedBox(height: 20),
-          ],
+        title: Text(
+          'My Account',
+          style: GoogleFonts.sora(
+            fontWeight: FontWeight.w600,
+            color: _green,
+            fontSize: 16,
+          ),
         ),
+        backgroundColor: _surface,
+        foregroundColor: _green,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('subscriptions')
+            .doc(user.phoneNumber)
+            .snapshots(),
+        builder: (context, subSnap) {
+          final subData = subSnap.data?.data();
+          final planFromSub = subData?['planName'] as String?;
+          final planTitle = planFromSub ?? user.subscriptionPlan;
+          final planInfo = SubscriptionPlans.byTitle(planTitle);
+          final isActive = user.isSubscribed == true ||
+              (subData?['status'] as String?)?.toLowerCase() == 'active';
+          final upgrades = SubscriptionPlans.upgradesFrom(
+            planInfo?.title ?? planTitle,
+          );
+          final lastPayment = SubscriptionBilling.asDate(
+                subData?['lastPaymentDate'],
+              ) ??
+              SubscriptionBilling.asDate(subData?['startDate']);
+          final nextPayment = SubscriptionBilling.asDate(
+                subData?['nextPaymentDate'],
+              ) ??
+              SubscriptionBilling.asDate(subData?['expiryDate']) ??
+              (lastPayment != null
+                  ? SubscriptionBilling.nextPaymentDate(lastPayment)
+                  : null);
+          final hoursLeft = SubscriptionBilling.hoursRemaining(nextPayment);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _header(user),
+                const SizedBox(height: 20),
+                _subscriptionCard(
+                  user: user,
+                  planInfo: planInfo,
+                  planLabel: planTitle,
+                  isActive: isActive,
+                  upgrades: upgrades,
+                  price: (subData?['price'] as num?)?.toDouble(),
+                  lastPayment: lastPayment,
+                  nextPayment: nextPayment,
+                  hoursLeft: hoursLeft,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Personal information',
+                  style: GoogleFonts.sora(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _muted,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _infoCard(user),
+                const SizedBox(height: 20),
+                Text(
+                  'Services',
+                  style: GoogleFonts.sora(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _muted,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _actionCard(
+                  icon: Icons.receipt_long_rounded,
+                  title: 'Payment receipts',
+                  subtitle: 'View history and open a receipt',
+                  onTap: () {
+                    navProvider.setIndex(1);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                    );
+                  },
+                ),
+                _actionCard(
+                  icon: Icons.description_outlined,
+                  title: 'My bill',
+                  subtitle: 'Current subscription invoice',
+                  onTap: () {
+                    navProvider.setIndex(2);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BillsScreen()),
+                    );
+                  },
+                ),
+                _actionCard(
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'All plans',
+                  subtitle: 'Compare Monthly, Weekly and Daily',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SubscriptionScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _actionCard(
+                  icon: Icons.support_agent_rounded,
+                  title: 'Contact support',
+                  subtitle: 'Talk to WastePro agents',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SupportScreen()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => userProvider.logout(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFC1443D),
+                      side: const BorderSide(color: Color(0xFFE8C0BC)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Logout',
+                      style: GoogleFonts.sora(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
       bottomNavigationBar: _buildBottomNav(navProvider),
     );
   }
 
-  // --- UI HELPERS FOR CLEANER CODE ---
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(title, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+  Widget _header(UserModel user) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 32,
+            backgroundColor: _green.withValues(alpha: 0.12),
+            child: Text(
+              user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
+              style: GoogleFonts.sora(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: _green,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.fullName,
+                  style: GoogleFonts.sora(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _text,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '+237 ${user.phoneNumber}',
+                  style: GoogleFonts.inter(fontSize: 13, color: _muted),
+                ),
+                if (user.agenceName.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    user.agenceName,
+                    style: GoogleFonts.inter(fontSize: 12, color: _muted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoTile(IconData icon, String title, String value) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.green),
-      title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      subtitle: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black)),
+  Widget _subscriptionCard({
+    required UserModel user,
+    required SubscriptionPlanInfo? planInfo,
+    required String? planLabel,
+    required bool isActive,
+    required List<SubscriptionPlanInfo> upgrades,
+    required double? price,
+    required DateTime? lastPayment,
+    required DateTime? nextPayment,
+    required int hoursLeft,
+  }) {
+    final label = planInfo?.title ?? planLabel ?? 'No plan';
+    final priceLabel = price != null
+        ? '${price.toStringAsFixed(0)} XAF'
+        : planInfo != null
+            ? '${planInfo.price.toStringAsFixed(0)} XAF'
+            : null;
+    final renewAmount = price ?? planInfo?.price ?? 3000;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.workspace_premium_rounded,
+                  color: _gold,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Current plan',
+                      style: GoogleFonts.inter(fontSize: 12, color: _muted),
+                    ),
+                    Text(
+                      label,
+                      style: GoogleFonts.sora(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: _text,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: (isActive ? _green : _muted).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isActive ? 'ACTIVE' : 'INACTIVE',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? _green : _muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (planInfo != null || priceLabel != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              [
+                if (planInfo != null) planInfo.subtitle,
+                if (priceLabel != null) priceLabel,
+              ].join(' · '),
+              style: GoogleFonts.inter(fontSize: 13, color: _muted),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _bg,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        '$hoursLeft',
+                        style: GoogleFonts.sora(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: _green,
+                        ),
+                      ),
+                      Text(
+                        'hours left',
+                        style: GoogleFonts.inter(fontSize: 11, color: _muted),
+                      ),
+                      Text(
+                        'until next payment',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(fontSize: 10, color: _muted),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 48, color: _border),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Last payment',
+                          style:
+                              GoogleFonts.inter(fontSize: 11, color: _muted),
+                        ),
+                        Text(
+                          SubscriptionBilling.formatDate(lastPayment),
+                          style: GoogleFonts.sora(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _text,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Next payment',
+                          style:
+                              GoogleFonts.inter(fontSize: 11, color: _muted),
+                        ),
+                        Text(
+                          SubscriptionBilling.formatDate(nextPayment),
+                          style: GoogleFonts.sora(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _gold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _openCheckoutForPlan(
+                user: user,
+                cycleName: planInfo?.title ?? planLabel ?? 'Monthly',
+                amount: renewAmount.toDouble(),
+              ),
+              icon: const Icon(Icons.payments_rounded, size: 18),
+              label: Text(
+                isActive ? 'Pay / Renew now' : 'Pay now',
+                style: GoogleFonts.sora(fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (upgrades.isEmpty && isActive)
+            Text(
+              'You are on the highest plan (Daily).',
+              style: GoogleFonts.inter(fontSize: 13, color: _muted),
+            )
+          else if (!isActive)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SubscriptionScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(
+                  'Choose a plan',
+                  style: GoogleFonts.sora(fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _green,
+                  side: const BorderSide(color: _border),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            )
+          else ...[
+            Text(
+              'Upgrade to a higher plan',
+              style: GoogleFonts.sora(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _text,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...upgrades.map((plan) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Material(
+                  color: _bg,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _openCheckoutForPlan(
+                      user: user,
+                      cycleName: plan.title,
+                      amount: plan.price,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  plan.title,
+                                  style: GoogleFonts.sora(
+                                    fontWeight: FontWeight.w700,
+                                    color: _green,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  '${plan.subtitle} · ${plan.price.toStringAsFixed(0)} XAF',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: _muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'Upgrade & pay',
+                            style: GoogleFonts.sora(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _gold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 16,
+                            color: _gold,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildActionTile(IconData icon, String title, String sub, VoidCallback onTap) {
+  Future<void> _openCheckoutForPlan({
+    required UserModel user,
+    required String cycleName,
+    required double amount,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(
+          amount: amount,
+          description: 'WastePro $cycleName subscription',
+          txRefPrefix: 'WP',
+          onPaymentSuccess: () => _finalizeFromProfile(
+            user: user,
+            cycleName: cycleName,
+            amount: amount,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _finalizeFromProfile({
+    required UserModel user,
+    required String cycleName,
+    required double amount,
+  }) async {
+    final phone = user.phoneNumber;
+    final now = DateTime.now();
+    final nextPayment = SubscriptionBilling.nextPaymentDate(now);
+    try {
+      await SubscriptionService().createContractFlow(
+        phone,
+        cycleName,
+        amount,
+      );
+      await FirebaseFirestore.instance.collection('subscriptions').doc(phone).set({
+        'planName': cycleName,
+        'price': amount,
+        'startDate': FieldValue.serverTimestamp(),
+        'lastPaymentDate': FieldValue.serverTimestamp(),
+        'nextPaymentDate': Timestamp.fromDate(nextPayment),
+        'expiryDate': Timestamp.fromDate(nextPayment),
+        'status': 'active',
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+      await context.read<UserProvider>().refreshUser(phone);
+      if (!mounted) return;
+
+      final charged = AppConfig.isCampayDemo
+          ? AppConfig.campayDemoMaxAmount
+          : amount;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => PaymentReceiptScreen(
+            description: 'WastePro $cycleName subscription',
+            amount: charged,
+            displayAmount: amount,
+            currency: 'XAF',
+            status: 'successful',
+            method: 'CamPay',
+            phone: phone,
+            customerName: user.fullName,
+            createdAt: now,
+            isDemoCharge: AppConfig.isCampayDemo,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment saved but sync failed: $e')),
+      );
+    }
+  }
+
+  Widget _infoCard(UserModel user) {
+    final location = user.latitude != null && user.longitude != null
+        ? 'Pinned at ${user.latitude!.toStringAsFixed(4)}, ${user.longitude!.toStringAsFixed(4)}'
+        : 'No location set yet';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        children: [
+          _infoRow(Icons.phone_outlined, 'Phone', '+237 ${user.phoneNumber}'),
+          const Divider(height: 1, color: _border),
+          _infoRow(Icons.badge_outlined, 'Role', user.role.toUpperCase()),
+          const Divider(height: 1, color: _border),
+          _infoRow(Icons.home_outlined, 'Collection point', location),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String title, String value) {
     return ListTile(
-      onTap: onTap,
-      leading: CircleAvatar(backgroundColor: Colors.green.withValues(alpha: 0.1), child: Icon(icon, color: Colors.green, size: 20)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(sub),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+      leading: Icon(icon, color: _green, size: 22),
+      title: Text(
+        title,
+        style: GoogleFonts.inter(fontSize: 12, color: _muted),
+      ),
+      subtitle: Text(
+        value,
+        style: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: _text,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: CircleAvatar(
+          backgroundColor: _green.withValues(alpha: 0.1),
+          child: Icon(icon, color: _green, size: 20),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.sora(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.inter(fontSize: 12, color: _muted),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: _muted),
+      ),
     );
   }
 
@@ -146,7 +731,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       height: 65,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -164,7 +749,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.home_rounded,
-                label: "Home",
+                label: 'Home',
                 index: 0,
                 onTap: () {
                   navProvider.setIndex(0);
@@ -174,21 +759,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.history_rounded,
-                label: "History",
+                label: 'History',
                 index: 1,
                 onTap: () {
                   navProvider.setIndex(1);
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const HistoryScreen()),
+                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
                   );
                 },
               ),
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.description_rounded,
-                label: "Bill",
+                label: 'Bill',
                 index: 2,
                 onTap: () {
                   navProvider.setIndex(2);
@@ -201,11 +785,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildNavItem(
                 navProvider: navProvider,
                 icon: Icons.person_rounded,
-                label: "Profile",
+                label: 'Profile',
                 index: 3,
-                onTap: () {
-                  navProvider.setIndex(3);
-                },
+                onTap: () => navProvider.setIndex(3),
               ),
             ],
           ),
@@ -222,12 +804,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required VoidCallback onTap,
   }) {
     final isSelected = navProvider.currentIndex == index;
-    final Color dGreen = const Color(0xFF0F3D2E);
-    final Color dMuted = const Color(0xFF7C8A80);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      splashColor: dGreen.withValues(alpha: 0.1),
+      splashColor: _green.withValues(alpha: 0.1),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Column(
@@ -237,15 +817,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected ? dGreen.withValues(alpha: 0.15) : Colors.transparent,
+                color: isSelected
+                    ? _green.withValues(alpha: 0.15)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
-                border: isSelected 
-                    ? Border.all(color: dGreen.withValues(alpha: 0.3), width: 1.5)
+                border: isSelected
+                    ? Border.all(
+                        color: _green.withValues(alpha: 0.3),
+                        width: 1.5,
+                      )
                     : null,
               ),
               child: Icon(
                 icon,
-                color: isSelected ? dGreen : dMuted,
+                color: isSelected ? _green : _muted,
                 size: 24,
               ),
             ),
@@ -255,7 +840,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? dGreen : dMuted,
+                color: isSelected ? _green : _muted,
               ),
             ),
           ],

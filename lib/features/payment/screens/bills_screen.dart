@@ -3,11 +3,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/subscription_billing.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../subscription/screens/subscription_screen.dart';
 import '../../profile/screens/profile_screen.dart';
-
+import 'checkout_screen.dart';
+import 'payment_receipt_screen.dart';
+import '../../../core/config.dart';
+import '../../../services/subscription_service.dart';
+import '../../../core/subscription_plans.dart';
 /// Bills screen — shows the client's current active subscription bill
 /// and payment status. This is distinct from Payment History which
 /// shows all past transactions.
@@ -78,6 +83,15 @@ class _BillsScreenState extends State<BillsScreen> {
           final price = (data['price'] as num?)?.toDouble() ?? 0;
           final status = data['status'] as String? ?? 'inactive';
           final startDate = (data['startDate'] as Timestamp?)?.toDate();
+          final lastPayment =
+              SubscriptionBilling.asDate(data['lastPaymentDate']) ?? startDate;
+          final nextPayment =
+              SubscriptionBilling.asDate(data['nextPaymentDate']) ??
+                  SubscriptionBilling.asDate(data['expiryDate']) ??
+                  (lastPayment != null
+                      ? SubscriptionBilling.nextPaymentDate(lastPayment)
+                      : null);
+          final hoursLeft = SubscriptionBilling.hoursRemaining(nextPayment);
           final collectionDays =
               (data['collection_days'] as List<dynamic>?)?.cast<String>() ?? [];
           final pickupTime = data['pickup_time'] as String? ?? '';
@@ -90,63 +104,59 @@ class _BillsScreenState extends State<BillsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Current Bill Card
                 _buildCurrentBillCard(
                   planName: planName,
                   price: price,
                   status: status,
                   startDate: startDate,
+                  lastPayment: lastPayment,
+                  nextPayment: nextPayment,
+                  hoursLeft: hoursLeft,
                   isActive: isActive,
                 ),
                 const SizedBox(height: 18),
-
-                // Subscription Details
                 if (planName.isNotEmpty) ...[
                   _buildDetailsCard(
                     collectionDays: collectionDays,
                     pickupTime: pickupTime,
                     zoneName: zoneName,
                     startDate: startDate,
+                    lastPayment: lastPayment,
+                    nextPayment: nextPayment,
+                    hoursLeft: hoursLeft,
                   ),
                   const SizedBox(height: 18),
                 ],
-
-                // Pay / Renew button
-                if (!isActive)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SubscriptionScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: Text(
-                        "Subscribe Now",
-                        style: GoogleFonts.sora(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: dGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _payFromBills(
+                      planName: planName.isNotEmpty ? planName : 'Monthly',
+                      price: price > 0
+                          ? price
+                          : (SubscriptionPlans.byTitle(planName)?.price ??
+                              3000),
+                    ),
+                    icon: const Icon(Icons.payments_rounded, size: 18),
+                    label: Text(
+                      isActive ? 'Pay / Renew now' : 'Pay now',
+                      style: GoogleFonts.sora(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
                     ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: dGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
                   ),
-
+                ),
                 const SizedBox(height: 18),
-
-                // Past payments for this subscription
                 _buildRecentPayments(user.phoneNumber),
               ],
             ),
@@ -157,11 +167,81 @@ class _BillsScreenState extends State<BillsScreen> {
     );
   }
 
+  Future<void> _payFromBills({
+    required String planName,
+    required double price,
+  }) async {
+    final user = Provider.of<UserProvider>(context, listen: false).user!;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(
+          amount: price,
+          description: 'WastePro $planName subscription',
+          txRefPrefix: 'WP',
+          onPaymentSuccess: () async {
+            final now = DateTime.now();
+            final next = SubscriptionBilling.nextPaymentDate(now);
+            try {
+              await SubscriptionService().createContractFlow(
+                user.phoneNumber,
+                planName,
+                price,
+              );
+              await FirebaseFirestore.instance
+                  .collection('subscriptions')
+                  .doc(user.phoneNumber)
+                  .set({
+                'planName': planName,
+                'price': price,
+                'startDate': FieldValue.serverTimestamp(),
+                'lastPaymentDate': FieldValue.serverTimestamp(),
+                'nextPaymentDate': Timestamp.fromDate(next),
+                'expiryDate': Timestamp.fromDate(next),
+                'status': 'active',
+              }, SetOptions(merge: true));
+              if (!mounted) return;
+              await context.read<UserProvider>().refreshUser(user.phoneNumber);
+              if (!mounted) return;
+              final charged = AppConfig.isCampayDemo
+                  ? AppConfig.campayDemoMaxAmount
+                  : price;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => PaymentReceiptScreen(
+                    description: 'WastePro $planName subscription',
+                    amount: charged,
+                    displayAmount: price,
+                    currency: 'XAF',
+                    status: 'successful',
+                    method: 'CamPay',
+                    phone: user.phoneNumber,
+                    customerName: user.fullName,
+                    createdAt: now,
+                    isDemoCharge: AppConfig.isCampayDemo,
+                  ),
+                ),
+                (route) => route.isFirst,
+              );
+            } catch (e) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Sync error: $e')),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildCurrentBillCard({
     required String planName,
     required double price,
     required String status,
     required DateTime? startDate,
+    required DateTime? lastPayment,
+    required DateTime? nextPayment,
+    required int hoursLeft,
     required bool isActive,
   }) {
     final statusColor = isActive ? dGreen : dRed;
@@ -215,15 +295,53 @@ class _BillsScreenState extends State<BillsScreen> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            startDate != null
-                ? 'Since ${startDate.day}/${startDate.month}/${startDate.year}'
-                : 'No start date',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 12,
-            ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$hoursLeft h remaining',
+                      style: GoogleFonts.sora(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'until next payment',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Last: ${SubscriptionBilling.formatDate(lastPayment)}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Next: ${SubscriptionBilling.formatDate(nextPayment)}',
+                    style: GoogleFonts.inter(
+                      color: dGold,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -235,6 +353,9 @@ class _BillsScreenState extends State<BillsScreen> {
     required String pickupTime,
     required String zoneName,
     required DateTime? startDate,
+    required DateTime? lastPayment,
+    required DateTime? nextPayment,
+    required int hoursLeft,
   }) {
     return Container(
       width: double.infinity,
@@ -256,6 +377,24 @@ class _BillsScreenState extends State<BillsScreen> {
             ),
           ),
           const SizedBox(height: 14),
+          _detailRow(
+            Icons.hourglass_bottom_rounded,
+            "Hours until next payment",
+            SubscriptionBilling.formatHours(hoursLeft),
+          ),
+          const SizedBox(height: 10),
+          _detailRow(
+            Icons.event_available_outlined,
+            "Last payment date",
+            SubscriptionBilling.formatDate(lastPayment ?? startDate),
+          ),
+          const SizedBox(height: 10),
+          _detailRow(
+            Icons.event_outlined,
+            "Next payment date",
+            SubscriptionBilling.formatDate(nextPayment),
+          ),
+          const SizedBox(height: 10),
           _detailRow(
             Icons.calendar_today_outlined,
             "Collection Days",

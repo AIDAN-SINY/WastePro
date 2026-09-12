@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../payment/screens/bills_screen.dart';
+import '../../payment/screens/payment_receipt_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import 'subscription_screen.dart';
 
@@ -204,7 +205,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ? ''
         : '${createdAt.day}/${createdAt.month}/${createdAt.year}';
 
-    return Container(
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaymentReceiptScreen.fromMap(
+              data,
+              transactionId: doc.id,
+            ),
+          ),
+        );
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -258,6 +272,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     "Date: $date",
                     style: GoogleFonts.inter(color: dMuted, fontSize: 12),
                   ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap to open receipt',
+                  style: GoogleFonts.inter(
+                    color: dGreen.withValues(alpha: 0.7),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -278,6 +301,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 

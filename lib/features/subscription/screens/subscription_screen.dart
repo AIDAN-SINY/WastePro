@@ -3,17 +3,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/config.dart';
+import '../../../core/subscription_plans.dart';
 import '../../../services/frequency_resolver.dart';
 import '../../../services/subscription_service.dart';
 import '../../../providers/user_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../payment/screens/checkout_screen.dart';
+import '../../payment/screens/payment_receipt_screen.dart';
 import '../../payment/screens/bills_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import 'history_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
-  const SubscriptionScreen({super.key});
+  const SubscriptionScreen({super.key, this.upgradeToPlan});
+
+  /// When set (e.g. "Weekly"), opens focused on upgrading to that plan.
+  final String? upgradeToPlan;
 
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
@@ -34,14 +39,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String _zoneName = '';
   bool _zoneLoaded = false;
 
-  // Dev bypass: when true, skip CamPay and auto-confirm.
-  bool _devBypass = false;
-
   @override
   void initState() {
     super.initState();
-    _loadZoneCalendar();
-    _loadDevBypass();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadZoneCalendar();
+    final target = widget.upgradeToPlan;
+    if (target == null || !mounted) return;
+    // Let the plans UI paint, then open checkout so the user can enter payment.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    final plan = SubscriptionPlans.byTitle(target);
+    if (plan == null) return;
+    await _handleSubscription(plan.title, plan.price);
   }
 
 
@@ -54,7 +67,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     // Zone name is derived from the agency name (e.g. "Yaoundé — Bastos" → "Bastos").
     final raw = user.agenceName.trim();
-    if (raw.isEmpty) return;
+    if (raw.isEmpty) {
+      if (mounted) setState(() => _zoneLoaded = true);
+      return;
+    }
     final parts = raw.split(RegExp(r'[—–-]'));
     final zoneName = parts.length >= 2 ? parts.last.trim() : raw;
 
@@ -85,21 +101,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     } catch (_) {
       if (mounted) setState(() => _zoneLoaded = true);
     }
-  }
-
-  /// Loads the dev bypass flag from Firestore.
-  Future<void> _loadDevBypass() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('app_config')
-          .doc('settings')
-          .get();
-      if (doc.exists && mounted) {
-        setState(() {
-          _devBypass = doc.data()?['devPaymentBypass'] == true;
-        });
-      }
-    } catch (_) {}
   }
 
   /// Maps plan title to a FrequencyTier.
@@ -136,35 +137,24 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final user = userProvider.user!;
     final phone = user.phoneNumber;
 
-    if (_devBypass) {
-      // Dev bypass: skip CamPay entirely, auto-confirm.
-      await _finalizeSubscription(
-        cycleName: cycleName,
-        amount: amount,
-        phone: phone,
-        resolvedDays: resolvedDays,
-        userProvider: userProvider,
-      );
-    } else {
-      // Navigate to the CheckoutScreen — handles Campay Mobile Money flow.
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CheckoutScreen(
+    // Always open Checkout so the user can choose a method and enter phone/PIN.
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(
+          amount: amount,
+          description: 'WastePro $cycleName subscription',
+          txRefPrefix: 'WP',
+          onPaymentSuccess: () => _finalizeSubscription(
+            cycleName: cycleName,
             amount: amount,
-            description: 'WastePro $cycleName subscription',
-            txRefPrefix: 'WP',
-            onPaymentSuccess: () => _finalizeSubscription(
-              cycleName: cycleName,
-              amount: amount,
-              phone: phone,
-              resolvedDays: resolvedDays,
-              userProvider: userProvider,
-            ),
+            phone: phone,
+            resolvedDays: resolvedDays,
+            userProvider: userProvider,
           ),
         ),
-      );
-    }
+      ),
+    );
   }
 
   /// Creates the contract and subscription record after a confirmed payment.
@@ -187,6 +177,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       );
 
       // 2. Doc historique lu par l'écran « My Bill » / Payment History.
+      final now = DateTime.now();
+      final nextPayment = now.add(const Duration(days: 30));
       await FirebaseFirestore.instance
           .collection('subscriptions')
           .doc(phone)
@@ -194,6 +186,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         'planName': cycleName,
         'price': amount,
         'startDate': FieldValue.serverTimestamp(),
+        'lastPaymentDate': FieldValue.serverTimestamp(),
+        'nextPaymentDate': Timestamp.fromDate(nextPayment),
+        'expiryDate': Timestamp.fromDate(nextPayment),
         'status': 'active',
         'collection_days': resolvedDays,
         'pickup_time': _zonePickupTime,
@@ -211,9 +206,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             backgroundColor: dGreen,
           ),
         );
-        Navigator.pop(context); // Return to Dashboard
-        // 3. Refresh user data to show the new active_contract_id
         await userProvider.refreshUser(phone);
+        if (!mounted) return;
+
+        final charged = AppConfig.isCampayDemo
+            ? AppConfig.campayDemoMaxAmount.toDouble()
+            : amount;
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => PaymentReceiptScreen(
+              description: 'WastePro $cycleName subscription',
+              amount: charged,
+              displayAmount: amount,
+              currency: 'XAF',
+              status: 'successful',
+              method: 'CamPay',
+              phone: phone,
+              customerName: userProvider.user?.fullName,
+              createdAt: DateTime.now(),
+              isDemoCharge: AppConfig.isCampayDemo,
+            ),
+          ),
+          (route) => route.isFirst,
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -324,11 +340,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   @override
   Widget build(BuildContext context) {
     final navProvider = Provider.of<NavigationProvider>(context);
+    final user = Provider.of<UserProvider>(context).user;
+    final currentRank = SubscriptionPlans.rankOf(user?.subscriptionPlan);
+    final upgradeFocus = widget.upgradeToPlan;
     
     return Scaffold(
       backgroundColor: dBg,
       appBar: AppBar(
-        title: Text("Service Plans", style: GoogleFonts.sora(fontWeight: FontWeight.w600, color: dGreen, fontSize: 16)),
+        title: Text(
+          upgradeFocus != null ? "Upgrade plan" : "Service Plans",
+          style: GoogleFonts.sora(fontWeight: FontWeight.w600, color: dGreen, fontSize: 16),
+        ),
         backgroundColor: dSurface,
         elevation: 0,
         foregroundColor: dGreen,
@@ -340,7 +362,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Choose Your Plan",
+                  upgradeFocus != null
+                      ? "Upgrade to $upgradeFocus"
+                      : "Choose Your Plan",
                   style: GoogleFonts.sora(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -349,7 +373,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Select a collection frequency that suits your needs",
+                  upgradeFocus != null
+                      ? "Pay to switch to a higher collection frequency"
+                      : "Select a collection frequency that suits your needs",
                   style: GoogleFonts.inter(
                     fontSize: 12.5,
                     color: dMuted,
@@ -357,9 +383,30 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                _buildPlanCard("Monthly", 3000, "1 Collection per week", Icons.calendar_month, false),
-                _buildPlanCard("Weekly", 5500, "2 Collections per week", Icons.view_week, true),
-                _buildPlanCard("Daily", 15000, "Collection every single day", Icons.wb_sunny, false),
+                _buildPlanCard(
+                  "Monthly",
+                  3000,
+                  "1 Collection per week",
+                  Icons.calendar_month,
+                  false,
+                  currentRank: currentRank,
+                ),
+                _buildPlanCard(
+                  "Weekly",
+                  5500,
+                  "2 Collections per week",
+                  Icons.view_week,
+                  true,
+                  currentRank: currentRank,
+                ),
+                _buildPlanCard(
+                  "Daily",
+                  15000,
+                  "Collection every single day",
+                  Icons.wb_sunny,
+                  false,
+                  currentRank: currentRank,
+                ),
                 
                 const SizedBox(height: 14),
                 Center(
@@ -400,7 +447,27 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     );
   }
 
-  Widget _buildPlanCard(String title, double price, String subtitle, IconData icon, bool isPopular) {
+  Widget _buildPlanCard(
+    String title,
+    double price,
+    String subtitle,
+    IconData icon,
+    bool isPopular, {
+    required int currentRank,
+  }) {
+    final planRank = SubscriptionPlans.rankOf(title);
+    final isCurrent = currentRank > 0 && planRank == currentRank;
+    final isUpgrade = planRank > currentRank && currentRank > 0;
+    final isLower = currentRank > 0 && planRank < currentRank;
+    final ctaLabel = isCurrent
+        ? 'CURRENT'
+        : isUpgrade
+            ? 'UPGRADE'
+            : isLower
+                ? 'LOWER'
+                : 'SUBSCRIBE';
+    final enabled = !isCurrent && !isLower;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -469,6 +536,24 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             ),
                           ),
                         ],
+                        if (isCurrent) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: dGreen,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "YOURS",
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -510,15 +595,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isPopular ? dGold : dGreen,
+                  backgroundColor: enabled
+                      ? (isUpgrade || isPopular ? dGold : dGreen)
+                      : dMuted.withValues(alpha: 0.35),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   elevation: 0,
                 ),
-                onPressed: () => _handleSubscription(title, price),
+                onPressed: enabled ? () => _handleSubscription(title, price) : null,
                 child: Text(
-                  "SUBSCRIBE",
+                  ctaLabel,
                   style: GoogleFonts.sora(
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
