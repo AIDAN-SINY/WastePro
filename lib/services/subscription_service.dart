@@ -1,8 +1,14 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'payment_service.dart';
+
 class SubscriptionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final PaymentService _payments;
+
+  SubscriptionService({PaymentService? paymentService})
+      : _payments = paymentService ?? PaymentService();
 
   static const double _earthRadiusKm = 6371.0;
 
@@ -109,6 +115,33 @@ class SubscriptionService {
 
   // --- BANKING & SETTLEMENT LOGIC ---
 
+  /// Charge the subscriber via CamPay (MTN MoMo / Orange Money).
+  /// Returns true only when CamPay reports SUCCESSFUL.
+  Future<bool> payWithCampay({
+    required String phone,
+    required int amount,
+    required String planName,
+    String? accountUserId,
+  }) async {
+    final result = await _payments.collectPayment(
+      phone: phone,
+      amount: amount.toDouble(),
+      description: 'WastePro $planName subscription',
+      userId: accountUserId ?? phone,
+      waitForConfirmation: true,
+    );
+
+    if (result.isFailed) {
+      throw CampayException(
+        'Payment failed${result.operator != null ? ' (${result.operator})' : ''}. '
+        'Ref: ${result.reference}',
+      );
+    }
+
+    return result.isSuccessful;
+  }
+
+  @Deprecated('Use payWithCampay instead')
   Future<bool> simulatePayment(int amount) async {
     await Future.delayed(const Duration(seconds: 1));
     return true;
@@ -128,28 +161,29 @@ class SubscriptionService {
 
       final clientData = clientSnap.data() as Map<String, dynamic>;
       final String? activeContractId = clientData['active_contract_id'];
+      final pickupId = 'PKP-${DateTime.now().millisecondsSinceEpoch}';
+      final pickupRef = _db.collection('pickups').doc(pickupId);
 
-      // Step 1: Record the formal Pickup entry (The Diagram Link)
-      await executePickupFlow(
-        clientPhone,
-        collectorPhone,
-        activeContractId ?? "N/A",
-      );
+      transaction.set(pickupRef, {
+        'pickup_id': pickupId,
+        'client_id': clientPhone,
+        'collector_id': collectorPhone,
+        'contract_id': activeContractId ?? 'N/A',
+        'timestamp': FieldValue.serverTimestamp(),
+        'verification_code': 'Verified_By_Scan',
+      });
 
-      // Step 2: Update Client Status
       transaction.update(clientRef, {
         'needsPickup': false,
         'lastCollection': FieldValue.serverTimestamp(),
       });
 
-      // Step 3: Update Collector Metrics for Bank Credit Scoring
+      final collector = collectorData(collectorSnap);
       transaction.update(collectorRef, {
         'lastCollectedClient': clientPhone,
         'lastCollectionAt': FieldValue.serverTimestamp(),
-        // Increment earnings and success count
-        'earnings': (collectorData(collectorSnap)['earnings'] ?? 0) + 250,
-        'successPickups':
-            (collectorData(collectorSnap)['successPickups'] ?? 0) + 1,
+        'earnings': ((collector['earnings'] as num?)?.toDouble() ?? 0) + 250,
+        'successPickups': ((collector['successPickups'] as num?)?.toInt() ?? 0) + 1,
       });
     });
   }
@@ -185,5 +219,18 @@ class SubscriptionService {
   Map<String, dynamic> collectorData(DocumentSnapshot snap) =>
       snap.data() as Map<String, dynamic>;
 
-  Future<void> processOneTimePayment(String phone, int i, String s) async {}
+  Future<void> processOneTimePayment(
+    String phone,
+    int amount,
+    String description,
+  ) async {
+    final ok = await payWithCampay(
+      phone: phone,
+      amount: amount,
+      planName: description,
+    );
+    if (!ok) {
+      throw CampayException('One-time payment failed');
+    }
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +14,7 @@ class AdminHeatmapScreen extends StatefulWidget {
 class _AdminHeatmapScreenState extends State<AdminHeatmapScreen> {
   Set<Circle> _heatCircles = {};
   bool _isLoading = true;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sub;
 
   @override
   void initState() {
@@ -19,36 +22,47 @@ class _AdminHeatmapScreenState extends State<AdminHeatmapScreen> {
     _loadHeatmapData();
   }
 
-  // BANK RESEARCH LOGIC: Fetch subscribed households to visualize "Financial Heat"
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
   void _loadHeatmapData() {
-    FirebaseFirestore.instance
+    // Avoid composite index: filter isSubscribed client-side.
+    _sub = FirebaseFirestore.instance
         .collection('users')
         .where('role', isEqualTo: 'client')
-        .where('isSubscribed', isEqualTo: true) // Only show paying customers
         .snapshots()
         .listen((snapshot) {
-      Set<Circle> newCircles = {};
-      
-      for (var doc in snapshot.docs) {
+      final newCircles = <Circle>{};
+
+      for (final doc in snapshot.docs) {
         final data = doc.data();
-        if (data['latitude'] != null && data['longitude'] != null) {
-          // We create a "Heat Point" using a semi-transparent circle
-          newCircles.add(
-            Circle(
-              circleId: CircleId(doc.id),
-              center: LatLng(data['latitude'], data['longitude']),
-              radius: 300, // 300 meters radius
-              fillColor: Colors.red.withValues(alpha: 0.3), // The "Heat" color
-              strokeWidth: 0,
-            ),
-          );
-        }
+        if (data['isSubscribed'] != true) continue;
+        final lat = data['latitude'];
+        final lng = data['longitude'];
+        if (lat is! num || lng is! num) continue;
+
+        newCircles.add(
+          Circle(
+            circleId: CircleId(doc.id),
+            center: LatLng(lat.toDouble(), lng.toDouble()),
+            radius: 300,
+            fillColor: Colors.red.withValues(alpha: 0.3),
+            strokeWidth: 0,
+          ),
+        );
       }
 
+      if (!mounted) return;
       setState(() {
         _heatCircles = newCircles;
         _isLoading = false;
       });
+    }, onError: (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     });
   }
 
@@ -56,7 +70,7 @@ class _AdminHeatmapScreenState extends State<AdminHeatmapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Financial Penetration Map"),
+        title: const Text('Financial Penetration Map'),
         backgroundColor: Colors.indigo[900],
         foregroundColor: Colors.white,
       ),
@@ -64,14 +78,12 @@ class _AdminHeatmapScreenState extends State<AdminHeatmapScreen> {
         children: [
           GoogleMap(
             initialCameraPosition: const CameraPosition(
-              target: LatLng(3.8480, 11.5021), // Yaoundé
+              target: LatLng(3.8480, 11.5021),
               zoom: 12,
             ),
             circles: _heatCircles,
             myLocationEnabled: true,
           ),
-          
-          // --- RESEARCH LEGEND ---
           Positioned(
             top: 20,
             left: 20,
@@ -80,23 +92,35 @@ class _AdminHeatmapScreenState extends State<AdminHeatmapScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: [const BoxShadow(color: Colors.black26, blurRadius: 5)],
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 5),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("LEGEND", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Text(
+                    'LEGEND',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                   const SizedBox(height: 5),
-                  _legendItem(Colors.red.withValues(alpha: 0.6), "High Subscription Density"),
-                  _legendItem(Colors.orange.withValues(alpha: 0.4), "Medium Activity"),
-                  _legendItem(Colors.blue.withValues(alpha: 0.3), "Emerging Market"),
+                  _legendItem(
+                    Colors.red.withValues(alpha: 0.6),
+                    'High Subscription Density',
+                  ),
+                  _legendItem(
+                    Colors.orange.withValues(alpha: 0.4),
+                    'Medium Activity',
+                  ),
+                  _legendItem(
+                    Colors.blue.withValues(alpha: 0.3),
+                    'Emerging Market',
+                  ),
                 ],
               ),
             ),
           ),
-          
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator()),
+          if (_isLoading) const Center(child: CircularProgressIndicator()),
         ],
       ),
     );
