@@ -84,7 +84,7 @@ class UserProvider with ChangeNotifier {
 
   // 4. Logout and Clear Session (Firebase Auth)
   Future<void> logout() async {
-    // ⚠️ Ordre critique : la session APP est vidée SYNCHRONIQUEMENT, AVANT
+    //  Ordre critique : la session APP est vidée SYNCHRONIQUEMENT, AVANT
     // le signOut backend. Si le signOut Firebase reste bloqué (réseau,
     // plugin web/desktop…), l'utilisateur doit quand même pouvoir quitter
     // le backoffice et se reconnecter avec un autre compte — le prochain

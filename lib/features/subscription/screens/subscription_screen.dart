@@ -384,10 +384,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      "Demo mode — CamPay sandbox caps payments at "
-                      "${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF. "
-                      "Your plan activates with a test charge; real prices apply "
-                      "in production.",
+                      "Demo mode - CamPay charges "
+                      "${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF "
+                      "even if the plan shows 3000 / 5500 / 15000 XAF. "
+                      "Real prices apply in production.",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(color: dMuted, fontSize: 11, height: 1.4),
                     ),

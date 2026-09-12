@@ -62,7 +62,13 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     if (!_init) {
       _init = true;
       _bot = ChatbotService();
-      _addBot("Hey there! 👋 I'm WasteBot, your WastePro assistant.\n\nHow can I help you today?", 'greeting');
+      final aiOn = _bot.isAiConfigured;
+      _addBot(
+        aiOn
+            ? "Hey there! I'm WasteBot, your WastePro AI assistant.\n\nAsk me anything about plans, pickups, CamPay payments, or support."
+            : "Hey there! I'm WasteBot, your WastePro assistant.\n\nFAQ is ready. To unlock AI answers, add HF_TOKEN in .env and restart the app.",
+        'greeting',
+      );
     }
   }
 
@@ -103,11 +109,11 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   }
 
   void _confirm(bool yes) async {
-    _addUser(yes ? 'Yes, submit' : 'No, cancel');
+    _addUser(yes? 'Yes, submit': 'No, cancel');
     setState(() => _typing = true);
     final user = context.read<UserProvider>().user;
     await Future.delayed(const Duration(milliseconds: 400));
-    final reply = await _processSafely(yes ? 'yes' : 'no', user);
+    final reply = await _processSafely(yes? 'yes': 'no', user);
     if (!mounted) return;
     setState(() => _typing = false);
     _addBot(reply.text, reply.intent, suggestions: reply.suggestions);
@@ -115,20 +121,20 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   }
 
   /// Appelle le service en attrapant toute erreur (Firestore hors ligne,
-  /// règles… ) : le chat affiche un message propre au lieu de planter.
+  /// règles… ): le chat affiche un message propre au lieu de planter.
   Future<ChatReply> _processSafely(String text, UserModel? user) async {
     try {
       return await _bot.process(text, user: user);
     } catch (_) {
       return const ChatReply(
-        text: "Something went wrong on my end. 🙈\n\nPlease try again or contact support.",
+        text: "Something went wrong on my end. \n\nPlease try again or contact support.",
         intent: 'error',
       );
     }
   }
 
   /// Quand le bot s'engage à ouvrir une vraie fonctionnalité (paiement,
-  /// support), on la livre : la feuille se ferme et l'écran s'ouvre.
+  /// support), on la livre: la feuille se ferme et l'écran s'ouvre.
   void _afterReply(ChatReply reply) {
     if (reply.intent == 'payment_initiated') {
       _openFeature(const BillsScreen());
@@ -205,8 +211,8 @@ class _ChatbotScreenState extends State<ChatbotScreen>
             decoration: BoxDecoration(color: _surface, borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(18), bottomLeft: Radius.circular(18), bottomRight: Radius.circular(18)), border: Border.all(color: _border)),
             child: _richText(m.text),
           ),
-          if (m.confirm) ...[const SizedBox(height: 8), _confirmButtons()],
-          if (m.suggestions.isNotEmpty && !m.confirm) ...[const SizedBox(height: 8), _suggestionChips(m.suggestions)],
+          if (m.confirm)...[const SizedBox(height: 8), _confirmButtons()],
+          if (m.suggestions.isNotEmpty &&!m.confirm)...[const SizedBox(height: 8), _suggestionChips(m.suggestions)],
         ])),
       ]),
     );
@@ -232,7 +238,14 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(20)),
-          child: const Text('✓ Yes, submit', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check, color: Colors.white, size: 16),
+              SizedBox(width: 6),
+              Text('Yes, submit', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
       ),
       const SizedBox(width: 8),
@@ -241,7 +254,14 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: _border)),
-          child: Text('✗ Cancel', style: TextStyle(color: _muted, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.close, color: _muted, size: 16),
+              const SizedBox(width: 6),
+              Text('Cancel', style: TextStyle(color: _muted, fontSize: 13, fontWeight: FontWeight.w500)),
+            ],
+          ),
         ),
       ),
     ]);
@@ -277,7 +297,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
           child: AnimatedBuilder(
             animation: _dots,
             builder: (_, _) => Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) {
-              final opacity = ((_dots.value - i * 0.33).abs() < 0.33) ? 1.0 : 0.3;
+              final opacity = ((_dots.value - i * 0.33).abs() < 0.33)? 1.0: 0.3;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Opacity(opacity: opacity, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: _muted, shape: BoxShape.circle))),
@@ -322,6 +342,7 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   }
 
   Widget _header() {
+    final aiOn = _init && _bot.isAiConfigured;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(color: _surface, border: Border(bottom: BorderSide(color: _border))),
@@ -335,9 +356,22 @@ class _ChatbotScreenState extends State<ChatbotScreen>
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('WasteBot', style: GoogleFonts.sora(fontSize: 14, fontWeight: FontWeight.w600, color: _text)),
           Row(children: [
-            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: aiOn ? Colors.green : Colors.orange,
+                shape: BoxShape.circle,
+              ),
+            ),
             const SizedBox(width: 4),
-            Text('Online now', style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
+            Text(
+              aiOn ? 'AI online' : 'FAQ only — add HF_TOKEN',
+              style: TextStyle(
+                fontSize: 11,
+                color: aiOn ? Colors.green.shade700 : Colors.orange.shade800,
+              ),
+            ),
           ]),
         ])),
         GestureDetector(

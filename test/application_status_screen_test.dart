@@ -54,7 +54,7 @@ void main() {
 
     expect(find.text('Under review'), findsOneWidget);
     expect(find.text('Application rejected'), findsNothing);
-    expect(find.text('Approved! 🎉'), findsNothing);
+    expect(find.text('Approved!'), findsNothing);
   });
 
   testWidgets('approved application → green card + login button', (
@@ -64,7 +64,7 @@ void main() {
     await pumpStatus(tester, db);
     await checkStatus(tester, '698 22 44 66');
 
-    expect(find.text('Approved! 🎉'), findsOneWidget);
+    expect(find.text('Approved!'), findsOneWidget);
     expect(find.text('Log in'), findsOneWidget);
     expect(find.text('Re-apply'), findsNothing);
   });
@@ -108,7 +108,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Approved! 🎉'), findsOneWidget);
+      expect(find.text('Approved!'), findsOneWidget);
       expect(find.text('Under review'), findsNothing);
     },
   );

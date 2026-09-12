@@ -177,7 +177,7 @@ void main() {
     test('complaint without category hint asks 1-5, then proceeds', () async {
       final r1 = await bot.process('submit complaint');
       expect(r1.intent, 'complaint_flow');
-      expect(r1.text, contains('1️⃣'));
+      expect(r1.text, contains('1'));
 
       // L'état « choisir la catégorie » est géré : « 1 » avance, ne reset
       // plus la conversation (ancien bug → « Something went wrong »).

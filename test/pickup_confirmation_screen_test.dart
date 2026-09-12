@@ -139,7 +139,7 @@ void main() {
     expect(collectorPush.length, 1);
     expect(
       collectorPush.first.data()['title'],
-      'Pickup validated from client Alice Njoya ✓',
+      'Pickup validated from client Alice Njoya ',
     );
     final collectorPayload =
         collectorPush.first.data()['data'] as Map<String, dynamic>;

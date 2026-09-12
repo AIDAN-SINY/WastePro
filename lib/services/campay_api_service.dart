@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import '../core/config.dart';
+
 /// Exception levée par l'API Campay (message exploitable côté UI).
 class CampayApiException implements Exception {
   const CampayApiException(this.message);
@@ -11,26 +13,12 @@ class CampayApiException implements Exception {
   String toString() => message;
 }
 
-/// Client REST Campay — encaissement Mobile Money Cameroun (MTN MoMo /
-/// Orange Money) via l'API publique avec authentification par
-/// identifiants (username / password → Bearer token).
-///
-/// Flux : [getToken] obtient un jeton ; [requestPayment] envoie la demande
-/// USSD au téléphone du client ; [pollUntilResolved] interroge le statut
-/// jusqu'à un état final (SUCCESSFUL / FAILED / TIMEOUT).
+/// Client REST Campay — encaissement Mobile Money Cameroun.
 class CampayApiService {
   CampayApiService({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
 
-  // ---------------------------------------------------------------------------
-  // Configuration
-  // ---------------------------------------------------------------------------
-
-  /// Base URL basée sur la variable d'environnement `CAMPAY_ENV`.
-  ///
-  /// - `demo`     → `https://demo.campay.net/api`
-  /// - `production` → `https://www.campay.net/api`
   String get _baseUrl {
     final env = dotenv.env['CAMPAY_ENV'] ?? 'demo';
     return env == 'production'
@@ -40,20 +28,24 @@ class CampayApiService {
 
   String get _username => dotenv.env['CAMPAY_USERNAME'] ?? '';
   String get _password => dotenv.env['CAMPAY_PASSWORD'] ?? '';
+  String get _permanentToken =>
+      (dotenv.env['CAMPAY_TOKEN'] ?? AppConfig.campayToken).trim();
 
-  bool get isConfigured => _username.isNotEmpty && _password.isNotEmpty;
+  bool get isConfigured {
+    if (_permanentToken.isNotEmpty) return true;
+    final user = _username.trim();
+    final pass = _password.trim();
+    if (user.isEmpty || pass.isEmpty) return false;
+    if (user.startsWith('your_') || pass.startsWith('your_')) return false;
+    return true;
+  }
 
-  /// `true` quand l'app pointe vers le bac à sable Campay.
   bool get isDemo => (dotenv.env['CAMPAY_ENV'] ?? 'demo') != 'production';
 
-  // ---------------------------------------------------------------------------
-  // API Methods
-  // ---------------------------------------------------------------------------
-
-  /// Obtient un jeton d'accès (Bearer token) via `POST /token/` avec les
-  /// identifiants de l'application.
   Future<String> getToken() async {
     _ensureConfigured();
+    if (_permanentToken.isNotEmpty) return _permanentToken;
+
     try {
       final response = await _dio.post(
         '$_baseUrl/token/',
@@ -189,8 +181,8 @@ class CampayApiService {
   void _ensureConfigured() {
     if (!isConfigured) {
       throw const CampayApiException(
-        'Campay is not configured. Set CAMPAY_USERNAME and CAMPAY_PASSWORD '
-        'in your .env file.',
+        'Campay is not configured. Set CAMPAY_TOKEN or '
+        'CAMPAY_USERNAME / CAMPAY_PASSWORD in your .env file.',
       );
     }
   }

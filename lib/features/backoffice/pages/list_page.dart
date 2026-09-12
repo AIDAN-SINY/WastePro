@@ -238,7 +238,7 @@ class BoListPage extends StatelessWidget {
         return BoItemCard(
           avatarText: boInitials(c.name),
           title: c.name,
-          subtitle: '${c.zone} · ★ ${c.rating.toStringAsFixed(1)}',
+          subtitle: '${c.zone} · rating ${c.rating.toStringAsFixed(1)}',
           status: c.status,
           onKebab: () => _onKebab(context, c),
         );
@@ -272,7 +272,7 @@ class BoListPage extends StatelessWidget {
         );
       case BoEntity.frequence:
         return BoItemCard(
-          avatarText: '🔄',
+          avatarText: 'Fq',
           title: (item as FrequenceModel).libelle,
           subtitle: 'Every ${item.jours} days',
           status: 'Active',

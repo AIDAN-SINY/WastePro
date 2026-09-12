@@ -253,7 +253,7 @@ class _ClientDashboardState extends State<ClientDashboard>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "$greeting, $firstName 👋",
+                      "$greeting, $firstName",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.sora(
@@ -1012,12 +1012,12 @@ class _ClientDashboardState extends State<ClientDashboard>
             .join()
             .toUpperCase();
         final stars = rating >= 4.5
-            ? "★★★★★"
+            ? ""
             : rating >= 3.5
-                ? "★★★★☆"
+                ? ""
                 : rating >= 2.5
-                    ? "★★★☆☆"
-                    : "★★☆☆☆";
+                    ? ""
+                    : "";
         return GestureDetector(
           onTap: () {
             Navigator.push(

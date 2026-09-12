@@ -318,7 +318,7 @@ class _CollectorDashboardState extends State<CollectorDashboard>
           s.commentaire =
               data['commentaire'] as String? ?? s.commentaire;
         });
-        _showToast('Pickup validated from client ${s.clientName} ✓');
+        _showToast('Pickup validated from client ${s.clientName} ');
       }
     }, onError: (e) {
       debugPrint('[CollectorDashboard] Pickup validation watch failed: $e');

@@ -133,7 +133,7 @@ class _PaymentWaitingScreenState extends State<PaymentWaitingScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Check your phone 📱',
+              'Check your phone',
               style: GoogleFonts.sora(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -187,8 +187,9 @@ class _PaymentWaitingScreenState extends State<PaymentWaitingScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'Demo sandbox — the maximum charge is '
-                  '${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF.',
+                  'Demo sandbox - CamPay charge is '
+                  '${AppConfig.campayDemoMaxAmount.toStringAsFixed(0)} XAF '
+                  '(plan price is display-only).',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(color: dMuted, fontSize: 11),
                 ),

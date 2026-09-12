@@ -383,7 +383,7 @@ void main() {
     // Choisir un collecteur actif puis approuver.
     await tester.tap(find.byKey(const Key('bo_review_collector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Paul Mbarga · ★ 4.8').last);
+    await tester.tap(find.text('Paul Mbarga ·  4.8').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('bo_review_approve')));
     await tester.pumpAndSettle();
@@ -454,7 +454,7 @@ void main() {
     // Choisir Vincent Onana puis confirmer.
     await tester.tap(find.byKey(const Key('bo_reassign_collector')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Vincent Onana · ★ 4.5').last);
+    await tester.tap(find.text('Vincent Onana ·  4.5').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('bo_reassign_confirm')));
     await tester.pumpAndSettle();

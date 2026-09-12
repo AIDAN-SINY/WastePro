@@ -7,16 +7,16 @@ import 'package:http/http.dart' as http;
 /// Email service using Elastic Email REST API.
 ///
 /// Configuration via `.env`:
-///   - `ELASTICEMAIL_API_KEY` — your Elastic Email API key
-///   - `ELASTICEMAIL_FROM` — sender email (e.g. 'noreply@wastepro.cm')
-///   - `ELASTICEMAIL_FROM_NAME` — sender display name (e.g. 'WastePro')
+/// - `ELASTICEMAIL_API_KEY` — your Elastic Email API key
+/// - `ELASTICEMAIL_FROM` — sender email (e.g. 'noreply@wastepro.cm')
+/// - `ELASTICEMAIL_FROM_NAME` — sender display name (e.g. 'WastePro')
 ///
 /// In production, move API calls to a Cloud Function to protect credentials.
 /// This service logs calls in Firestore `email_logs` for audit and debugging.
 class EmailService {
   EmailService({FirebaseFirestore? db, http.Client? client})
-      : _db = db ?? FirebaseFirestore.instance,
-        _client = client ?? http.Client();
+      : _db = db?? FirebaseFirestore.instance,
+        _client = client?? http.Client();
 
   final FirebaseFirestore _db;
   final http.Client _client;
@@ -222,7 +222,7 @@ class EmailService {
         to: to,
         subject: subject,
         type: type,
-        status: success ? 'sent' : 'failed',
+        status: success? 'sent': 'failed',
         response: body,
       );
 
@@ -253,14 +253,14 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
         <h2 style="color: #0F3D2E;">Pickup Reminder</h2>
         <p>Hello <strong>$name</strong>,</p>
         <p>This is a reminder that your waste collection is scheduled for:</p>
         <div style="background-color: #E7EFE9; padding: 15px; border-radius: 8px; margin: 15px 0;">
-          <p style="margin: 0; font-size: 18px;"><strong>📅 $date</strong></p>
+          <p style="margin: 0; font-size: 18px;"><strong> $date</strong></p>
           <p style="margin: 5px 0 0 0; color: #666;">⏰ $time</p>
         </div>
         <p>Please ensure your waste bin is placed outside by the scheduled time.</p>
@@ -283,10 +283,10 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #0F3D2E;">Payment Confirmed ✅</h2>
+        <h2 style="color: #0F3D2E;">Payment Confirmed </h2>
         <p>Hello <strong>$name</strong>,</p>
         <p>Your payment has been successfully processed.</p>
         <div style="background-color: #E7EFE9; padding: 15px; border-radius: 8px; margin: 15px 0;">
@@ -313,10 +313,10 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #C1443D;">⚠️ Subscription Expiring</h2>
+        <h2 style="color: #C1443D;"> Subscription Expiring</h2>
         <p>Hello <strong>$name</strong>,</p>
         <p>Your WastePro subscription will expire in <strong>$daysLeft day(s)</strong> (on $expiryDate).</p>
         <div style="background-color: #F8E4E2; padding: 15px; border-radius: 8px; margin: 15px 0;">
@@ -336,10 +336,10 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #0F3D2E;">📊 $title</h2>
+        <h2 style="color: #0F3D2E;"> $title</h2>
         <p>Hello <strong>$name</strong>,</p>
         <p>Your <strong>$title</strong> for <strong>$period</strong> has been generated.</p>
         <p>Please find the report attached or download it from the Reports section in the admin console.</p>
@@ -361,7 +361,7 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
         <h2 style="color: #0F3D2E;">Validate Your Pickup</h2>
@@ -389,10 +389,10 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #0F3D2E;">Pickup Confirmed ✅</h2>
+        <h2 style="color: #0F3D2E;">Pickup Confirmed </h2>
         <p>Hello <strong>$clientName</strong>,</p>
         <p>You confirmed the pickup of <strong>${poids.toStringAsFixed(1)} kg</strong> by <strong>$collectorName</strong> on <strong>$date</strong>.</p>
         <div style="background-color: #E7EFE9; padding: 15px; border-radius: 8px; margin: 15px 0;">
@@ -417,10 +417,10 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #C1443D;">⚠️ Pickup Issue Reported</h2>
+        <h2 style="color: #C1443D;"> Pickup Issue Reported</h2>
         <p>Hello <strong>$clientName</strong>,</p>
         <p>You reported an issue with <strong>$collectorName</strong>'s pickup on <strong>$date</strong>.</p>
         <div style="background-color: #F8E4E2; padding: 15px; border-radius: 8px; margin: 15px 0;">
@@ -440,7 +440,7 @@ class EmailService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
         <h2 style="color: #0F3D2E;">$title</h2>

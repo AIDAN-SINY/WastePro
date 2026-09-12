@@ -1445,7 +1445,7 @@ class _BoReviewSheetState extends State<_BoReviewSheet> {
                     DropdownMenuItem(
                       value: c.id,
                       child: Text(
-                        '${c.name} · ★ ${c.rating.toStringAsFixed(1)}',
+                        '${c.name} · rating ${c.rating.toStringAsFixed(1)}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1766,7 +1766,7 @@ class _BoReassignSheetState extends State<_BoReassignSheet> {
                     DropdownMenuItem(
                       value: c.id,
                       child: Text(
-                        '${c.name} · ★ ${c.rating.toStringAsFixed(1)}',
+                        '${c.name} · rating ${c.rating.toStringAsFixed(1)}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),

@@ -235,10 +235,10 @@ class TwoFactorService {
     return '''
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background-color: #0F3D2E; padding: 20px; border-radius: 10px 10px 0 0;">
-        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;">🗑️ WastePro</h1>
+        <h1 style="color: #E8A33D; margin: 0; font-size: 24px;"> WastePro</h1>
       </div>
       <div style="background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd;">
-        <h2 style="color: #0F3D2E;">🔐 Verification Code</h2>
+        <h2 style="color: #0F3D2E;"> Verification Code</h2>
         <p>Hello <strong>$name</strong>,</p>
         <p>Your two-factor authentication verification code is:</p>
         <div style="background-color: #E7EFE9; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">

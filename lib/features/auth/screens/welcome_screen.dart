@@ -19,7 +19,7 @@ class WelcomeScreen extends StatelessWidget {
   /// (app web : /login, /register) — sinon repli sur une push impérative
   /// (tests / contextes sans routeur).
   ///
-  /// ⚠️ La push impérative est le piège qui force à actualiser la page : un
+  ///  La push impérative est le piège qui force à actualiser la page : un
   /// écran poussé avec Navigator.push reste empilé AU-DESSUS du routeur, et
   /// router.go('/') après le login ne le retire pas. Le routeur, lui,
   /// remplace proprement la pile (/login → /).

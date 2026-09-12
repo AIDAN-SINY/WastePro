@@ -51,7 +51,7 @@ void main() async {
   // provider debug atteste TOUT appareil ; en production, Play Integrity
   // (Android) / App Attest (iOS).
   //
-  // ⚠️ PAS sur web : sans webProvider (reCAPTCHA), le plugin web jette un
+  //  PAS sur web : sans webProvider (reCAPTCHA), le plugin web jette un
   // `ArgumentError` à CHAQUE lancement (l'erreur « App Check activation
   // skipped » dans la console) — et App Check n'est pas appliqué côté
   // console, donc inutile de le déclencher ici. À réactiver le jour où un

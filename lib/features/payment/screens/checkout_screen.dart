@@ -19,7 +19,7 @@ import '../controllers/checkout_controller.dart';
 ///   ),
 /// ));
 /// ```
-class CheckoutScreen extends StatelessWidget {
+class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({
     super.key,
     required this.amount,
@@ -29,22 +29,17 @@ class CheckoutScreen extends StatelessWidget {
     this.onPaymentSuccess,
   });
 
-  /// Montant à payer (XAF).
   final num amount;
-
-  /// Description de la transaction.
   final String description;
-
-  /// Référence externe optionnelle.
   final String? externalReference;
-
-  /// Préfixe de la référence externe.
   final String txRefPrefix;
-
-  /// Callback après confirmation du paiement.
   final VoidCallback? onPaymentSuccess;
 
-  // Design system colors (consistent with existing app).
+  @override
+  State<CheckoutScreen> createState() => _CheckoutScreenState();
+}
+
+class _CheckoutScreenState extends State<CheckoutScreen> {
   static const Color _dGreen = Color(0xFF0F3D2E);
   static const Color _dGold = Color(0xFFD4A853);
   static const Color _dMuted = Color(0xFF7C8A80);
@@ -53,20 +48,35 @@ class CheckoutScreen extends StatelessWidget {
   static const Color _dBorder = Color(0xFFE8EBE9);
   static const Color _dText = Color(0xFF182620);
 
+  late final CheckoutController controller;
+  late final String _tag;
+
+  @override
+  void initState() {
+    super.initState();
+    _tag = 'checkout-${DateTime.now().microsecondsSinceEpoch}';
+    controller = Get.put(
+      CheckoutController(
+        amount: widget.amount,
+        description: widget.description,
+        externalReference: widget.externalReference,
+        txRefPrefix: widget.txRefPrefix,
+        onPaymentSuccess: widget.onPaymentSuccess,
+      ),
+      tag: _tag,
+    );
+  }
+
+  @override
+  void dispose() {
+    if (Get.isRegistered<CheckoutController>(tag: _tag)) {
+      Get.delete<CheckoutController>(tag: _tag);
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Enregistre le contrôleur GetX (sera automatiquement disposé quand
-    // l'écran est retiré du stack).
-    final controller = Get.put(
-      CheckoutController(
-        amount: amount,
-        description: description,
-        externalReference: externalReference,
-        txRefPrefix: txRefPrefix,
-        onPaymentSuccess: onPaymentSuccess,
-      ),
-    );
-
     return Scaffold(
       backgroundColor: _dBg,
       appBar: AppBar(
@@ -306,10 +316,10 @@ class CheckoutScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                'Demo mode — Campay sandbox caps payments at '
-                '${controller.chargeableAmount.toStringAsFixed(0)} XAF. '
-                'Your plan activates with a test charge; real prices apply '
-                'in production.',
+                'Demo mode - CamPay charges '
+                '${controller.chargeableAmount.toStringAsFixed(0)} XAF '
+                '(plan ${controller.displayAmount.toStringAsFixed(0)} XAF shown above). '
+                'Real prices apply in production.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   color: _dMuted,
@@ -407,7 +417,7 @@ class CheckoutScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  description,
+                  widget.description,
                   style: GoogleFonts.sora(
                     color: _dText,
                     fontSize: 14,
@@ -422,13 +432,27 @@ class CheckoutScreen extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            '${amount.toStringAsFixed(0)} XAF',
-            style: GoogleFonts.sora(
-              color: _dGreen,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${widget.amount.toStringAsFixed(0)} XAF',
+                style: GoogleFonts.sora(
+                  color: _dGreen,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (AppConfig.isCampayDemo)
+                Text(
+                  'Demo: ${controller.chargeableAmount.toStringAsFixed(0)} XAF',
+                  style: GoogleFonts.inter(
+                    color: _dGold,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
           ),
         ],
       ),

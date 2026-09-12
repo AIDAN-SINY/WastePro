@@ -102,7 +102,7 @@ class FirebaseAuthBackend implements AuthBackend {
     required String email,
     required String password,
   }) async {
-    // ⚠️ PAS de `fetchSignInMethodsForEmail` ici. Cette API devait départager
+    //  PAS de `fetchSignInMethodsForEmail` ici. Cette API devait départager
     // « aucun compte » de « mauvais mot de passe », mais avec la protection
     // contre l'énumération d'emails activée sur le projet (réglage
     // Identity Platform), elle renvoie une liste VIDE même pour un compte

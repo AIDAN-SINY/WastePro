@@ -122,7 +122,7 @@ class _FrequenceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BoItemCard(
-      avatarText: '🔄',
+      avatarText: 'Fq',
       title: frequence.libelle,
       subtitle: 'Every ${frequence.jours} days',
       status: 'Active',

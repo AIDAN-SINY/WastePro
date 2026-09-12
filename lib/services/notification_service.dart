@@ -432,7 +432,7 @@ class NotificationService {
   }) async {
     await sendNotificationToUser(
       userId: collectorId,
-      title: 'Pickup validated from client $clientName ✓',
+      title: 'Pickup validated from client $clientName ',
       body: 'The QR code was scanned: ${poids.toStringAsFixed(1)} kg collected on $date is confirmed by the client.',
       data: {
         'type': 'pickup_validated',

@@ -59,18 +59,16 @@ void main() {
       expect(doc.data()!['status'], 'cancelled');
     });
 
-    test('in demo mode, the amount is capped at 25 XAF', () async {
+    test('in demo mode, CamPay is charged 1 XAF (plan price is display-only)', () async {
       final db = FakeFirebaseFirestore();
-      // Token configured → charge() goes up to CamPay initiation.
       final service = PaymentService(
         db: db,
         campay: CampayService(token: 'demo'),
       );
 
-      // The demo cap (25 XAF) applies to the billed amount.
-      expect(service.demoChargeableAmount(3000), 25);
-      expect(service.demoChargeableAmount(25), 25);
-      expect(service.demoChargeableAmount(10), 10);
+      expect(service.demoChargeableAmount(3000), 1);
+      expect(service.demoChargeableAmount(5500), 1);
+      expect(service.demoChargeableAmount(1), 1);
     });
 
     test('isConfigured reflects the CamPay token', () {

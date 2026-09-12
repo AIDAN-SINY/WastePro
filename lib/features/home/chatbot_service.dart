@@ -6,6 +6,7 @@ library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
+import '../../services/huggingface_chat_service.dart';
 
 /// Supported languages for the chatbot.
 enum Lang { en, fr }
@@ -13,124 +14,124 @@ enum Lang { en, fr }
 /// Translation keys and their localised strings.
 Map<String, Map<Lang, String>> _translations = {
   'confirm_yes': {
-    Lang.en: "Great! 😊",
-    Lang.fr: "Super ! 😊",
+    Lang.en: "Great!",
+    Lang.fr: "Super !",
   },
   'confirm_no': {
-    Lang.en: "No problem! I've cancelled that. 👍",
-    Lang.fr: "Pas de souci ! J'ai annulé. 👍",
+    Lang.en: "No problem! I've cancelled that.",
+    Lang.fr: "Pas de souci ! J'ai annulé.",
   },
   'greeting': {
-    Lang.en: "Hey there! 👋 I'm WasteBot, your WastePro assistant.\n\nHow can I help you today?",
-    Lang.fr: "Salut ! 👋 Je suis WasteBot, votre assistant WastePro.\n\nComment puis-je vous aider aujourd'hui ?",
+    Lang.en: "Hey there! I'm WasteBot, your WastePro assistant.\n\nHow can I help you today?",
+    Lang.fr: "Salut ! Je suis WasteBot, votre assistant WastePro.\n\nComment puis-je vous aider aujourd'hui ?",
   },
   'thanks': {
-    Lang.en: "You're welcome! 😊 Anything else?",
-    Lang.fr: "De rien ! 😊 Autre chose ?",
+    Lang.en: "You're welcome! Anything else?",
+    Lang.fr: "De rien ! Autre chose ?",
   },
   'escalate': {
-    Lang.en: "I'll connect you with an Agency representative. 📞\n\nThey'll contact you shortly. Is there anything else I can help with?",
-    Lang.fr: "Je vais vous connecter à un représentant de l'agence. 📞\n\nIls vous contacteront sous peu. Puis-je vous aider avec autre chose ?",
+    Lang.en: "I'll connect you with an Agency representative. \n\nThey'll contact you shortly. Is there anything else I can help with?",
+    Lang.fr: "Je vais vous connecter à un représentant de l'agence. \n\nIls vous contacteront sous peu. Puis-je vous aider avec autre chose ?",
   },
   'upgrade': {
-    Lang.en: "Easy! 💪\n\n1. Go to Subscription Plan\n2. Choose your new plan\n3. Pay via MoMo/Orange Money\n\nTakes 30 seconds! ⚡",
-    Lang.fr: "Facile ! 💪\n\n1. Allez dans Abonnement\n2. Choisissez votre nouveau plan\n3. Payez via MoMo/Orange Money\n\nÇa prend 30 secondes ! ⚡",
+    Lang.en: "Easy! \n\n1. Go to Subscription Plan\n2. Choose your new plan\n3. Pay via MoMo/Orange Money\n\nTakes 30 seconds!",
+    Lang.fr: "Facile ! \n\n1. Allez dans Abonnement\n2. Choisissez votre nouveau plan\n3. Payez via MoMo/Orange Money\n\nÇa prend 30 secondes !",
   },
   'plan_difference': {
-    Lang.en: "It's all about pickup frequency! 📅\n\n🟢 Essential (5k) → 2 pickups/week\n🟡 Standard (10k) → 3 pickups/week\n🔴 Premium (15k) → Daily pickups\n\nMore pickups = cleaner area! 🌿",
-    Lang.fr: "C'est tout une question de fréquence de collecte ! 📅\n\n🟢 Essentiel (5k) → 2 collectes/semaine\n🟡 Standard (10k) → 3 collectes/semaine\n🔴 Premium (15k) → Collectes quotidiennes\n\nPlus de collectes = zone plus propre ! 🌿",
+    Lang.en: "It's all about pickup frequency! \n\n Essential (5k) → 2 pickups/week\n Standard (10k) → 3 pickups/week\n Premium (15k) → Daily pickups\n\nMore pickups = cleaner area!",
+    Lang.fr: "C'est tout une question de fréquence de collecte ! \n\n Essentiel (5k) → 2 collectes/semaine\n Standard (10k) → 3 collectes/semaine\n Premium (15k) → Collectes quotidiennes\n\nPlus de collectes = zone plus propre !",
   },
   'plans': {
-    Lang.en: "We've got 3 plans! 🎉\n\n🟢 Essential — 5,000 XAF/mo → 2x/week\n🟡 Standard — 10,000 XAF/mo → 3x/week\n🔴 Premium — 15,000 XAF/mo → daily",
-    Lang.fr: "Nous avons 3 plans ! 🎉\n\n🟢 Essentiel — 5 000 XAF/mois → 2x/semaine\n🟡 Standard — 10 000 XAF/mois → 3x/semaine\n🔴 Premium — 15 000 XAF/mois → quotidien",
+    Lang.en: "We've got 3 plans! \n\n Essential — 5,000 XAF/mo → 2x/week\n Standard — 10,000 XAF/mo → 3x/week\n Premium — 15,000 XAF/mo → daily",
+    Lang.fr: "Nous avons 3 plans ! \n\n Essentiel — 5 000 XAF/mois → 2x/semaine\n Standard — 10 000 XAF/mois → 3x/semaine\n Premium — 15 000 XAF/mois → quotidien",
   },
   'support': {
-    Lang.en: "We're here for you! 💚\n\n📱 WhatsApp: +237 696 713 899\n📞 Call: +237 696 713 899\n📧 Email: support@wastepro.cm",
-    Lang.fr: "Nous sommes là pour vous ! 💚\n\n📱 WhatsApp: +237 696 713 899\n📞 Appel: +237 696 713 899\n📧 Email: support@wastepro.cm",
+    Lang.en: "We're here for you! \n\n WhatsApp: +237 696 713 899\n Call: +237 696 713 899\n Email: support@wastepro.cm",
+    Lang.fr: "Nous sommes là pour vous ! \n\n WhatsApp: +237 696 713 899\n Appel: +237 696 713 899\n Email: support@wastepro.cm",
   },
   'report_issue': {
-    Lang.en: "Super quick! 🛠️\n\n1. Tap Report Issue\n2. Pick a category\n3. Add details\n4. Submit!",
-    Lang.fr: "Super rapide ! 🛠️\n\n1. Touchez Signaler un problème\n2. Choisissez une catégorie\n3. Ajoutez des détails\n4. Envoyez !",
+    Lang.en: "Super quick! \n\n1. Tap Report Issue\n2. Pick a category\n3. Add details\n4. Submit!",
+    Lang.fr: "Super rapide ! \n\n1. Touchez Signaler un problème\n2. Choisissez une catégorie\n3. Ajoutez des détails\n4. Envoyez !",
   },
   'how_it_works': {
-    Lang.en: "Super simple! 🚛✨\n\n1. Pick a plan\n2. We assign a collector to your zone\n3. Collector picks up on scheduled days\n4. Collector marks the pickup done\n5. You get a notification to confirm\n6. Confirm or dispute the pickup!\n7. Track everything on your dashboard!",
-    Lang.fr: "Super simple ! 🚛✨\n\n1. Choisissez un plan\n2. On vous assigne un collecteur dans votre zone\n3. Le collecteur vient les jours prévus\n4. Le collecteur marque la collecte\n5. Vous recevez une notification pour confirmer\n6. Confirmez ou contestez la collecte !\n7. Tout garder un œil sur votre tableau de bord !",
+    Lang.en: "Super simple! \n\n1. Pick a plan\n2. We assign a collector to your zone\n3. Collector picks up on scheduled days\n4. Collector marks the pickup done\n5. You get a notification to confirm\n6. Confirm or dispute the pickup!\n7. Track everything on your dashboard!",
+    Lang.fr: "Super simple ! \n\n1. Choisissez un plan\n2. On vous assigne un collecteur dans votre zone\n3. Le collecteur vient les jours prévus\n4. Le collecteur marque la collecte\n5. Vous recevez une notification pour confirmer\n6. Confirmez ou contestez la collecte !\n7. Tout garder un œil sur votre tableau de bord !",
   },
   'validation': {
-    Lang.en: "Two-step now! 🔐\n\n1. Collector verifies with OTP or QR code\n2. You get a notification to confirm\n3. Tap Confirm — pickup is verified! ✅\n4. Or tap Report an issue to dispute\n\nAfter confirmation, the collector is credited and the pickup is complete! ✅",
-    Lang.fr: "Maintenant en deux étapes ! 🔐\n\n1. Le collecteur vérifie avec OTP ou code QR\n2. Vous recevez une notification pour confirmer\n3. Touchez Confirmer — collecte vérifiée ! ✅\n4. Ou Touchez Signaler un problème pour contester\n\nAprès confirmation, le collecteur est crédité et la collecte est terminée ! ✅",
+    Lang.en: "Two-step now! \n\n1. Collector verifies with OTP or QR code\n2. You get a notification to confirm\n3. Tap Confirm — pickup is verified! \n4. Or tap Report an issue to dispute\n\nAfter confirmation, the collector is credited and the pickup is complete!",
+    Lang.fr: "Maintenant en deux étapes ! \n\n1. Le collecteur vérifie avec OTP ou code QR\n2. Vous recevez une notification pour confirmer\n3. Touchez Confirmer — collecte vérifiée ! \n4. Ou Touchez Signaler un problème pour contester\n\nAprès confirmation, le collecteur est crédité et la collecte est terminée !",
   },
   'missed_pickup': {
-    Lang.en: "No stress! 😌\n\n• Your collector will note it\n• Book an extra pickup (1,000 XAF)\n• Tap Request Pickup on dashboard\n\nWe've got your back! 🤝",
-    Lang.fr: "Pas de stress ! 😌\n\n• Votre collecteur le notera\n• Réservez une collecte supplémentaire (1 000 XAF)\n• Touchez Demander une collecte sur le tableau de bord\n\nOn est là pour vous ! 🤝",
+    Lang.en: "No stress! \n\n• Your collector will note it\n• Book an extra pickup (1,000 XAF)\n• Tap Request Pickup on dashboard\n\nWe've got your back!",
+    Lang.fr: "Pas de stress ! \n\n• Votre collecteur le notera\n• Réservez une collecte supplémentaire (1 000 XAF)\n• Touchez Demander une collecte sur le tableau de bord\n\nOn est là pour vous !",
   },
   'payment_methods': {
-    Lang.en: "Mobile Money! 📱💰\n\n• MTN MoMo\n• Orange Money\n\nPowered by CamPay — secure & instant! 🔒",
-    Lang.fr: "Monnaie mobile ! 📱💰\n\n• MTN MoMo\n• Orange Money\n\nExécuté par CamPay — sécurisé et instantané ! 🔒",
+    Lang.en: "Mobile Money! \n\n• MTN MoMo\n• Orange Money\n\nPowered by CamPay — secure & instant!",
+    Lang.fr: "Monnaie mobile ! \n\n• MTN MoMo\n• Orange Money\n\nExécuté par CamPay — sécurisé et instantané !",
   },
   'extra_pickup': {
-    Lang.en: "Easy! 📦\n\n1. Tap Request Pickup\n2. Pay 1,000 XAF via MoMo/Orange Money\n3. Collector arrives within 24h! ⏰",
-    Lang.fr: "Facile ! 📦\n\n1. Touchez Demander une collecte\n2. Payez 1 000 XAF via MoMo/Orange Money\n3. Le collecteur arrive sous 24h ! ⏰",
+    Lang.en: "Easy! \n\n1. Tap Request Pickup\n2. Pay 1,000 XAF via MoMo/Orange Money\n3. Collector arrives within 24h! ⏰",
+    Lang.fr: "Facile ! \n\n1. Touchez Demander une collecte\n2. Payez 1 000 XAF via MoMo/Orange Money\n3. Le collecteur arrive sous 24h ! ⏰",
   },
   'update_address': {
-    Lang.en: "Here's how! 📍\n\n1. Go to Profile\n2. Tap Edit Profile\n3. Update your zone",
-    Lang.fr: "Voici comment ! 📍\n\n1. Allez dans Profil\n2. Touchez Modifier le profil\n3. Mettez à jour votre zone",
+    Lang.en: "Here's how! \n\n1. Go to Profile\n2. Tap Edit Profile\n3. Update your zone",
+    Lang.fr: "Voici comment ! \n\n1. Allez dans Profil\n2. Touchez Modifier le profil\n3. Mettez à jour votre zone",
   },
   'password': {
-    Lang.en: "Quick fix! 🔑\n\n1. Go to Profile → Settings\n2. Update your password\n\nForgot it? Contact support via WhatsApp! 💬",
-    Lang.fr: "Réponse rapide ! 🔑\n\n1. Allez dans Profil → Paramètres\n2. Modifiez votre mot de passe\n\nOublié ? Contactez le support via WhatsApp ! 💬",
+    Lang.en: "Quick fix! \n\n1. Go to Profile → Settings\n2. Update your password\n\nForgot it? Contact support via WhatsApp!",
+    Lang.fr: "Réponse rapide ! \n\n1. Allez dans Profil → Paramètres\n2. Modifiez votre mot de passe\n\nOublié ? Contactez le support via WhatsApp !",
   },
   'track': {
-    Lang.en: "Live tracking! 📍\n\nScroll to the Tracking section — you'll see a mini-map with your collector's position! 🗺️",
-    Lang.fr: "Suivi en direct ! 📍\n\nFaites défiler vers la section Suivi — vous verrez une mini-carte avec la position de votre collecteur ! 🗺️",
+    Lang.en: "Live tracking! \n\nScroll to the Tracking section — you'll see a mini-map with your collector's position!",
+    Lang.fr: "Suivi en direct ! \n\nFaites défiler vers la section Suivi — vous verrez une mini-carte avec la position de votre collecteur !",
   },
   'need_login': {
     Lang.en: "I need you to be logged in for that. Please log in first!",
     Lang.fr: "Je besoin que vous soyez connecté pour ça. Connectez-vous d'abord !",
   },
   'unknown': {
-    Lang.en: "I'm not sure about that one 🤔\n\nTry asking about:\n💰 Plans & pricing\n🚛 How collection works\n💳 Payment methods\n📅 My next pickup\n🛠️ Reporting issues",
-    Lang.fr: "Je ne suis pas sûr de ça 🤔\n\nEssayez de demander :\n💰 Plans et prix\n🚛 Comment la collecte fonctionne\n💳 Méthodes de paiement\n📅 Ma prochaine collecte\n🛠️ Signaler des problèmes",
+    Lang.en: "I'm not sure about that one \n\nTry asking about:\n Plans & pricing\n How collection works\n Payment methods\n My next pickup\n Reporting issues",
+    Lang.fr: "Je ne suis pas sûr de ça \n\nEssayez de demander :\n Plans et prix\n Comment la collecte fonctionne\n Méthodes de paiement\n Ma prochaine collecte\n Signaler des problèmes",
   },
   'no_schedule': {
-    Lang.en: "No pickup schedule set up yet. 📅\n\nSubscribe to a plan to get regular pickups!",
-    Lang.fr: "Pas encore de calendrier de collecte configuré. 📅\n\nAbonnez-vous à un plan pour des collectes régulières !",
+    Lang.en: "No pickup schedule set up yet. \n\nSubscribe to a plan to get regular pickups!",
+    Lang.fr: "Pas encore de calendrier de collecte configuré. \n\nAbonnez-vous à un plan pour des collectes régulières !",
   },
   'no_subscription': {
-    Lang.en: "You don't have an active subscription yet. 📋\n\nChoose a plan to start getting regular pickups!",
-    Lang.fr: "Vous n'avez pas encore d'abonnement actif. 📋\n\nChoisissez un plan pour commencer à recevoir des collectes régulières !",
+    Lang.en: "You don't have an active subscription yet. \n\nChoose a plan to start getting regular pickups!",
+    Lang.fr: "Vous n'avez pas encore d'abonnement actif. \n\nChoisissez un plan pour commencer à recevoir des collectes régulières !",
   },
   'no_pickup_today': {
-    Lang.en: "No pickup scheduled for today. 📅\n\nCheck your contract card for your next scheduled pickup!",
-    Lang.fr: "Pas de collecte prévue aujourd'hui. 📅\n\nRegardez votre carte contrat pour votre prochaine collecte !",
+    Lang.en: "No pickup scheduled for today. \n\nCheck your contract card for your next scheduled pickup!",
+    Lang.fr: "Pas de collecte prévue aujourd'hui. \n\nRegardez votre carte contrat pour votre prochaine collecte !",
   },
   'no_payments': {
-    Lang.en: "No payment history yet. 📋\n\nYour first payment will appear here after you subscribe!",
-    Lang.fr: "Pas encore d'historique de paiement. 📋\n\nVotre premier paiement apparaîtra ici après votre abonnement !",
+    Lang.en: "No payment history yet. \n\nYour first payment will appear here after you subscribe!",
+    Lang.fr: "Pas encore d'historique de paiement. \n\nVotre premier paiement apparaîtra ici après votre abonnement !",
   },
   'no_notifications': {
-    Lang.en: "You're all caught up! No unread notifications. ✅",
-    Lang.fr: "Vous êtes à jour ! Aucune notification non lue. ✅",
+    Lang.en: "You're all caught up! No unread notifications.",
+    Lang.fr: "Vous êtes à jour ! Aucune notification non lue.",
   },
   'complaint_flow_category': {
-    Lang.en: "What type of issue?\n\n1️⃣ Missed collection\n2️⃣ Overflowing bin\n3️⃣ Illegal dumping\n4️⃣ Damaged bin\n5️⃣ Other",
-    Lang.fr: "Quel type de problème ?\n\n1️⃣ Collecte manquée\n2️⃣ Benne débordée\n3️⃣ Décharge illégale\n4️⃣ Benne endommagée\n5️⃣ Autre",
+    Lang.en: "What type of issue?\n\n1 Missed collection\n2 Overflowing bin\n3 Illegal dumping\n4 Damaged bin\n5 Other",
+    Lang.fr: "Quel type de problème ?\n\n1 Collecte manquée\n2 Benne débordée\n3 Décharge illégale\n4 Benne endommagée\n5 Autre",
   },
   'complaint_describe': {
-    Lang.en: "Got it — **{category}** 📝\n\nCan you describe what happened?",
-    Lang.fr: "Compris — **{category}** 📝\n\nPouvez-vous décrire ce qui s'est passé ?",
+    Lang.en: "Got it — **{category}** \n\nCan you describe what happened?",
+    Lang.fr: "Compris — **{category}** \n\nPouvez-vous décrire ce qui s'est passé ?",
   },
   'complaint_category_select': {
     Lang.en: "Please reply with a number 1-5, or describe the issue in your own words.",
     Lang.fr: "Veuillez répondre par un numéro 1-5, ou décrivez le problème en vos propres mots.",
   },
   'complaint_confirmation': {
-    Lang.en: "Here's your complaint:\n\n📋 **Type:** {category}\n📝 **Details:** {description}\n\nSubmit this complaint?",
-    Lang.fr: "Voici votre plainte :\n\n📋 **Type :** {category}\n📝 **Détails :** {description}\n\nSoumettre cette plainte ?",
+    Lang.en: "Here's your complaint:\n\n **Type:** {category}\n **Details:** {description}\n\nSubmit this complaint?",
+    Lang.fr: "Voici votre plainte :\n\n **Type :** {category}\n **Détails :** {description}\n\nSoumettre cette plainte ?",
   },
   'complaint_submitted': {
-    Lang.en: "Your complaint has been submitted! ✅\n\nYour agency will review it. You'll get a notification when there's an update.",
-    Lang.fr: "Votre plainte a été soumise ! ✅\n\nVotre agence l'examinera. Vous recevrez une notification quand il y aura une mise à jour.",
+    Lang.en: "Your complaint has been submitted! \n\nYour agency will review it. You'll get a notification when there's an update.",
+    Lang.fr: "Votre plainte a été soumise ! \n\nVotre agence l'examinera. Vous recevrez une notification quand il y aura une mise à jour.",
   },
   'pickup_ask_date': {
     Lang.en: "Sure! What date for the pickup?\n\n(e.g. 'tomorrow', 'Friday', 'August 25')",
@@ -141,28 +142,28 @@ Map<String, Map<Lang, String>> _translations = {
     Lang.fr: "Je n'ai pas bien saisi la date. Pouvez-vous réessayer ?\n\nExemples : 'demain', 'vendredi', '25 août'",
   },
   'pickup_confirmation': {
-    Lang.en: "Here's your pickup request:\n\n📦 **Type:** On-demand pickup\n📅 **Date:** {date}\n📍 **Address:** {address}\n💰 **Cost:** 1,000 XAF (via Mobile Money)\n\nSubmit this request?",
-    Lang.fr: "Voici votre demande de collecte :\n\n📦 **Type :** Collecte à la demande\n📅 **Date :** {date}\n📍 **Adresse :** {address}\n💰 **Coût :** 1 000 XAF (via Monnaie mobile)\n\nSoumettre cette demande ?",
+    Lang.en: "Here's your pickup request:\n\n **Type:** On-demand pickup\n **Date:** {date}\n **Address:** {address}\n **Cost:** 1,000 XAF (via Mobile Money)\n\nSubmit this request?",
+    Lang.fr: "Voici votre demande de collecte :\n\n **Type :** Collecte à la demande\n **Date :** {date}\n **Adresse :** {address}\n **Coût :** 1 000 XAF (via Monnaie mobile)\n\nSoumettre cette demande ?",
   },
   'payment_intro': {
     Lang.en: "To proceed with payment, I'll redirect you to the payment screen.\n\nYou'll receive a USSD prompt to confirm with your PIN.\n\nProceed with payment?",
     Lang.fr: "Pour procéder au paiement, je vous redirigerai vers l'écran de paiement.\n\nVous recevrez une invite USSD pour confirmer avec votre PIN.\n\nProcéder au paiement ?",
   },
   'payment_initiated': {
-    Lang.en: "Redirecting to payment... 💳\n\nYou'll receive a USSD prompt on your phone.",
-    Lang.fr: "Redirection vers le paiement... 💳\n\nVous recevrez une invite USSD sur votre téléphone.",
+    Lang.en: "Redirecting to payment... \n\nYou'll receive a USSD prompt on your phone.",
+    Lang.fr: "Redirection vers le paiement... \n\nVous recevrez une invite USSD sur votre téléphone.",
   },
   'pickup_submitted': {
-    Lang.en: "Pickup request submitted! ✅📦\n\nYour collector will be notified. You'll get a confirmation once it's scheduled.",
-    Lang.fr: "Demande de collecte soumise ! ✅📦\n\nVotre collecteur sera notifié. Vous recevrez une confirmation une fois planifiée.",
+    Lang.en: "Pickup request submitted! \n\nYour collector will be notified. You'll get a confirmation once it's scheduled.",
+    Lang.fr: "Demande de collecte soumise ! \n\nVotre collecteur sera notifié. Vous recevrez une confirmation une fois planifiée.",
   },
   'complaint_plain_category': {
-    Lang.en: "Got it — **{category}** 📝\n\nCan you describe what happened?",
-    Lang.fr: "Compris — **{category}** 📝\n\nDécrivez ce qui s'est passé, s'il vous plaît ?",
+    Lang.en: "Got it — **{category}** \n\nCan you describe what happened?",
+    Lang.fr: "Compris — **{category}** \n\nDécrivez ce qui s'est passé, s'il vous plaît ?",
   },
   'complaint_plain_describe': {
-    Lang.en: "Got it — **{category}** 📝\n\nCan you describe what happened?",
-    Lang.fr: "Compris — **{category}** 📝\n\nDécrivez ce qui s'est passé, s'il vous plaît ?",
+    Lang.en: "Got it — **{category}** \n\nCan you describe what happened?",
+    Lang.fr: "Compris — **{category}** \n\nDécrivez ce qui s'est passé, s'il vous plaît ?",
   },
   'pickup_error': {
     Lang.en: "Something went wrong. Let's start fresh! How can I help?",
@@ -185,8 +186,8 @@ Map<String, Map<Lang, String>> _translations = {
     Lang.fr: "Désolé, je n'ai pas pu soumettre votre demande. Réessayez.",
   },
   'see_you_soon': {
-    Lang.en: "Got it! I'll be here if you need anything else. Have a great day! 👋",
-    Lang.fr: "Compris ! Je serai là si vous avez besoin de quoi que ce soit. Bonne journée ! 👋",
+    Lang.en: "Got it! I'll be here if you need anything else. Have a great day!",
+    Lang.fr: "Compris ! Je serai là si vous avez besoin de quoi que ce soit. Bonne journée !",
   },
   'confirm_slip': {
     Lang.en: "Cancelled.",
@@ -209,22 +210,33 @@ class ChatReply {
   final List<String> suggestions;
 }
 
-/// Simple chatbot — FAQ + Firestore backend.
+/// Simple chatbot — FAQ + Firestore + Hugging Face AI fallback.
 class ChatbotService {
-  ChatbotService({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
+  ChatbotService({
+    FirebaseFirestore? db,
+    HuggingFaceChatService? ai,
+  })  : _db = db ?? FirebaseFirestore.instance,
+        _ai = ai ?? HuggingFaceChatService();
+
   final FirebaseFirestore _db;
+  final HuggingFaceChatService _ai;
+
+  /// Recent turns for AI context: `{role, content}`.
+  final List<Map<String, String>> _aiHistory = [];
 
   // Conversation state for multi-step flows
   String _state = 'idle';
   final Map<String, dynamic> _buffer = {};
   Lang _lang = Lang.en;
 
+  bool get isAiConfigured => _ai.isConfigured;
+
   /// Process a user message and return a reply.
   Future<ChatReply> process(String message, {UserModel? user}) async {
     final text = message.trim().toLowerCase();
     if (text.isEmpty) {
       return _reply(
-        text: _lang == Lang.fr ? "Qu'est-ce qui vous préoccupe ? 🤔" : "What's on your mind? 🤔",
+        text: _lang == Lang.fr ? "Qu'est-ce qui vous préoccupe ? " : "What's on your mind? ",
         intent: 'unknown',
       );
     }
@@ -251,6 +263,7 @@ class ChatbotService {
   void reset() {
     _state = 'idle';
     _buffer.clear();
+    _aiHistory.clear();
   }
 
   // ── Intent Detection ──────────────────────────────────────────────
@@ -263,8 +276,8 @@ class ChatbotService {
     // French conversational greetings
     if (RegExp(r'\b(comment tu vas|comment ça va|comment ca va|ça va|ca va|tu vas bien|comment allez|comment vas)\b').hasMatch(text)) {
       return _reply(text: _lang == Lang.fr
-          ? "Ça va bien, merci ! 😊 Je suis WasteBot, votre assistant WastePro.\n\nComment puis-je vous aider aujourd'hui ?"
-          : "I'm doing well, thanks! 😊 I'm WasteBot, your WastePro assistant.\n\nHow can I help you today?", intent: 'greeting');
+          ? "Ça va bien, merci !  Je suis WasteBot, votre assistant WastePro.\n\nComment puis-je vous aider aujourd'hui ?"
+          : "I'm doing well, thanks!  I'm WasteBot, your WastePro assistant.\n\nHow can I help you today?", intent: 'greeting');
     }
     if (RegExp(r"\b(thanks?|thank you|merci|m'merci|merci beaucoup)\b").hasMatch(text)) {
       return _reply(text: _t('thanks'), intent: 'thanks');
@@ -359,8 +372,52 @@ class ChatbotService {
       return _reply(text: _t('need_login'), intent: 'need_login');
     }
 
-    // Fallback
-    return _reply(text: _t('unknown'), intent: 'unknown', suggestions: ['What plans?', 'Next pickup', 'Payment methods']);
+    // Open questions → Hugging Face AI (with FAQ fallback).
+    return _aiReply(originalMessage);
+  }
+
+  /// Ask Hugging Face; on failure fall back to the local unknown FAQ.
+  Future<ChatReply> _aiReply(String originalMessage) async {
+    if (!_ai.isConfigured) {
+      return _reply(
+        text: _lang == Lang.fr
+            ? '${_t('unknown')}\n\nPour activer l\'IA WasteBot, ajoute HF_TOKEN dans ton fichier .env puis relance l\'app.'
+            : '${_t('unknown')}\n\nTo enable WasteBot AI, add HF_TOKEN to your .env file and restart the app.',
+        intent: 'unknown',
+        suggestions: ['What plans?', 'Next pickup', 'Payment methods'],
+      );
+    }
+
+    try {
+      final history = _aiHistory.length > 10
+          ? _aiHistory.sublist(_aiHistory.length - 10)
+          : List<Map<String, String>>.from(_aiHistory);
+
+      final answer = await _ai.chat(
+        userMessage: originalMessage,
+        french: _lang == Lang.fr,
+        history: history,
+      );
+
+      _aiHistory.add({'role': 'user', 'content': originalMessage});
+      _aiHistory.add({'role': 'assistant', 'content': answer});
+
+      return _reply(
+        text: answer,
+        intent: 'ai',
+        suggestions: _lang == Lang.fr
+            ? ['Tarifs', 'Paiement CamPay', 'Prochaine collecte']
+            : ['What plans?', 'CamPay payment', 'Next pickup'],
+      );
+    } catch (e) {
+      return _reply(
+        text: _lang == Lang.fr
+            ? 'IA indisponible pour le moment (${e.toString()}).\n\n${_t('unknown')}'
+            : 'AI is unavailable right now (${e.toString()}).\n\n${_t('unknown')}',
+        intent: 'unknown',
+        suggestions: ['What plans?', 'Next pickup', 'Payment methods'],
+      );
+    }
   }
 
   // ── Multi-step Flows ──────────────────────────────────────────────
@@ -659,8 +716,8 @@ class ChatbotService {
 
       return _reply(
         text: _lang == Lang.fr
-            ? "Votre prochaine collecte est le $formatted à $pickupTime ! 📅\n\n$countdown"
-            : "Your next pickup is $formatted at $pickupTime! 📅\n\nThat's $countdown",
+            ? "Votre prochaine collecte est le $formatted à $pickupTime ! \n\n$countdown"
+            : "Your next pickup is $formatted at $pickupTime! \n\nThat's $countdown",
         intent: 'next_pickup',
         suggestions: [_t('track'), _t('extra_pickup')],
       );
@@ -686,12 +743,12 @@ class ChatbotService {
         );
       }
 
-      final emoji = plan.toLowerCase().contains('premium') ? '🔴' : plan.toLowerCase().contains('standard') ? '🟡' : '🟢';
+      final emoji = plan.toLowerCase().contains('premium') ? '' : plan.toLowerCase().contains('standard') ? '' : '';
 
       return _reply(
         text: _lang == Lang.fr
-            ? "Oui, votre abonnement est actif ! ✅\n\n$emoji Plan : $plan\nStatut : Actif\n\nTout est prêt ! 🚛"
-            : "Yes, your subscription is active! ✅\n\n$emoji Plan: $plan\nStatus: Active\n\nYou're all set! 🚛",
+            ? "Oui, votre abonnement est actif ! \n\n$emoji Plan : $plan\nStatut : Actif\n\nTout est prêt ! "
+            : "Yes, your subscription is active! \n\n$emoji Plan: $plan\nStatus: Active\n\nYou're all set! ",
         intent: 'subscription_active',
         suggestions: [_t('track'), 'Change plan'],
       );
@@ -717,10 +774,10 @@ class ChatbotService {
             final isDone = status == 'completed' || status == 'paid';
             return _reply(
               text: isDone
-                  ? (_lang == Lang.fr ? "Oui ! Votre benne a été collectée aujourd'hui ! ✅✅" : "Yes! Your bin was collected today! ✅✅")
+                  ? (_lang == Lang.fr ? "Oui ! Votre benne a été collectée aujourd'hui ! " : "Yes! Your bin was collected today! ")
                   : (_lang == Lang.fr
-                      ? "Oui, une collecte est prévue aujourd'hui ! 🗑️📅\n\nVotre collecteur est en route !"
-                      : "Yes, a pickup is scheduled for today! 🗑️📅\n\nYour collector is on the way!"),
+                      ? "Oui, une collecte est prévue aujourd'hui ! \n\nVotre collecteur est en route !"
+                      : "Yes, a pickup is scheduled for today! \n\nYour collector is on the way!"),
               intent: 'pickup_today',
               suggestions: [_t('track')],
             );
@@ -741,8 +798,8 @@ class ChatbotService {
         if (collectionDays.contains(todayName)) {
           return _reply(
             text: _lang == Lang.fr
-                ? "Oui, une collecte est prévue aujourd'hui ! 🗑️📅\n\nVotre collecteur est en route !"
-                : "Yes, a pickup is scheduled for today! 🗑️📅\n\nYour collector is on the way!",
+                ? "Oui, une collecte est prévue aujourd'hui ! \n\nVotre collecteur est en route !"
+                : "Yes, a pickup is scheduled for today! \n\nYour collector is on the way!",
             intent: 'pickup_today',
             suggestions: [_t('track')],
           );
@@ -771,14 +828,14 @@ class ChatbotService {
         );
       }
 
-      final header = _lang == Lang.fr ? "Paiements récents : 💳\n\n" : "Recent payments: 💳\n\n";
+      final header = _lang == Lang.fr ? "Paiements récents : \n\n" : "Recent payments: \n\n";
       final buffer = StringBuffer(header);
       for (final doc in snap.docs) {
         final d = doc.data();
         final amount = d['amount'];
         final desc = d['description'] ?? d['type'] ?? '';
         final status = d['status'] ?? '';
-        final icon = status == 'successful' ? '✅' : status == 'failed' ? '❌' : '⏳';
+        final icon = status == 'successful' ? '' : status == 'failed' ? '' : '⏳';
         buffer.writeln("$icon $amount XAF — $desc");
       }
 
@@ -798,8 +855,8 @@ class ChatbotService {
       }
 
       final countText = _lang == Lang.fr
-          ? "${unread.length} notification${unread.length > 1 ? 's' : ''} non lue${unread.length > 1 ? 's' : ''} : 🔔\n\n"
-          : "${unread.length} unread notification${unread.length > 1 ? 's' : ''}: 🔔\n\n";
+          ? "${unread.length} notification${unread.length > 1 ? 's' : ''} non lue${unread.length > 1 ? 's' : ''} : \n\n"
+          : "${unread.length} unread notification${unread.length > 1 ? 's' : ''}: \n\n";
       final buffer = StringBuffer(countText);
       for (final doc in unread.take(5)) {
         final d = doc.data();

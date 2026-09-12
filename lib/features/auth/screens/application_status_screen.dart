@@ -101,7 +101,7 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
   void _goToLogin() {
     final router = GoRouter.maybeOf(context);
     if (router != null) {
-      // ⚠️ L'écran de statut est poussé IMPÉRATIVEMENT au-dessus du routeur
+      //  L'écran de statut est poussé IMPÉRATIVEMENT au-dessus du routeur
       // (depuis le login ou la carte de succès). Il faut le retirer avant de
       // laisser le routeur naviguer — sinon il resterait empilé au-dessus de
       // la destination et bloquerait la navigation (piège documenté dans
@@ -408,7 +408,7 @@ class _ApplicationStatusScreenState extends State<ApplicationStatusScreen> {
       icon: Icons.check_circle_rounded,
       iconColor: const Color(0xFF33D17E),
       iconBg: const Color(0xFF33D17E).withValues(alpha: 0.16),
-      title: 'Approved! 🎉',
+      title: 'Approved!',
       message:
           'Your application was approved and a collector has been assigned '
           'to you. Please log in to access your dashboard and start '
