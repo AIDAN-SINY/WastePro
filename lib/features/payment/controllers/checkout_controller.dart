@@ -45,7 +45,7 @@ extension PaymentMethodLabel on PaymentMethod {
 /// Checkout via CamPay.
 ///
 /// UI shows the plan price (e.g. 3000 XAF). In demo, CamPay is charged
-/// only [AppConfig.campayDemoMaxAmount] (1 XAF).
+/// only [AppConfig.campayDemoMaxAmount] (25 XAF).
 class CheckoutController extends GetxController {
   CheckoutController({
     required this.amount,

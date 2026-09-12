@@ -45,7 +45,8 @@ class PaymentService {
   /// True when the CamPay token has been configured.
   bool get isConfigured => _campay.isConfigured;
 
-  /// Amount charged: in demo always 1 XAF (plan price is display-only).
+  /// Amount charged: in demo always [AppConfig.campayDemoMaxAmount] XAF
+  /// (plan price is display-only).
   double demoChargeableAmount(double amount) =>
       AppConfig.isCampayDemo ? AppConfig.campayDemoMaxAmount : amount;
 

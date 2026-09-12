@@ -29,7 +29,7 @@ class AppConfig {
     return campayBaseUrl.contains('demo');
   }
   /// Demo charge sent to CamPay while UI still shows full plan prices.
-  static const double campayDemoMaxAmount = 1;
+  static const double campayDemoMaxAmount = 25;
 
   /// Default currency (Cameroon).
   static const String currency = 'XAF';
