@@ -73,20 +73,12 @@ class CheckoutController extends GetxController {
   String _token = '';
   String _reference = '';
 
-  @override
-  void onInit() {
-    super.onInit();
-    // Prefill MoMo phone from the signed-in client when available.
-    try {
-      final ctx = Get.context;
-      if (ctx != null) {
-        final user = Provider.of<UserProvider>(ctx, listen: false).user;
-        final phone = user?.phoneNumber.trim() ?? '';
-        if (phone.isNotEmpty) {
-          phoneNumber.value = phone;
-        }
-      }
-    } catch (_) {}
+  /// Bound from [CheckoutScreen] — required because the app uses
+  /// MaterialApp (not GetMaterialApp), so Get.snackbar / Get.context crash.
+  BuildContext? hostContext;
+
+  void bindHost(BuildContext context) {
+    hostContext = context;
   }
 
   num get chargeableAmount {
@@ -113,35 +105,24 @@ class CheckoutController extends GetxController {
   }
 
   void _notify(String title, String message, {bool error = false}) {
-    final ctx = Get.context;
-    if (ctx != null && ctx.mounted) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                error ? Icons.error_outline : Icons.info_outline,
-                color: Colors.white,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text('$title: $message')),
-            ],
-          ),
-          backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
+    final ctx = hostContext;
+    if (ctx == null || !ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error ? Icons.error_outline : Icons.info_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text('$title: $message')),
+          ],
         ),
-      );
-      return;
-    }
-    Get.snackbar(
-      title,
-      message,
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: error ? Colors.red.shade100 : Colors.green.shade100,
-      colorText: error ? Colors.red.shade900 : Colors.green.shade900,
-      margin: const EdgeInsets.all(12),
-      borderRadius: 12,
-      duration: const Duration(seconds: 4),
+        backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
+        duration: const Duration(seconds: 5),
+      ),
     );
   }
 
@@ -309,8 +290,9 @@ class CheckoutController extends GetxController {
 
   Future<void> _writeTransactionToFirestore() async {
     try {
-      final user = Get.context != null
-          ? Provider.of<UserProvider>(Get.context!, listen: false).user
+      final ctx = hostContext;
+      final user = ctx != null && ctx.mounted
+          ? Provider.of<UserProvider>(ctx, listen: false).user
           : null;
       final phone = user?.phoneNumber ?? '';
       await FirebaseFirestore.instance.collection('transactions').add({

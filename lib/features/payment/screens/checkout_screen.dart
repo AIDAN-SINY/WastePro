@@ -100,6 +100,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    controller.bindHost(context);
     return Scaffold(
       backgroundColor: _dBg,
       appBar: AppBar(
