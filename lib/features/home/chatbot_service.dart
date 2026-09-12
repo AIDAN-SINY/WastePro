@@ -381,8 +381,8 @@ class ChatbotService {
     if (!_ai.isConfigured) {
       return _reply(
         text: _lang == Lang.fr
-            ? '${_t('unknown')}\n\nPour activer l\'IA WasteBot, ajoute HF_TOKEN dans ton fichier .env puis relance l\'app.'
-            : '${_t('unknown')}\n\nTo enable WasteBot AI, add HF_TOKEN to your .env file and restart the app.',
+            ? '${_t('unknown')}\n\nAstuce: pour l\'IA, ajoute un HF_TOKEN Hugging Face (permission Inference Providers) dans .env puis relance l\'app.'
+            : '${_t('unknown')}\n\nTip: for AI answers, add a Hugging Face HF_TOKEN (Inference Providers permission) in .env and restart the app.',
         intent: 'unknown',
         suggestions: ['What plans?', 'Next pickup', 'Payment methods'],
       );
@@ -409,11 +409,17 @@ class ChatbotService {
             ? ['Tarifs', 'Paiement CamPay', 'Prochaine collecte']
             : ['What plans?', 'CamPay payment', 'Next pickup'],
       );
-    } catch (e) {
+    } on HuggingFaceChatException catch (e) {
+      return _reply(
+        text: '${e.messageFor(french: _lang == Lang.fr)}\n\n${_t('unknown')}',
+        intent: 'unknown',
+        suggestions: ['What plans?', 'Next pickup', 'Payment methods'],
+      );
+    } catch (_) {
       return _reply(
         text: _lang == Lang.fr
-            ? 'IA indisponible pour le moment (${e.toString()}).\n\n${_t('unknown')}'
-            : 'AI is unavailable right now (${e.toString()}).\n\n${_t('unknown')}',
+            ? 'WasteBot IA est temporairement indisponible.\n\n${_t('unknown')}'
+            : 'WasteBot AI is temporarily unavailable.\n\n${_t('unknown')}',
         intent: 'unknown',
         suggestions: ['What plans?', 'Next pickup', 'Payment methods'],
       );
