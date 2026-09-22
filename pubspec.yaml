@@ -58,6 +58,11 @@ dependencies:
   geolocator: ^12.0.0
   google_maps_flutter: ^2.7.0
 
+  # CamPay / HTTP
+  http: ^1.2.2
+  uuid: ^4.5.1
+  flutter_dotenv: ^5.2.1
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -80,6 +85,7 @@ dev_dependencies:
 flutter:
 
    assets:
+       - .env
        - assets/images/waste_bg.jpg
        - assets/images/internal_bg.jpg
   # The following line ensures that the Material Icons font is

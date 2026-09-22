@@ -17,15 +17,22 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
-  String _fullPhoneNumber = "";
+  final TextEditingController _phoneController = TextEditingController();
+  String _fullPhoneNumber = '';
   bool _isLoading = false;
   bool _isNumberValid = false;
   bool _obscurePassword = true;
 
   @override
+  void dispose() {
+    _passwordController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 1. ADDED APPBAR FOR THE BACK ARROW
       appBar: AppBar(
         backgroundColor: Colors.green.shade800,
         elevation: 0,
@@ -49,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const Icon(Icons.shield_outlined, size: 60, color: Colors.white),
             const SizedBox(height: 10),
             Text(
-              "WASTEPRO",
+              'WASTEPRO',
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 20,
@@ -58,7 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const Spacer(),
-
             Container(
               padding: const EdgeInsets.all(30),
               decoration: const BoxDecoration(
@@ -69,53 +75,49 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Login",
+                    'Login',
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 30),
-
-                  // 2. UPDATED PHONE INPUT WITH VISIBLE ARROW
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(15),
                     ),
                     child: InternationalPhoneNumberInput(
-                      onInputChanged: (n) => _fullPhoneNumber = n.phoneNumber!,
+                      onInputChanged: (n) {
+                        _fullPhoneNumber = n.phoneNumber ?? '';
+                      },
                       onInputValidated: (v) =>
                           setState(() => _isNumberValid = v),
                       selectorConfig: const SelectorConfig(
                         selectorType: PhoneInputSelectorType.BOTTOM_SHEET,
                         showFlags: true,
-                        useEmoji: true,
-                        // This adds the visual "arrow" or distinction
+                        useEmoji: false,
                         setSelectorButtonAsPrefixIcon: true,
                         leadingPadding: 15,
                       ),
                       initialValue: PhoneNumber(isoCode: 'CM'),
-                      textFieldController: TextEditingController(),
+                      textFieldController: _phoneController,
                       inputDecoration: const InputDecoration(
                         hintText: 'Phone Number',
                         border: InputBorder.none,
                         suffixIcon: Icon(
                           Icons.arrow_drop_down,
                           color: Colors.grey,
-                        ), // Visual hint
+                        ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // PASSWORD WITH TOGGLE
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
-                      hintText: "Password",
+                      hintText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -135,9 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 40),
-
                   SizedBox(
                     width: double.infinity,
                     height: 60,
@@ -152,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              "CONNECT",
+                              'CONNECT',
                               style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
@@ -170,10 +170,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleAuth() async {
-    if (!_isNumberValid || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Invalid credentials")));
+    if (!_isNumberValid ||
+        _fullPhoneNumber.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid credentials')),
+      );
       return;
     }
     setState(() => _isLoading = true);
@@ -201,12 +203,13 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       } else {
-        throw "User not found. Please register first.";
+        throw 'User not found. Please register first.';
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

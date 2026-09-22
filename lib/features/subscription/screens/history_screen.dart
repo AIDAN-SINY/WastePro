@@ -8,35 +8,93 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<UserProvider>(context).user!;
+    final user = Provider.of<UserProvider>(context).user;
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Payment History"), backgroundColor: Colors.green, foregroundColor: Colors.white),
-      body: StreamBuilder<DocumentSnapshot>(
-        // For a prototype, we check the user's active sub document
-        stream: FirebaseFirestore.instance.collection('subscriptions').doc(user.phoneNumber).snapshots(),
+      appBar: AppBar(
+        title: const Text('Payment History'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        // No composite index required: filter client-side by createdAt.
+        stream: FirebaseFirestore.instance
+            .collection('transactions')
+            .where('userId', isEqualTo: user.phoneNumber)
+            .limit(100)
+            .snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text("No subscription history found."));
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final startDate = (data['startDate'] as Timestamp).toDate();
-          
-          return ListView(
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final docs = [...(snapshot.data?.docs ?? [])];
+          docs.sort((a, b) {
+            final aTs = (a.data() as Map)['createdAt'];
+            final bTs = (b.data() as Map)['createdAt'];
+            final aDate = aTs is Timestamp ? aTs.toDate() : DateTime(1970);
+            final bDate = bTs is Timestamp ? bTs.toDate() : DateTime(1970);
+            return bDate.compareTo(aDate);
+          });
+
+          if (docs.isEmpty) {
+            return const Center(child: Text('No payment history found.'));
+          }
+
+          return ListView.separated(
             padding: const EdgeInsets.all(20),
-            children: [
-              const Text("Latest Transaction", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 10),
-              Card(
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final status = (data['status'] ?? 'pending').toString();
+              final amount = data['amount'] ?? 0;
+              final description =
+                  (data['description'] ?? 'CamPay payment').toString();
+              final operator = data['operator']?.toString();
+              final createdAt = data['createdAt'];
+              DateTime? date;
+              if (createdAt is Timestamp) date = createdAt.toDate();
+
+              final statusColor = status == 'completed'
+                  ? Colors.green
+                  : status == 'failed'
+                      ? Colors.red
+                      : Colors.orange;
+
+              return Card(
                 child: ListTile(
                   leading: const Icon(Icons.receipt_long, color: Colors.green),
-                  title: Text("${data['planName']} Plan"),
-                  subtitle: Text("Paid: ${data['price']} XAF\nDate: ${startDate.day}/${startDate.month}/${startDate.year}"),
-                  trailing: const Text("SUCCESS", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  title: Text(description),
+                  subtitle: Text(
+                    [
+                      'Paid: $amount XAF',
+                      if (operator != null) 'Operator: $operator',
+                      if (date != null)
+                        'Date: ${date.day}/${date.month}/${date.year}',
+                      'Ref: ${docs[index].id}',
+                    ].join('\n'),
+                  ),
+                  isThreeLine: true,
+                  trailing: Text(
+                    status.toUpperCase(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              );
+            },
           );
         },
       ),

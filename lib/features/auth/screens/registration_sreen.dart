@@ -26,25 +26,34 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController _confirmPassController = TextEditingController();
 
   String? _selectedNeighborhood;
+  String _selectedRole = 'client';
   bool _isLoading = false;
   bool _obs1 = true;
   bool _obs2 = true;
 
   final List<String> _neighborhoods = [
-    "Yaoundé: Bastos",
-    "Yaoundé: Mendong",
-    "Yaoundé: Ngousso",
-    "Yaoundé: Etoudi",
-    "Douala: Akwa",
-    "Douala: Bonamoussadi",
-    "Douala: Bonapriso",
-    "Other",
+    'Yaoundé: Bastos',
+    'Yaoundé: Mendong',
+    'Yaoundé: Ngousso',
+    'Yaoundé: Etoudi',
+    'Douala: Akwa',
+    'Douala: Bonamoussadi',
+    'Douala: Bonapriso',
+    'Other',
   ];
 
   @override
   void initState() {
     super.initState();
     _passController.text = widget.initialPassword;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _passController.dispose();
+    _confirmPassController.dispose();
+    super.dispose();
   }
 
   Future<void> _showRetryDialog(String message) async {
@@ -92,12 +101,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final assignedRole = await AuthService().determineRole(widget.phone);
       final newUser = UserModel(
         phoneNumber: widget.phone,
         fullName: _nameController.text.trim(),
-        role: assignedRole,
+        role: _selectedRole,
         password: _passController.text,
+        neighborhood: _selectedNeighborhood,
       );
 
       await AuthService().register(newUser);
@@ -154,7 +163,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             DropdownButtonFormField<String>(
               initialValue: _selectedNeighborhood,
               decoration: _inputDecoration(
-                "Neighborhood / Zone",
+                'Neighborhood / Zone',
                 Icons.map_outlined,
               ),
               items: _neighborhoods
@@ -163,9 +172,28 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               onChanged: (val) => setState(() => _selectedNeighborhood = val),
             ),
             const SizedBox(height: 15),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedRole,
+              decoration: _inputDecoration(
+                'Account type',
+                Icons.badge_outlined,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'client', child: Text('Client')),
+                DropdownMenuItem(
+                  value: 'collector',
+                  child: Text('Collector'),
+                ),
+                DropdownMenuItem(value: 'admin', child: Text('Admin')),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedRole = val);
+              },
+            ),
+            const SizedBox(height: 15),
             _buildTextField(
               _passController,
-              "Password",
+              'Password',
               Icons.lock_outline,
               isPassword: true,
               obscure: _obs1,
